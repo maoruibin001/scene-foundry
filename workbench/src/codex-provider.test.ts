@@ -1,9 +1,13 @@
 import {test,expect} from 'bun:test';
-import {codexEnvironment,cliReceipt} from './codex-provider';
+import {codexEnvironment,cliReceipt,resolveCodexBin} from './codex-provider';
 import {modelSchema,normalizeModelValue} from './model-schema';
 test('subscription subprocess receives no API credentials or endpoint overrides',()=>{
  const env=codexEnvironment({HOME:'/test',PATH:'/bin',CODEX_HOME:'/codex',OPENAI_API_KEY:'secret',CODEX_API_KEY:'secret',OPENAI_BASE_URL:'https://alternate',ANTHROPIC_API_KEY:'secret',PIPELINE_PROVIDER_API_KEY:'secret'});
  expect(env).toEqual({HOME:'/test',PATH:'/bin',CODEX_HOME:'/codex'});
+});
+test('default launcher resolves the local codex CLI rather than a custom wrapper',()=>{
+ expect(resolveCodexBin()).toBe(Bun.which('codex')??'codex');
+ expect(resolveCodexBin('/missing/custom/codex')).toBe('/missing/custom/codex');
 });
 test('CLI route mismatch is rejected, no fabricated returned model',()=>{
  const log='OpenAI Codex v0.154.0\nmodel: gpt-5.6-luna\nprovider: openai\nreasoning effort: low\nsession id: abc\ntokens used\n1,234';

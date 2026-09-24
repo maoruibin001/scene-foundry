@@ -7,7 +7,8 @@ import {captureCodexProcess} from './codex-process';
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
 
-export const CODEX_BIN=process.env.PIPELINE_CODEX_BIN??'codex6';
+export function resolveCodexBin(value?:string){const requested=value?.trim()||'codex';return Bun.which(requested)??requested;}
+export const CODEX_BIN=resolveCodexBin(process.env.PIPELINE_CODEX_BIN);
 let activeRoute:CodexRoute|undefined;let routeFailure:string|undefined;
 export async function initializeCodexRoute(){try{activeRoute=await discoverCodexRoute(CODEX_BIN,codexEnvironment());routeFailure=undefined;}catch(error){activeRoute=undefined;routeFailure=String(error);}}
 function routeForModel(model=process.env.PIPELINE_MODEL){return routeForSelection(activeRoute,process.env.PIPELINE_MODEL,model);}
@@ -30,7 +31,7 @@ export function cliReceipt(log:string,model:string,effort=CODEX_EFFORT,expectedP
 export async function callCodex(input:{system:string,text:string,images?:{path:string,mime:string}[],role:string,signal?:AbortSignal,modelSettings?:ModelSettings},dir:string,model:string,schema:any){
  input.signal?.throwIfAborted();const images=validateCodexImages(input.images);
  if(!activeRoute)throw Error('CODEX_ROUTE_UNVERIFIED：启动器路由尚未初始化');assertLauncherUnchanged(CODEX_BIN,activeRoute);const route=routeForModel(model)!;
- if(!codexLogin(model))throw Error('PROVIDER_NOT_CONFIGURED：请检查本地 codex6 启动器认证配置');
+ if(!codexLogin(model))throw Error('PROVIDER_NOT_CONFIGURED：请检查本地 Codex CLI 登录状态和启动器配置');
  const effort=input.modelSettings?.reasoningEffort??CODEX_EFFORT,timeoutMs=modelTimeoutMs(effort,input.role);
  const scratch=mkdtempSync(join(tmpdir(),'scene-foundry-codex-')),schemaPath=join(scratch,'schema.json'),output=join(scratch,'response.json'),workerPath=join(scratch,'worker.zh.md');
  writeFileSync(workerPath,CODEX_WORKER_INSTRUCTIONS);const workerInstructionsSha256=createHash('sha256').update(CODEX_WORKER_INSTRUCTIONS).digest('hex');

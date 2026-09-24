@@ -17,7 +17,7 @@ For a clean installation and the browser acceptance procedure, follow the [from-
 
 ## Local setup
 
-Install Bun, Node.js, Python 3, Corepack/pnpm, and a local Codex CLI (or configure a compatible Messages API provider). The pinned dependency commits are in `prototype/brief.json`. With access to the two upstream repositories, run from this repository's root:
+Install Bun, Node.js, Python 3, Corepack/pnpm, and the locally authenticated `codex` CLI (or configure a compatible Messages API provider). The default provider is the local Codex CLI found on `PATH`; custom launchers are opt-in through `PIPELINE_CODEX_BIN`. The pinned dependency commits are in `prototype/brief.json`. With access to the two upstream repositories, run from this repository's root:
 
 ```sh
 python3 prototype/bin/bootstrap.py

@@ -7,7 +7,7 @@ import {readFileSync,writeFileSync,existsSync} from 'node:fs';
 import {join} from 'node:path';
 import {callCodex,codexLogin,CODEX_EFFORT,CODEX_BIN,codexRouteInfo,codexRouteError} from './codex-provider';
 import {modelSchema,normalizeModelValue,type ModelSchemaContext} from './model-schema';
-export const PROVIDER=process.env.PIPELINE_PROVIDER??'messages-api';
+export const PROVIDER=process.env.PIPELINE_PROVIDER??'codex-cli';
 if(!['messages-api','codex-cli'].includes(PROVIDER))throw Error('未知模型提供方式');
 const explicit=Boolean(process.env.PIPELINE_PROVIDER_URL||process.env.PIPELINE_PROVIDER_API_KEY);
 export const BASE=((explicit?process.env.PIPELINE_PROVIDER_URL:process.env.ANTHROPIC_BASE_URL)??'').replace(/\/$/,'');
@@ -18,7 +18,7 @@ export const defaultModelSettings=(level:Complexity='simple'):ModelSettings=>PRO
 export const MODEL_LIMIT=parseCallLimit(process.env.PIPELINE_MAX_CALLS);
 export const isConfigured=(model=MODEL)=>PROVIDER==='codex-cli'?codexLogin(model):Boolean(BASE&&KEY);
 let used=0;
-export function budget(selectedModel=MODEL){return {provider:PROVIDER,executable:PROVIDER==='codex-cli'?CODEX_BIN:null,providerLabel:PROVIDER==='codex-cli'?'本地 Codex6 · '+(codexRouteInfo(selectedModel)?.providerId??'路由未就绪'):'模型 API',reasoningEffort:PROVIDER==='codex-cli'?CODEX_EFFORT:null,...budgetSnapshot(MODEL_LIMIT,used),model:MODEL,judgeModel:JUDGE_MODEL,host:PROVIDER==='codex-cli'?'本地 Codex CLI':BASE?new URL(BASE).host:null,configured:isConfigured(selectedModel),executionRoute:codexRouteInfo(selectedModel),routeError:codexRouteError()};}
+export function budget(selectedModel=MODEL){return {provider:PROVIDER,executable:PROVIDER==='codex-cli'?CODEX_BIN:null,providerLabel:PROVIDER==='codex-cli'?'本地 Codex · '+(codexRouteInfo(selectedModel)?.providerId??'路由未就绪'):'模型 API',reasoningEffort:PROVIDER==='codex-cli'?CODEX_EFFORT:null,...budgetSnapshot(MODEL_LIMIT,used),model:MODEL,judgeModel:JUDGE_MODEL,host:PROVIDER==='codex-cli'?'本地 Codex CLI':BASE?new URL(BASE).host:null,configured:isConfigured(selectedModel),executionRoute:codexRouteInfo(selectedModel),routeError:codexRouteError()};}
 export function hasBudget(required=1){return callAllowance(MODEL_LIMIT,used,required);}
 export function configureLedger(path:string){if(existsSync(path))used=JSON.parse(readFileSync(path,'utf8')).used??0;return ()=>writeFileSync(path,JSON.stringify({used,max:MODEL_LIMIT}));}
 let persist=()=>{};export function setLedger(path:string){persist=configureLedger(PROVIDER==='codex-cli'?path.replace(/\.json$/,'-codex.json'):path);}

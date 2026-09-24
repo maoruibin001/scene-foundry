@@ -28,5 +28,5 @@ export class ReferenceBaselines {
 }
 export const references=new ReferenceBaselines(join(DATA,'references'),UPLOADS);
 export function imageService(){return {configured:!!(process.env.PIPELINE_IMAGE_URL&&process.env.PIPELINE_IMAGE_API_KEY&&process.env.PIPELINE_IMAGE_MODEL),model:process.env.PIPELINE_IMAGE_MODEL??null,reason:'自动生图需要配置工作台可调用的生图服务；可上传已有图片进入确认。'};}
-/** 明确配置的兼容图片接口，不借用 codex6 凭证、不静默切换供应商。 */
+/** 明确配置的兼容图片接口，不借用 Codex CLI 凭证、不静默切换供应商。 */
 export async function generateReferenceImages(prompt:string,count:number){if(!imageService().configured)throw Error('IMAGE_SERVICE_NOT_CONFIGURED：'+imageService().reason);const r=await fetch(process.env.PIPELINE_IMAGE_URL!,{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+process.env.PIPELINE_IMAGE_API_KEY},body:JSON.stringify({model:process.env.PIPELINE_IMAGE_MODEL,prompt:'为同一个可建造的三维场景生成参考图。遵守用户描述，构图清晰，结构一致，无界面、文字水印。多张时展示同一空间的不同视角。用户描述：'+prompt,n:count,response_format:'b64_json'}),signal:AbortSignal.timeout(300000)});if(!r.ok){await r.body?.cancel();throw Error('IMAGE_SERVICE_HTTP_'+r.status);}const v:any=await r.json();if(!Array.isArray(v.data)||v.data.length!==count||v.data.some((i:any)=>typeof i.b64_json!=='string'))throw Error('生图服务须返回对应数量的 base64 图像');return v.data.map((i:any)=>({bytes:Buffer.from(i.b64_json,'base64'),mime:'image/png'}));}
