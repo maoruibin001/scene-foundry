@@ -59,10 +59,7 @@ lsof -nP -iTCP:19977 -sTCP:LISTEN
 没有输出时，在仓库根目录创建仅本机使用的配置：
 
 ```sh
-codex_bin="$(command -v codex)"
 cat > workbench/.env <<EOF
-PIPELINE_PROVIDER=codex-cli
-PIPELINE_CODEX_BIN=$codex_bin
 PIPELINE_MODEL=gpt-6-luna
 PIPELINE_CODEX_EFFORT=low
 PIPELINE_MAX_CALLS=30
@@ -70,7 +67,7 @@ PORT=19977
 EOF
 ```
 
-默认提供者是本机已登录的 `codex` CLI，不依赖 `codex6` 等个人包装脚本。`PIPELINE_CODEX_BIN` 可填写 `PATH` 上的命令名或实际可读的绝对文件路径；服务会解析并固定启动器摘要。若使用自己的 Messages API，改用 `.env.example` 所述的 `PIPELINE_PROVIDER=messages-api`、提供商 URL、API key 和模型；这些值只写入 `.env`，不要提交到 Git。示例不配置自动生图服务，测试时上传已有 PNG。
+上面的配置故意不指定提供者和启动器，以验证仓库默认使用本机已登录的 `codex` CLI，不依赖 `codex6` 等个人包装脚本。需要显式指定时，`PIPELINE_CODEX_BIN` 可填写 `PATH` 上的命令名或实际可读的绝对文件路径；服务会解析并固定启动器摘要。若使用自己的 Messages API，改用 `.env.example` 所述的 `PIPELINE_PROVIDER=messages-api`、提供商 URL、API key 和模型；这些值只写入 `.env`，不要提交到 Git。示例不配置自动生图服务，测试时上传已有 PNG。
 
 从 `workbench/` 启动服务并保持终端打开：
 
