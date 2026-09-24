@@ -1,0 +1,1230 @@
+{
+  "name": "旧日餐厅 · 双图布局重建",
+  "interpretation": "两图为同一废弃餐厅的不同方向观察。矩形按包含黑边的整幅图归一化；全零表示不可见。重复卡座和吊灯的跨图配对存在歧义，已在描述与置信度中体现。",
+  "assumptions": [
+    "后厨仅有有限补充视角，未展示结构和精确尺度为推断，不声明已完整还原。",
+    "透视修正候选：从参考图水平边方向推断员工门墙与主拱垂直、服务口与主拱共墙。具体尺度和画外连通仍需验证。",
+    "入口玻璃围合、圆桌椅可见轮廓经像面约束修正；跨图身份和隐蔽区域仍需视觉复核。",
+    "双图圆桌独立轮廓求解落在互相重叠的位置，因此合并为同一张中央圆桌，按双视角联合约束；木椅身份仍属于推断。",
+    "员工门所在墙与主砖拱垂直，服务口与主砖拱共墙；精确尺度仍待验证。",
+    "入口围合保持在第一相机背后，局部放大玻璃开口；透视误差仍存在，不能通过把墙推到相机前面来降低像面误差。"
+  ],
+  "architecture": [
+    {
+      "id": "foyer_floor",
+      "kind": "floor",
+      "label": "前厅棋盘地砖",
+      "position": [
+        -3.75,
+        -1,
+        -0.1
+      ],
+      "size": [
+        7.5,
+        12,
+        0.1
+      ],
+      "rotation": 0,
+      "material": "tile",
+      "openings": []
+    },
+    {
+      "id": "dining_floor",
+      "kind": "floor",
+      "label": "餐厅旧地毯",
+      "position": [
+        4,
+        2,
+        -0.1
+      ],
+      "size": [
+        8,
+        16,
+        0.105
+      ],
+      "rotation": 0,
+      "material": "carpet",
+      "openings": []
+    },
+    {
+      "id": "timber_roof",
+      "kind": "ceiling",
+      "label": "餐厅木梁屋顶",
+      "position": [
+        4,
+        2,
+        4
+      ],
+      "size": [
+        8,
+        16,
+        0.55
+      ],
+      "rotation": 0,
+      "material": "wood",
+      "openings": []
+    },
+    {
+      "id": "foyer_roof",
+      "kind": "ceiling",
+      "label": "前厅吊顶",
+      "position": [
+        -3.75,
+        -1,
+        4.25
+      ],
+      "size": [
+        7.5,
+        12,
+        0.2
+      ],
+      "rotation": 0,
+      "material": "plaster",
+      "openings": []
+    },
+    {
+      "id": "main_arch_wall",
+      "kind": "wall",
+      "label": "餐厅墙面",
+      "position": [
+        0,
+        -0.55,
+        0
+      ],
+      "size": [
+        10.6,
+        0.5,
+        4.5
+      ],
+      "rotation": -1.5707963267948966,
+      "material": "brick",
+      "openings": [
+        {
+          "id": "arch_main",
+          "kind": "arch",
+          "offset": 0,
+          "width": 9.6,
+          "bottom": 0,
+          "height": 3.65,
+          "rise": 0.55
+        }
+      ]
+    },
+    {
+      "id": "staff_room_front",
+      "kind": "wall",
+      "label": "餐厅墙面",
+      "position": [
+        -3.75,
+        4.5,
+        0
+      ],
+      "size": [
+        7.5,
+        0.25,
+        4.5
+      ],
+      "rotation": 0,
+      "material": "plaster",
+      "openings": [
+        {
+          "id": "staff_door_01",
+          "kind": "door",
+          "offset": 2.1700787283750005,
+          "width": 2.1,
+          "bottom": 0,
+          "height": 3.1594169282743216,
+          "rise": 0
+        }
+      ]
+    },
+    {
+      "id": "brick_partition",
+      "kind": "wall",
+      "label": "餐厅墙面",
+      "position": [
+        0,
+        7.375,
+        0
+      ],
+      "size": [
+        5.25,
+        0.5,
+        4.5
+      ],
+      "rotation": -1.5707963267948966,
+      "material": "brick",
+      "openings": [
+        {
+          "id": "service_window_01",
+          "kind": "service",
+          "offset": 0.275,
+          "width": 2.8,
+          "bottom": 1.12,
+          "height": 1.35,
+          "rise": 0.36
+        }
+      ]
+    },
+    {
+      "id": "window_wall_east",
+      "kind": "wall",
+      "label": "餐厅墙面",
+      "position": [
+        8,
+        2,
+        0
+      ],
+      "size": [
+        16,
+        0.24,
+        4.5
+      ],
+      "rotation": -1.5707963267948966,
+      "material": "plaster",
+      "openings": [
+        {
+          "id": "east_window_0",
+          "kind": "window",
+          "offset": -6.35,
+          "width": 1.6500000000000001,
+          "bottom": 1.3,
+          "height": 1.8,
+          "rise": 0
+        },
+        {
+          "id": "east_window_1",
+          "kind": "window",
+          "offset": -3.8,
+          "width": 1.6500000000000001,
+          "bottom": 1.3,
+          "height": 1.8,
+          "rise": 0
+        },
+        {
+          "id": "east_window_2",
+          "kind": "window",
+          "offset": -1.25,
+          "width": 1.6500000000000001,
+          "bottom": 1.3,
+          "height": 1.8,
+          "rise": 0
+        },
+        {
+          "id": "east_window_3",
+          "kind": "window",
+          "offset": 1.3,
+          "width": 1.6500000000000001,
+          "bottom": 1.3,
+          "height": 1.8,
+          "rise": 0
+        }
+      ]
+    },
+    {
+      "id": "back_wall",
+      "kind": "wall",
+      "label": "餐厅墙面",
+      "position": [
+        4,
+        10,
+        0
+      ],
+      "size": [
+        8,
+        0.24,
+        4.5
+      ],
+      "rotation": 0,
+      "material": "plaster",
+      "openings": [
+        {
+          "id": "back_window_1",
+          "kind": "window",
+          "offset": 0.2,
+          "width": 1.2100000000000002,
+          "bottom": 1.3,
+          "height": 1.8,
+          "rise": 0
+        },
+        {
+          "id": "back_window_2",
+          "kind": "window",
+          "offset": 2.7,
+          "width": 1.2100000000000002,
+          "bottom": 1.3,
+          "height": 1.8,
+          "rise": 0
+        }
+      ]
+    },
+    {
+      "id": "entrance_wall",
+      "kind": "wall",
+      "label": "餐厅墙面",
+      "position": [
+        -3.75,
+        -7,
+        0
+      ],
+      "size": [
+        7.5,
+        0.24,
+        4.45
+      ],
+      "rotation": 3.141592653589793,
+      "material": "plaster",
+      "openings": [
+        {
+          "id": "entry_sidelight_1",
+          "kind": "window",
+          "offset": -2.92,
+          "width": 1.54,
+          "bottom": 0.65,
+          "height": 2.65,
+          "rise": 0
+        },
+        {
+          "id": "entrance_01",
+          "kind": "door",
+          "offset": -0.33000000000000007,
+          "width": 2.268,
+          "bottom": 0,
+          "height": 3.25,
+          "rise": 0
+        },
+        {
+          "id": "entry_sidelight_2",
+          "kind": "window",
+          "offset": 2.26,
+          "width": 1.54,
+          "bottom": 0.65,
+          "height": 2.65,
+          "rise": 0
+        }
+      ]
+    },
+    {
+      "id": "kitchen_side_wall",
+      "kind": "wall",
+      "label": "餐厅墙面",
+      "position": [
+        -3.75,
+        7.5,
+        0
+      ],
+      "size": [
+        5,
+        0.2,
+        3.9
+      ],
+      "rotation": 1.5707963267948966,
+      "material": "brick",
+      "openings": []
+    },
+    {
+      "id": "kitchen_back_wall",
+      "kind": "wall",
+      "label": "餐厅墙面",
+      "position": [
+        -1.875,
+        10,
+        0
+      ],
+      "size": [
+        3.75,
+        0.2,
+        3.9
+      ],
+      "rotation": 0,
+      "material": "brick",
+      "openings": []
+    },
+    {
+      "id": "dining_south_wall",
+      "kind": "wall",
+      "label": "第二参考街机后方的抹灰端墙",
+      "position": [
+        4,
+        -6,
+        0
+      ],
+      "size": [
+        8,
+        0.24,
+        4.5
+      ],
+      "rotation": 3.141592653589793,
+      "material": "plaster",
+      "openings": [
+        {
+          "id": "south_window_1",
+          "kind": "window",
+          "offset": 0.3,
+          "width": 1.5,
+          "bottom": 1.28,
+          "height": 1.8,
+          "rise": 0
+        }
+      ]
+    },
+    {
+      "id": "kitchen_floor",
+      "kind": "floor",
+      "label": "后厨支撑空间，尺度为推断",
+      "position": [
+        -3.75,
+        7.25,
+        -0.1
+      ],
+      "size": [
+        7.5,
+        5.5,
+        0.1
+      ],
+      "rotation": 0,
+      "material": "tile",
+      "openings": []
+    },
+    {
+      "id": "kitchen_ceiling",
+      "kind": "ceiling",
+      "label": "后厨支撑空间，尺度为推断",
+      "position": [
+        -3.75,
+        7.25,
+        3.7
+      ],
+      "size": [
+        7.5,
+        5.5,
+        0.1
+      ],
+      "rotation": 0,
+      "material": "plaster",
+      "openings": []
+    },
+    {
+      "id": "west_wall",
+      "kind": "wall",
+      "label": "餐厅墙面",
+      "position": [
+        -7.5,
+        -1,
+        0
+      ],
+      "size": [
+        12,
+        0.24,
+        4.5
+      ],
+      "rotation": 1.5707963267948966,
+      "material": "plaster",
+      "openings": []
+    }
+  ],
+  "assets": [
+    {
+      "id": "arcade_01",
+      "kind": "arcade",
+      "label": "带人物侧绘的破旧街机；图1主要见正面",
+      "position": [
+        7.15,
+        2,
+        0
+      ],
+      "size": [
+        1.03,
+        1.02,
+        2.18
+      ],
+      "rotation": -1.5707963267948966,
+      "description": "带人物侧绘的破旧街机；图1主要见正面和侧面，图2主要见另一侧面，下部被卡座遮挡。"
+    },
+    {
+      "id": "booth_01",
+      "kind": "booth_set",
+      "label": "靠街机一端的卡座，含格纹桌面与红褐软",
+      "position": [
+        6.8,
+        4.7,
+        0
+      ],
+      "size": [
+        2.06,
+        2.25,
+        1
+      ],
+      "rotation": 1.5707963267948966,
+      "description": "靠街机一端的卡座，含格纹桌面与红褐软包座椅；图1被圆桌和木椅部分遮挡，图2位于中景、左端出画。"
+    },
+    {
+      "id": "booth_02",
+      "kind": "booth_set",
+      "label": "沿窗墙更深入的一组卡座，桌上有疑似对",
+      "position": [
+        6.8,
+        7.4,
+        0
+      ],
+      "size": [
+        2.06,
+        2.8,
+        1
+      ],
+      "rotation": 1.5707963267948966,
+      "description": "沿窗墙更深入的一组卡座，桌上有疑似对应的破灯罩；图1位于左后方，图2仅见近景桌面与靠背局部，边缘大量出画。配对为推定。；近侧为开口卡座，座位背面属于未验证推断。",
+      "openSide": "positive"
+    },
+    {
+      "id": "pendant_01",
+      "kind": "pendant",
+      "label": "靠窗灯列中段的彩色玻璃吊灯，框含可见",
+      "position": [
+        6.9,
+        3.2,
+        2.73
+      ],
+      "size": [
+        0.76,
+        0.76,
+        0.35
+      ],
+      "rotation": 0,
+      "description": "靠窗灯列中段的彩色玻璃吊灯，框含可见吊链；图1在街机左上，图2在街机上方。按灯列次序暂配。"
+    },
+    {
+      "id": "pendant_02",
+      "kind": "pendant",
+      "label": "靠砖拱灯列中较深入卡座区的吊灯，框含",
+      "position": [
+        4.9,
+        5.2,
+        2.79
+      ],
+      "size": [
+        0.8,
+        0.8,
+        0.36
+      ],
+      "rotation": 0,
+      "description": "靠砖拱灯列中较深入卡座区的吊灯，框含可见吊链；图1居中，图2靠拱口左上。身份为推定。"
+    },
+    {
+      "id": "pendant_03",
+      "kind": "pendant",
+      "label": "靠砖拱灯列中偏街机端的吊灯，框含可见",
+      "position": [
+        4.5,
+        0.1,
+        2.95
+      ],
+      "size": [
+        0.88,
+        0.88,
+        0.4
+      ],
+      "rotation": 0,
+      "description": "靠砖拱灯列中偏街机端的吊灯，框含可见吊链；图1右上灯体较大，图2远处居中灯体较小。身份为推定。"
+    },
+    {
+      "id": "fallen_lamp_table",
+      "kind": "fallen_lamp",
+      "label": "落在格纹桌面的破碎彩色玻璃灯罩；图2",
+      "position": [
+        6.156,
+        7.4,
+        0.8074074074074074
+      ],
+      "size": [
+        0.96,
+        0.96,
+        0.42
+      ],
+      "rotation": 0.8,
+      "description": "落在格纹桌面的破碎彩色玻璃灯罩；图2近景清楚，图1左后方桌上仅见小轮廓，跨图身份暂定。",
+      "support": {
+        "assetId": "booth_02",
+        "localPosition": [
+          0,
+          0.23,
+          0.8074074074074074
+        ]
+      }
+    },
+    {
+      "id": "fallen_lamp_floor",
+      "kind": "fallen_lamp",
+      "label": "砖拱柱脚旁地面的破碎彩色玻璃灯罩；图",
+      "position": [
+        0.3,
+        4.45,
+        0.018
+      ],
+      "size": [
+        0.65,
+        0.65,
+        0.3
+      ],
+      "rotation": 0.8,
+      "description": "砖拱柱脚旁地面的破碎彩色玻璃灯罩；图1位于左侧柱脚，图2位于右侧砖墙下。"
+    },
+    {
+      "id": "round_table_01",
+      "kind": "round_table",
+      "label": "靠主砖拱的圆形单柱木桌；桌腿局部被相",
+      "position": [
+        2.823523446099823,
+        1.262393019812734,
+        0
+      ],
+      "size": [
+        0.9929418534877907,
+        0.9929418534877907,
+        0.82
+      ],
+      "rotation": 0,
+      "description": "靠主砖拱的圆形单柱木桌；桌腿局部被相邻木椅遮挡。"
+    },
+    {
+      "id": "chair_01",
+      "kind": "chair",
+      "label": "圆桌旁带竖条靠背和红褐坐垫的木椅；图",
+      "position": [
+        2.6809748440843646,
+        2.0458218529658425,
+        0
+      ],
+      "size": [
+        0.78,
+        0.78,
+        1
+      ],
+      "rotation": -0.3,
+      "description": "圆桌旁带竖条靠背和红褐坐垫的木椅；图1位于圆桌左前，图2位于右前。"
+    },
+    {
+      "id": "wall_art_0",
+      "kind": "picture",
+      "label": "旧风景挂画",
+      "position": [
+        7.84,
+        2,
+        1.55
+      ],
+      "size": [
+        0.65,
+        0.1,
+        0.95
+      ],
+      "rotation": -1.5707963267948966,
+      "description": "窗口之间的深木画框与泛黄风景画",
+      "wallId": "window_wall_east"
+    },
+    {
+      "id": "wall_art_1",
+      "kind": "picture",
+      "label": "旧风景挂画",
+      "position": [
+        7.84,
+        4.525,
+        1.55
+      ],
+      "size": [
+        0.65,
+        0.1,
+        0.95
+      ],
+      "rotation": -1.5707963267948966,
+      "description": "窗口之间的深木画框与泛黄风景画",
+      "wallId": "window_wall_east"
+    },
+    {
+      "id": "wall_art_2",
+      "kind": "picture",
+      "label": "旧风景挂画",
+      "position": [
+        7.84,
+        7.075,
+        1.55
+      ],
+      "size": [
+        0.65,
+        0.1,
+        0.95
+      ],
+      "rotation": -1.5707963267948966,
+      "description": "窗口之间的深木画框与泛黄风景画",
+      "wallId": "window_wall_east"
+    },
+    {
+      "id": "small_debris",
+      "kind": "debris",
+      "label": "散落碎片",
+      "position": [
+        2.5,
+        0,
+        0
+      ],
+      "size": [
+        7,
+        5,
+        0.08
+      ],
+      "rotation": 0,
+      "description": "地面纸片、灰尘与抹灰碎块"
+    },
+    {
+      "id": "pendant_04",
+      "kind": "pendant",
+      "label": "后排吊灯",
+      "position": [
+        6.8,
+        5.9,
+        2.45
+      ],
+      "size": [
+        0.8,
+        0.8,
+        0.36
+      ],
+      "rotation": 0,
+      "description": "卡座上方彩玻璃吊灯"
+    },
+    {
+      "id": "front_right_chair",
+      "kind": "chair",
+      "label": "近景右侧木椅",
+      "position": [
+        3.8,
+        -2.8,
+        0
+      ],
+      "size": [
+        0.58,
+        0.62,
+        1.2
+      ],
+      "rotation": 0.7,
+      "description": "第一视角右前景木椅"
+    },
+    {
+      "id": "pendant_05",
+      "kind": "pendant",
+      "label": "近端窗边吊灯",
+      "position": [
+        6.9,
+        0.2,
+        2.85
+      ],
+      "size": [
+        0.8,
+        0.8,
+        0.36
+      ],
+      "rotation": 0,
+      "description": "参考第一图右侧窗前第五盏灯，两个镜头共享该位置。"
+    },
+    {
+      "id": "service_shelf",
+      "kind": "kitchen_shelf",
+      "label": "旧后厨柜架",
+      "position": [
+        -1.3,
+        7.1,
+        0
+      ],
+      "size": [
+        1.5,
+        0.55,
+        2
+      ],
+      "rotation": 1.5707963267948966,
+      "description": "门和服务口内部可见柜架；被遮挡内容为推断。"
+    },
+    {
+      "id": "staff_shelf",
+      "kind": "kitchen_shelf",
+      "label": "旧后厨柜架",
+      "position": [
+        -2.5,
+        5.7,
+        0
+      ],
+      "size": [
+        1.5,
+        0.55,
+        2
+      ],
+      "rotation": 0,
+      "description": "门和服务口内部可见柜架；被遮挡内容为推断。"
+    },
+    {
+      "id": "south_landscape",
+      "kind": "picture",
+      "wallId": "dining_south_wall",
+      "label": "街机后方横幅风景画",
+      "position": [
+        5.5,
+        -5.84,
+        1.65
+      ],
+      "size": [
+        1.22,
+        0.1,
+        0.84
+      ],
+      "rotation": 3.141592653589793,
+      "description": "第二参考图中可见的横幅旧风景画；位置由共同墙体约束。"
+    },
+    {
+      "id": "fallen_table_foreground",
+      "kind": "fallen_table",
+      "label": "右前景倾倒圆桌",
+      "position": [
+        2.62,
+        -3.96,
+        0
+      ],
+      "size": [
+        1.25,
+        0.85,
+        1.18
+      ],
+      "rotation": 0,
+      "description": "第一参考右前景可见倾斜圆形桌面与桌脚，保留真实三维形态；遮挡背面为推断。"
+    },
+    {
+      "id": "booth_foreground",
+      "kind": "booth_end",
+      "label": "右前景局部卡座",
+      "position": [
+        2.07,
+        -4.88,
+        0
+      ],
+      "size": [
+        0.71,
+        1.5,
+        1.03
+      ],
+      "rotation": 0,
+      "description": "第一参考右前景仅部分可见的深色木背红褐皮革卡座；画外长度和背面为推断。"
+    }
+  ],
+  "cameras": [
+    {
+      "id": "reference_1",
+      "referenceIndex": 1,
+      "position": [
+        -1.934011159539129,
+        -6.12,
+        1.5827158290205119
+      ],
+      "target": [
+        3.127884539974518,
+        2.504051581779824,
+        1.5284365323583262
+      ],
+      "verticalFov": 0.8200000000000001,
+      "reason": "第一图主拱与窗墙的水平边共享左侧消失点；员工门墙与主拱垂直，按两组透视方向校准。"
+    },
+    {
+      "id": "reference_2",
+      "referenceIndex": 2,
+      "position": [
+        7.22,
+        9.319999999999999,
+        1.7106423801171018
+      ],
+      "target": [
+        2.2260474022877927,
+        0.6735362547422987,
+        2.2575447057180082
+      ],
+      "verticalFov": 1.04,
+      "reason": "第二图沿卡座回看同一个西侧砖拱，服务口位于同墙北段，入口位于前厅南墙。"
+    }
+  ],
+  "landmarks": [
+    {
+      "id": "arch_main_view1",
+      "referenceIndex": 1,
+      "targetId": "arch_main",
+      "anchor": "center",
+      "uv": [
+        0.6285000000000001,
+        0.36350000000000005
+      ],
+      "confidence": 0.96,
+      "description": "连接地砖区与卡座区的宽砖拱及两侧砖柱；图1上部和右侧被画面裁切，柱脚局部被家具遮挡。"
+    },
+    {
+      "id": "arch_main_view2",
+      "referenceIndex": 2,
+      "targetId": "arch_main",
+      "anchor": "center",
+      "uv": [
+        0.5589999999999999,
+        0.591
+      ],
+      "confidence": 0.96,
+      "description": "连接地砖区与卡座区的宽砖拱及两侧砖柱；图1上部和右侧被画面裁切，柱脚局部被家具遮挡。"
+    },
+    {
+      "id": "staff_door_01_view1",
+      "referenceIndex": 1,
+      "targetId": "staff_door_01",
+      "anchor": "center",
+      "uv": [
+        0.14450000000000002,
+        0.5075
+      ],
+      "confidence": 0.99,
+      "description": "员工通道门框与敞开门扇，内部较暗；仅图1可见。"
+    },
+    {
+      "id": "service_window_01_view2",
+      "referenceIndex": 2,
+      "targetId": "service_window_01",
+      "anchor": "center",
+      "uv": [
+        0.9075,
+        0.5425
+      ],
+      "confidence": 0.98,
+      "description": "砖隔墙上的拱形服务开口及台沿；图2右端被画面裁切，开口内可见堆放物。"
+    },
+    {
+      "id": "entrance_01_view2",
+      "referenceIndex": 2,
+      "targetId": "entrance_01",
+      "anchor": "center",
+      "uv": [
+        0.554,
+        0.5595
+      ],
+      "confidence": 0.98,
+      "description": "敞开的入口门洞及两侧玻璃窗，可透见室外栏杆；仅图2可见。"
+    },
+    {
+      "id": "arcade_01_view1",
+      "referenceIndex": 1,
+      "targetId": "arcade_01",
+      "anchor": "center",
+      "uv": [
+        0.683,
+        0.5275000000000001
+      ],
+      "confidence": 0.99,
+      "description": "带人物侧绘的破旧街机；图1主要见正面和侧面，图2主要见另一侧面，下部被卡座遮挡。"
+    },
+    {
+      "id": "arcade_01_view2",
+      "referenceIndex": 2,
+      "targetId": "arcade_01",
+      "anchor": "center",
+      "uv": [
+        0.2025,
+        0.5625
+      ],
+      "confidence": 0.99,
+      "description": "带人物侧绘的破旧街机；图1主要见正面和侧面，图2主要见另一侧面，下部被卡座遮挡。"
+    },
+    {
+      "id": "booth_01_view1",
+      "referenceIndex": 1,
+      "targetId": "booth_01",
+      "anchor": "center",
+      "uv": [
+        0.5145,
+        0.581
+      ],
+      "confidence": 0.79,
+      "description": "靠街机一端的卡座，含格纹桌面与红褐软包座椅；图1被圆桌和木椅部分遮挡，图2位于中景、左端出画。"
+    },
+    {
+      "id": "booth_01_view2",
+      "referenceIndex": 2,
+      "targetId": "booth_01",
+      "anchor": "center",
+      "uv": [
+        0.2555,
+        0.7595000000000001
+      ],
+      "confidence": 0.79,
+      "description": "靠街机一端的卡座，含格纹桌面与红褐软包座椅；图1被圆桌和木椅部分遮挡，图2位于中景、左端出画。"
+    },
+    {
+      "id": "booth_02_view1",
+      "referenceIndex": 1,
+      "targetId": "booth_02",
+      "anchor": "center",
+      "uv": [
+        0.392,
+        0.5695
+      ],
+      "confidence": 0.73,
+      "description": "沿窗墙更深入的一组卡座，桌上有疑似对应的破灯罩；图1位于左后方，图2仅见近景桌面与靠背局部，边缘大量出画。配对为推定。"
+    },
+    {
+      "id": "booth_02_view2",
+      "referenceIndex": 2,
+      "targetId": "booth_02",
+      "anchor": "center",
+      "uv": [
+        0.4485,
+        0.839
+      ],
+      "confidence": 0.73,
+      "description": "沿窗墙更深入的一组卡座，桌上有疑似对应的破灯罩；图1位于左后方，图2仅见近景桌面与靠背局部，边缘大量出画。配对为推定。"
+    },
+    {
+      "id": "pendant_01_view1",
+      "referenceIndex": 1,
+      "targetId": "pendant_01",
+      "anchor": "center",
+      "uv": [
+        0.665,
+        0.3425
+      ],
+      "confidence": 0.73,
+      "description": "靠窗灯列中段的彩色玻璃吊灯，框含可见吊链；图1在街机左上，图2在街机上方。按灯列次序暂配。"
+    },
+    {
+      "id": "pendant_01_view2",
+      "referenceIndex": 2,
+      "targetId": "pendant_01",
+      "anchor": "center",
+      "uv": [
+        0.22,
+        0.4
+      ],
+      "confidence": 0.73,
+      "description": "靠窗灯列中段的彩色玻璃吊灯，框含可见吊链；图1在街机左上，图2在街机上方。按灯列次序暂配。"
+    },
+    {
+      "id": "pendant_02_view1",
+      "referenceIndex": 1,
+      "targetId": "pendant_02",
+      "anchor": "center",
+      "uv": [
+        0.5385,
+        0.2815
+      ],
+      "confidence": 0.68,
+      "description": "靠砖拱灯列中较深入卡座区的吊灯，框含可见吊链；图1居中，图2靠拱口左上。身份为推定。"
+    },
+    {
+      "id": "pendant_02_view2",
+      "referenceIndex": 2,
+      "targetId": "pendant_02",
+      "anchor": "center",
+      "uv": [
+        0.45399999999999996,
+        0.4155
+      ],
+      "confidence": 0.68,
+      "description": "靠砖拱灯列中较深入卡座区的吊灯，框含可见吊链；图1居中，图2靠拱口左上。身份为推定。"
+    },
+    {
+      "id": "pendant_03_view1",
+      "referenceIndex": 1,
+      "targetId": "pendant_03",
+      "anchor": "center",
+      "uv": [
+        0.7735,
+        0.2155
+      ],
+      "confidence": 0.68,
+      "description": "靠砖拱灯列中偏街机端的吊灯，框含可见吊链；图1右上灯体较大，图2远处居中灯体较小。身份为推定。"
+    },
+    {
+      "id": "pendant_03_view2",
+      "referenceIndex": 2,
+      "targetId": "pendant_03",
+      "anchor": "center",
+      "uv": [
+        0.39149999999999996,
+        0.439
+      ],
+      "confidence": 0.68,
+      "description": "靠砖拱灯列中偏街机端的吊灯，框含可见吊链；图1右上灯体较大，图2远处居中灯体较小。身份为推定。"
+    },
+    {
+      "id": "fallen_lamp_table_view1",
+      "referenceIndex": 1,
+      "targetId": "fallen_lamp_table",
+      "anchor": "center",
+      "uv": [
+        0.41200000000000003,
+        0.5275000000000001
+      ],
+      "confidence": 0.77,
+      "description": "落在格纹桌面的破碎彩色玻璃灯罩；图2近景清楚，图1左后方桌上仅见小轮廓，跨图身份暂定。"
+    },
+    {
+      "id": "fallen_lamp_table_view2",
+      "referenceIndex": 2,
+      "targetId": "fallen_lamp_table",
+      "anchor": "center",
+      "uv": [
+        0.512,
+        0.8305
+      ],
+      "confidence": 0.77,
+      "description": "落在格纹桌面的破碎彩色玻璃灯罩；图2近景清楚，图1左后方桌上仅见小轮廓，跨图身份暂定。"
+    },
+    {
+      "id": "fallen_lamp_floor_view1",
+      "referenceIndex": 1,
+      "targetId": "fallen_lamp_floor",
+      "anchor": "center",
+      "uv": [
+        0.311,
+        0.6405000000000001
+      ],
+      "confidence": 0.87,
+      "description": "砖拱柱脚旁地面的破碎彩色玻璃灯罩；图1位于左侧柱脚，图2位于右侧砖墙下。"
+    },
+    {
+      "id": "fallen_lamp_floor_view2",
+      "referenceIndex": 2,
+      "targetId": "fallen_lamp_floor",
+      "anchor": "center",
+      "uv": [
+        0.6825,
+        0.771
+      ],
+      "confidence": 0.87,
+      "description": "砖拱柱脚旁地面的破碎彩色玻璃灯罩；图1位于左侧柱脚，图2位于右侧砖墙下。"
+    },
+    {
+      "id": "round_table_01_view1",
+      "referenceIndex": 1,
+      "targetId": "round_table_01",
+      "anchor": "center",
+      "uv": [
+        0.516,
+        0.6335
+      ],
+      "confidence": 0.91,
+      "description": "靠主砖拱的圆形单柱木桌；桌腿局部被相邻木椅遮挡。"
+    },
+    {
+      "id": "round_table_01_view2",
+      "referenceIndex": 2,
+      "targetId": "round_table_01",
+      "anchor": "center",
+      "uv": [
+        0.47250000000000003,
+        0.6625
+      ],
+      "confidence": 0.91,
+      "description": "靠主砖拱的圆形单柱木桌；桌腿局部被相邻木椅遮挡。"
+    },
+    {
+      "id": "chair_01_view1",
+      "referenceIndex": 1,
+      "targetId": "chair_01",
+      "anchor": "center",
+      "uv": [
+        0.47650000000000003,
+        0.621
+      ],
+      "confidence": 0.88,
+      "description": "圆桌旁带竖条靠背和红褐坐垫的木椅；图1位于圆桌左前，图2位于右前。"
+    },
+    {
+      "id": "chair_01_view2",
+      "referenceIndex": 2,
+      "targetId": "chair_01",
+      "anchor": "center",
+      "uv": [
+        0.5015000000000001,
+        0.681
+      ],
+      "confidence": 0.88,
+      "description": "圆桌旁带竖条靠背和红褐坐垫的木椅；图1位于圆桌左前，图2位于右前。"
+    }
+  ],
+  "observationTargets": {
+    "arch_main": {
+      "1": "arch_main",
+      "2": "arch_main"
+    },
+    "round_table_01": {
+      "1": "round_table_01",
+      "2": "round_table_01"
+    },
+    "chair_01": {
+      "1": "chair_01",
+      "2": "chair_01"
+    }
+  },
+  "fitOptions": {
+    "cameras": {
+      "1": {
+        "position": [
+          [
+            -1.9690111595391289,
+            -1.899011159539129
+          ],
+          [
+            -6.155,
+            -6.085
+          ],
+          [
+            1.547715829020512,
+            1.6177158290205118
+          ]
+        ],
+        "yawDelta": 0.015,
+        "pitchDelta": 0.015,
+        "fovDelta": 0.015
+      },
+      "2": {
+        "position": [
+          [
+            7.185,
+            7.255
+          ],
+          [
+            9.284999999999998,
+            9.354999999999999
+          ],
+          [
+            1.6756423801171019,
+            1.7456423801171017
+          ]
+        ],
+        "yawDelta": 0.015,
+        "pitchDelta": 0.015,
+        "fovDelta": 0.015
+      }
+    },
+    "assets": {},
+    "visibility": [
+      {
+        "referenceIndex": 1,
+        "targetId": "arcade_01"
+      },
+      {
+        "referenceIndex": 2,
+        "targetId": "arcade_01"
+      },
+      {
+        "referenceIndex": 2,
+        "targetId": "entrance_01"
+      },
+      {
+        "referenceIndex": 1,
+        "targetId": "round_table_01"
+      },
+      {
+        "referenceIndex": 1,
+        "targetId": "staff_door_01"
+      }
+    ]
+  }
+}

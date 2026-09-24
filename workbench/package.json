@@ -1,0 +1,9 @@
+{
+  "name": "forgeax-scene-pipeline-workbench",
+  "private": true,
+  "scripts": {
+    "start": "bun src/server.ts",
+    "test": "bun test ./src"
+  },
+  "type": "module"
+}

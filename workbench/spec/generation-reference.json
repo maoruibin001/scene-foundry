@@ -1,0 +1,18 @@
+{
+  "id": "scene-foundry-public-method-v1",
+  "fileName": "workbench/spec/production.md",
+  "documentTitle": "Scene Foundry public method summary",
+  "sha256": "11fd449997884f46438a5ad05e1b6ebca5b71bfc2002d86a1239609c7636545b",
+  "role": "Repository-authored guidance; not an external specification",
+  "text": "Observe all supplied views before planning. Preserve visible spatial anchors, proportions, occlusion, openings, and camera relationships. Mark uncertain geometry as an inference. Build major structures before decorative details, inspect actual Engine output from multiple viewpoints, and repair only measured differences. A generated scene is not certified by a successful build alone.",
+  "adopted": [
+    "Record visible anchors, proportions, and occlusions across all supplied views.",
+    "Build major spatial structures before material and decorative detail.",
+    "Review actual rendered evidence and make bounded repairs."
+  ],
+  "boundaries": [
+    "Generated assets remain bound to the pinned ForgeaX Engine and Scene Generator versions.",
+    "Unseen reference geometry is marked as inferred, not observed.",
+    "A single successful run does not establish general reliability or certification."
+  ]
+}

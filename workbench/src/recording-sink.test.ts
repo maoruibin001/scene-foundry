@@ -1,0 +1,7 @@
+import {test,expect} from 'bun:test';
+import {mkdtemp,readFile,rm} from 'node:fs/promises';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
+import {recordingSink} from './recording-sink.mjs';
+test('loopback recording receiver enforces origin, one use, WebM and exact bytes',async()=>{const d=await mkdtemp(join(tmpdir(),'scene-recording-test-'));const s=await recordingSink(join(d,'tour.webm'),'http://localhost:19775');try{const body=new Uint8Array(4096);body.set([26,69,223,163]);expect((await fetch(s.url,{method:'POST',body,headers:{Origin:'http://wrong.invalid'}})).status).toBe(403);const r=await fetch(s.url,{method:'POST',body,headers:{Origin:'http://localhost:19775'}});expect(r.ok).toBe(true);const receipt=await s.receipt;expect(receipt.bytes).toBe(4096);expect(await readFile(join(d,'tour.webm'))).toEqual(Buffer.from(body));expect((await fetch(s.url,{method:'POST',body,headers:{Origin:'http://localhost:19775'}})).status).toBe(409);}finally{await s.close();await rm(d,{recursive:true,force:true});}});
+test('recording receiver fails closed on non-video bytes',async()=>{const d=await mkdtemp(join(tmpdir(),'scene-recording-bad-')),s=await recordingSink(join(d,'tour.webm'),'http://localhost:19775');try{await fetch(s.url,{method:'POST',body:new Uint8Array(2000),headers:{Origin:'http://localhost:19775'}});await expect(s.receipt).rejects.toThrow('WebM');}finally{await s.close();await rm(d,{recursive:true,force:true});}});

@@ -1,0 +1,441 @@
+{
+  "name": "低多边形灯塔场景",
+  "entities": [
+    {
+      "id": "lighthouse_main",
+      "label": "红白低多边形灯塔",
+      "kind": "lighthouse",
+      "role": "subject",
+      "position": [
+        0,
+        0,
+        6.5
+      ],
+      "size": [
+        4,
+        4,
+        11
+      ],
+      "color": "#D63B35",
+      "accent": "#F2E8D5",
+      "rotation": 0,
+      "requirementIds": [
+        "req-1",
+        "req-4",
+        "req-6"
+      ]
+    },
+    {
+      "id": "rock_base",
+      "label": "灰色岩石底座",
+      "kind": "rock",
+      "role": "context",
+      "position": [
+        0,
+        0,
+        1
+      ],
+      "size": [
+        6,
+        6,
+        2
+      ],
+      "color": "#626A70",
+      "accent": "#899197",
+      "rotation": 0,
+      "requirementIds": [
+        "req-2"
+      ]
+    },
+    {
+      "id": "service_platform",
+      "label": "蓝色检修平台",
+      "kind": "platform",
+      "role": "subject",
+      "position": [
+        7,
+        0,
+        1.5
+      ],
+      "size": [
+        3.5,
+        3.5,
+        3
+      ],
+      "color": "#245A9C",
+      "accent": "#76B7E8",
+      "rotation": 0,
+      "requirementIds": [
+        "req-3",
+        "req-5"
+      ]
+    },
+    {
+      "id": "shore_rock_1",
+      "label": "左前岩石",
+      "kind": "rock",
+      "role": "context",
+      "position": [
+        -7,
+        -5,
+        0.9
+      ],
+      "size": [
+        3,
+        2.5,
+        1.8
+      ],
+      "color": "#596269",
+      "accent": "#858D91",
+      "rotation": 15,
+      "requirementIds": []
+    },
+    {
+      "id": "shore_rock_2",
+      "label": "右前岩石",
+      "kind": "rock",
+      "role": "context",
+      "position": [
+        8,
+        -6,
+        0.8
+      ],
+      "size": [
+        2.8,
+        2.3,
+        1.6
+      ],
+      "color": "#596269",
+      "accent": "#858D91",
+      "rotation": -20,
+      "requirementIds": []
+    },
+    {
+      "id": "shore_rock_3",
+      "label": "后方岩石",
+      "kind": "rock",
+      "role": "context",
+      "position": [
+        -8,
+        5,
+        1
+      ],
+      "size": [
+        3.2,
+        2.6,
+        2
+      ],
+      "color": "#596269",
+      "accent": "#858D91",
+      "rotation": 30,
+      "requirementIds": []
+    },
+    {
+      "id": "shore_rock_4",
+      "label": "平台侧岩石",
+      "kind": "rock",
+      "role": "context",
+      "position": [
+        10,
+        5,
+        0.7
+      ],
+      "size": [
+        2.4,
+        2,
+        1.4
+      ],
+      "color": "#596269",
+      "accent": "#858D91",
+      "rotation": -10,
+      "requirementIds": []
+    },
+    {
+      "id": "crate_1",
+      "label": "平台工具箱一",
+      "kind": "crate",
+      "role": "context",
+      "position": [
+        6.4,
+        -0.8,
+        3.5
+      ],
+      "size": [
+        1.1,
+        1.1,
+        1.2
+      ],
+      "color": "#8A5A32",
+      "accent": "#D3A15C",
+      "rotation": 0,
+      "requirementIds": []
+    },
+    {
+      "id": "crate_2",
+      "label": "平台工具箱二",
+      "kind": "crate",
+      "role": "context",
+      "position": [
+        7.7,
+        0.8,
+        3.5
+      ],
+      "size": [
+        1.1,
+        1.1,
+        1.2
+      ],
+      "color": "#8A5A32",
+      "accent": "#D3A15C",
+      "rotation": 15,
+      "requirementIds": []
+    },
+    {
+      "id": "crate_3",
+      "label": "岸边补给箱",
+      "kind": "crate",
+      "role": "context",
+      "position": [
+        10,
+        -1,
+        0.8
+      ],
+      "size": [
+        1.4,
+        1.2,
+        1.6
+      ],
+      "color": "#76502F",
+      "accent": "#D0A25C",
+      "rotation": -8,
+      "requirementIds": []
+    },
+    {
+      "id": "lamp_1",
+      "label": "前侧航标灯",
+      "kind": "lamp",
+      "role": "context",
+      "position": [
+        -5,
+        -4,
+        2
+      ],
+      "size": [
+        1,
+        1,
+        4
+      ],
+      "color": "#303A46",
+      "accent": "#F5C84B",
+      "rotation": 0,
+      "requirementIds": [
+        "req-6"
+      ]
+    },
+    {
+      "id": "lamp_2",
+      "label": "平台侧航标灯",
+      "kind": "lamp",
+      "role": "context",
+      "position": [
+        5,
+        -4,
+        2
+      ],
+      "size": [
+        1,
+        1,
+        4
+      ],
+      "color": "#303A46",
+      "accent": "#F5C84B",
+      "rotation": 0,
+      "requirementIds": [
+        "req-6"
+      ]
+    },
+    {
+      "id": "lamp_3",
+      "label": "后侧航标灯",
+      "kind": "lamp",
+      "role": "context",
+      "position": [
+        -5,
+        5,
+        2
+      ],
+      "size": [
+        1,
+        1,
+        4
+      ],
+      "color": "#303A46",
+      "accent": "#F5C84B",
+      "rotation": 0,
+      "requirementIds": [
+        "req-6"
+      ]
+    },
+    {
+      "id": "tree_1",
+      "label": "左侧海岸树",
+      "kind": "tree",
+      "role": "context",
+      "position": [
+        -10,
+        -1,
+        2
+      ],
+      "size": [
+        2.5,
+        2.5,
+        4
+      ],
+      "color": "#5A3E2B",
+      "accent": "#3F7C4A",
+      "rotation": 0,
+      "requirementIds": []
+    },
+    {
+      "id": "tree_2",
+      "label": "后侧海岸树",
+      "kind": "tree",
+      "role": "context",
+      "position": [
+        -10,
+        8,
+        2.2
+      ],
+      "size": [
+        2.4,
+        2.4,
+        4.4
+      ],
+      "color": "#5A3E2B",
+      "accent": "#3F7C4A",
+      "rotation": 0,
+      "requirementIds": []
+    },
+    {
+      "id": "tree_3",
+      "label": "右侧海岸树",
+      "kind": "tree",
+      "role": "context",
+      "position": [
+        11,
+        8,
+        2
+      ],
+      "size": [
+        2.2,
+        2.2,
+        4
+      ],
+      "color": "#5A3E2B",
+      "accent": "#3F7C4A",
+      "rotation": 0,
+      "requirementIds": []
+    },
+    {
+      "id": "tree_4",
+      "label": "前方海岸树",
+      "kind": "tree",
+      "role": "context",
+      "position": [
+        11,
+        -8,
+        2.3
+      ],
+      "size": [
+        2.6,
+        2.6,
+        4.6
+      ],
+      "color": "#5A3E2B",
+      "accent": "#3F7C4A",
+      "rotation": 0,
+      "requirementIds": []
+    },
+    {
+      "id": "ground_main",
+      "label": "灰色海岸地面",
+      "kind": "ground",
+      "role": "ground",
+      "position": [
+        0,
+        0,
+        -0.5
+      ],
+      "size": [
+        24,
+        24,
+        1
+      ],
+      "color": "#A0A5A6",
+      "accent": "#C7CDCC",
+      "rotation": 0,
+      "requirementIds": [
+        "req-6"
+      ]
+    }
+  ],
+  "relations": [
+    {
+      "type": "on",
+      "subjects": [
+        "lighthouse_main"
+      ],
+      "target": "rock_base",
+      "gap": 0
+    },
+    {
+      "type": "on",
+      "subjects": [
+        "rock_base",
+        "service_platform",
+        "shore_rock_1",
+        "shore_rock_2",
+        "shore_rock_3",
+        "shore_rock_4",
+        "lamp_1",
+        "lamp_2",
+        "lamp_3",
+        "tree_1",
+        "tree_2",
+        "tree_3",
+        "tree_4",
+        "crate_3"
+      ],
+      "target": "ground_main",
+      "gap": 0
+    },
+    {
+      "type": "on",
+      "subjects": [
+        "crate_1",
+        "crate_2"
+      ],
+      "target": "service_platform",
+      "gap": 0
+    },
+    {
+      "type": "rightOf",
+      "subjects": [
+        "service_platform"
+      ],
+      "target": "lighthouse_main",
+      "gap": 3
+    },
+    {
+      "type": "around",
+      "subjects": [
+        "shore_rock_1",
+        "shore_rock_2",
+        "shore_rock_3",
+        "shore_rock_4"
+      ],
+      "target": "rock_base",
+      "radius": 8
+    }
+  ]
+}

@@ -1,0 +1,6 @@
+import {addChild,emptyScene,sceneNode} from '@forgeax/scene';
+import {compileGeometryProgram} from './geometry/program';
+export function generated({program,textures}:any){
+ const result=compileGeometryProgram(program,textures);
+ return addChild({scene:emptyScene(),nodes:result.meshes.map(m=>sceneNode({name:m.name,key:m.name,geometry:m.geometry}).scene)});
+}

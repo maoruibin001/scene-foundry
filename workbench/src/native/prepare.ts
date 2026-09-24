@@ -1,0 +1,44 @@
+import {lstatSync,mkdirSync,readFileSync,writeFileSync,copyFileSync,symlinkSync,existsSync} from 'node:fs';
+import {join,resolve} from 'node:path';
+import {randomUUID,createHash} from 'node:crypto';
+import {validateReconstruction} from './reconstruction-schema';
+import {ARCADE_MATERIALS,arcadeSurfaces} from './arcade-materials';
+const W=resolve(import.meta.dirname,'../..'),BASE=resolve(W,'..'),P=join(BASE,'prototype'),ENGINE=join(BASE,'engine');
+export const CASE=join(W,'data/reconstructions/diner-20260922');
+const read=(f:string)=>JSON.parse(readFileSync(f,'utf8')),save=(f:string,v:any)=>writeFileSync(f,JSON.stringify(v,null,2)+'\n');
+export const sha=(p:string)=>createHash('sha256').update(readFileSync(p)).digest('hex');
+// 图集的无损 GPU 上传分区：保留原图，不重采样、不生成替代纹理。
+// 固定版本的 Bun base64 正则对约 1024² 以上的合法数据误判；独立材质分区同时减少无关纹理采样。
+export function atlasSurfaces(atlas:any,grid=3){const bytes=Buffer.from(atlas.rgba8,'base64'),w=atlas.width/grid,h=atlas.height/grid;if(!Number.isInteger(w)||!Number.isInteger(h))throw Error('图集必须是等分九宫格');return Array.from({length:grid*grid},(_,i)=>{const out=Buffer.alloc(w*h*4),x=(i%grid)*w,y=Math.floor(i/grid)*h;for(let row=0;row<h;row++)bytes.copy(out,row*w*4,((y+row)*atlas.width+x)*4,((y+row)*atlas.width+x+w)*4);return {width:w,height:h,rgba8:out.toString('base64'),colorSpace:atlas.colorSpace};});}
+export const VIEWS=[{name:'参考视角一',position:[-5.0,1.66,6.5],target:[-.5,1.90,-2.0]},{name:'参考视角二',position:[-5.4,1.68,-3.82],target:[5.7,1.80,.30]}];
+export function prepareNativeControls(assets:string){
+ copyFileSync(join(W,'src/native/camera.txt'),join(assets,'camera.plugin.ts'));
+ copyFileSync(join(W,'src/native/camera-motion.ts'),join(assets,'camera-motion.ts'));
+ let ui=readFileSync(join(W,'src/ui-v3.txt'),'utf8').replace('Space 巡航/暂停 · 方向键移动 · H 隐藏/恢复 · R 开始/停止录屏','点击画面后：WASD 移动 · Q/E 降/升 · Shift 加速 · 鼠标拖动/← → 转向 · 1/2 复位 · Space 观测/暂停 · H 隐藏 · R 录屏');
+ ui=ui.replace('const record=document.createElement',`for(const [index,label] of ['参考视角一','参考视角二'].entries()){const button=document.createElement('button');button.textContent=label;button.style.cssText='margin:8px 4px;padding:5px 9px;cursor:pointer';button.onclick=()=>{channel.postMessage({action:'view',index});const canvas=document.querySelector('canvas');if(canvas){canvas.tabIndex=0;canvas.focus();}};hud.append(button);}hud.append(document.createElement('br'));const record=document.createElement`);
+ ui=ui.replace('const keys=(e:KeyboardEvent)=>{',`const keys=(e:KeyboardEvent)=>{if(e.target instanceof HTMLCanvasElement&&['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code))e.preventDefault();`);
+ ui=ui.replace('return()=>{channel.close();',`const focusCanvas=(e:PointerEvent)=>{if(e.target instanceof HTMLCanvasElement){e.target.tabIndex=0;e.target.focus();}};const contextMenu=(e:MouseEvent)=>{if(e.target instanceof HTMLCanvasElement)e.preventDefault();};document.addEventListener('pointerdown',focusCanvas);document.addEventListener('contextmenu',contextMenu);
+ return()=>{document.removeEventListener('pointerdown',focusCanvas);document.removeEventListener('contextmenu',contextMenu);channel.close();`);
+ writeFileSync(join(assets,'ui.plugin.ts'),ui);
+}
+export function prepareNative(root:string,id:string,layout?:any){
+ const game=join(root,'game'),assets=join(game,'assets'),source=join(root,'source');for(const d of [source,assets,join(game,'node_modules/@forgeax')])mkdirSync(d,{recursive:true});
+ const atlas=atlasSurfaces(read(join(CASE,'atlas-surface.json')));if(sha(join(CASE,'material-atlas.png'))!=='f6c7d8612de246750c1b240f070c35800cdb71e587eb7109750053333385de23')throw Error('餐厅材质版本摘要不符');
+ if(layout){if(sha(join(CASE,'detail-material-atlas-v1.png'))!=='139ff0b2b263cc018424e5b9865d013f892cf1e7925769b9ebb36e0028bdfeb2'||sha(join(CASE,'detail-atlas-surface.json'))!=='2092910b4707f5fcc541a9ce67c1d80bac971f60cc2f38dcd317f6cbffd279e3')throw Error('细节图集摘要不符');const details=atlasSurfaces(read(join(CASE,'detail-atlas-surface.json')),2);atlas[7]=details[1];atlas[8]=details[0];atlas.push(details[2],details[3]);}
+ if(layout){if(sha(join(CASE,'arcade-material-atlas-v1.png'))!==ARCADE_MATERIALS.imageSha256||sha(join(CASE,'arcade-atlas-surface.json'))!==ARCADE_MATERIALS.surfaceSha256)throw Error('街机材质图集摘要不符');for(const {index,texture} of arcadeSurfaces(read(join(CASE,'arcade-atlas-surface.json'))))atlas[index]=texture;}
+ const pin=read(join(P,'brief.json')),brief={...pin,id:'diner-'+id,name:'旧日餐厅 · 双视角复刻',semanticBrief:'依据两张参考图辅助制作同一个旧餐厅：砖拱木梁、多格窗、红褐卡座、格纹桌布、街机和彩玻璃吊灯。精确尺度和被遮挡区域为推断。',entry:'diner.scene.ts',exportName:'diner',args:[{atlas}],packageId:randomUUID(),sourceKey:'scene/diner-reconstruction',budget:{maxTriangles:250000,maxMaterials:30,consumerBuildMs:90000}};save(join(root,'brief.json'),brief);
+ if(layout){validateReconstruction(layout);brief.entry='reconstruction.scene.ts';brief.exportName='reconstruction';brief.args=[{atlas,layout}];brief.name=layout.name;save(join(root,'brief.json'),brief);save(join(root,'reference-layout.json'),layout);}
+ const views=layout?layout.cameras.sort((a:any,b:any)=>a.referenceIndex-b.referenceIndex).map((c:any)=>({name:'参考视角'+c.referenceIndex,position:[c.position[0],c.position[2],-c.position[1]],target:[c.target[0],c.target[2],-c.target[1]],fov:c.verticalFov})):VIEWS;
+ for(const file of ['mesh.ts','micro-surface.ts','diner.scene.ts',...(layout?['reconstruction.scene.ts','reconstruction-schema.ts','asset-library.ts','tabletop.ts','table-litter.ts','cloth.ts']:[])])copyFileSync(join(W,'src/native',file),join(source,file));
+ mkdirSync(join(source,'geometry'),{recursive:true});copyFileSync(join(W,'src/geometry/mesh.ts'),join(source,'geometry/mesh.ts'));writeFileSync(join(source,'mesh.ts'),readFileSync(join(source,'mesh.ts'),'utf8').replaceAll('../geometry/mesh','./geometry/mesh'));
+ const cfg=read(join(P,'game/forge.json'));cfg.id=brief.id;cfg.name=brief.name;save(join(game,'forge.json'),cfg);save(join(game,'package.json'),{name:'diner-reconstruction',private:true,type:'module',packageManager:'pnpm@11.7.0'});
+ if(!lstatSync(join(game,'node_modules/@forgeax/engine'),{throwIfNoEntry:false}))symlinkSync(join(ENGINE,'packages/engine'),join(game,'node_modules/@forgeax/engine'),'dir');
+ const bounceEntities=layout?layout.architecture.flatMap((wall:any)=>wall.openings.filter((o:any)=>o.kind==='window').map((o:any)=>{const c=Math.cos(wall.rotation),sn=Math.sin(wall.rotation),x=wall.position[0]+c*o.offset+sn*.45,y=wall.position[1]+sn*o.offset-c*.45;return o.id.replace(/[^a-zA-Z0-9_]/g,'_')+'_光:{components:{Transform:{pos:'+JSON.stringify([x,o.bottom+o.height*.45,-y])+'},PointLight:{color:[1,.87,.66],intensity:1.7,range:4.0}}},';})).join(''):'';
+ let world=readFileSync(join(P,'game/assets/world.pack.ts'),'utf8').replace('const pos=[20,10,20] as const;','const pos='+JSON.stringify(VIEWS[0].position)+' as const;').replace('[0,5,0]',JSON.stringify(VIEWS[0].target)).replace('fov:Math.PI/3','fov:1.16').replace('far:160','far:100').replace('near:0.1','near:0.035').replace('clearColor:[0.06,0.10,0.13,1]','clearColor:[0.28,0.30,0.24,1]').replace('direction:[-0.35,-0.85,-0.40]','direction:[-0.5,-0.42,0.68]').replace('intensity:3.2','intensity:2.2').replace('mapSize:1024','mapSize:2048').replace('shadowDistance:65','shadowDistance:30').replace('color:[0.65,0.83,1],intensity:0.85','color:[1,0.91,0.76],intensity:0.20');world=world.replace('Camera, DirectionalLight, Skylight, perspective','Camera, DirectionalLight, Skylight, PointLight, perspective').replace('sceneComponents:[Camera,DirectionalLight,Skylight,Name,Transform]','sceneComponents:[Camera,DirectionalLight,Skylight,PointLight,Name,Transform]').replace("ambient:{components:",bounceEntities+"ambient:{components:").replace('Micro garden recording scene','旧日餐厅').replace('Micro garden authored content','餐厅原生场景').replace('Recording camera','参考相机').replace('Warm daylight','暖色日光').replace('Cool ambient','室内环境光');
+ world=world.replace(JSON.stringify(VIEWS[0].position),JSON.stringify(views[0].position)).replace(JSON.stringify(VIEWS[0].target),JSON.stringify(views[0].target));if(layout)world=world.replace('fov:1.16','fov:'+views[0].fov);
+ writeFileSync(join(assets,'world.pack.ts'),world);
+ prepareNativeControls(assets);
+ save(join(assets,'scene-audit.json'),{name:brief.name,channelId:brief.packageId,specSha256:sha(join(W,'spec/production.md')),views,parts:[],provenance:{method:layout?'双图布局数据驱动原生资产构造':'辅助制作的原生场景脚本；非通用全自动复刻验证',engineSha:pin.engineSha,generatorSha:pin.generatorSha,atlasSha256:sha(join(CASE,'material-atlas.png')),referenceSha256:[1,2].map(i=>sha(join(CASE,'references/view-'+i+'.png')))}});
+ return brief;
+}
+if(import.meta.main){const b=prepareNative(resolve(process.argv[2]??join(CASE,'project')),process.argv[3]??'diagnostic',process.argv[4]?read(resolve(process.argv[4])):undefined);console.log(JSON.stringify({id:b.id,name:b.name,budget:b.budget}));}

@@ -1,0 +1,25 @@
+{
+  "id": "micro-garden-observatory",
+  "name": "根界 · 微观温室检修站",
+  "schemaVersion": "2.0.0",
+  "defaultScene": "a87e5649-45ce-573f-85a4-0e0cf565b71c",
+  "plugins": [
+    {
+      "id": "camera",
+      "name": "./assets/camera.plugin.ts",
+      "realm": "engine",
+      "inject": [
+        "world",
+        "gameHost"
+      ]
+    },
+    {
+      "id": "ui",
+      "name": "./assets/ui.plugin.ts",
+      "realm": "frontend",
+      "inject": [
+        "gameHost"
+      ]
+    }
+  ]
+}

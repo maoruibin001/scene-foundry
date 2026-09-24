@@ -1,0 +1,10 @@
+{
+  "repository": "https://github.com/cvg/LightGlue",
+  "codeSha": "eb42fee2d71449efb0aa5c10549752b5d75384d8",
+  "model": "sift_lightglue",
+  "modelRevision": "v0.1_arxiv",
+  "checkpoint": "LightGlue/sift_lightglue.pth",
+  "checkpointSha256": "5b52b8d9982d43532dc042606b346bb9594c9f5a4bd6f64362c63866287b4ac0",
+  "license": "Apache-2.0",
+  "extractor": "OpenCV SIFT + RootSIFT"
+}

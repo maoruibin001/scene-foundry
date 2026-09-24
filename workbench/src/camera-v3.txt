@@ -1,0 +1,24 @@
+import type {} from '@forgeax/engine/app';
+import {Time,Update} from '@forgeax/engine/ecs';
+import {INPUT_SNAPSHOT_RESOURCE_KEY,FRAME_START_SCAN_SYSTEM_NAME,type InputSnapshot} from '@forgeax/engine/input';
+import {quat} from '@forgeax/engine/math';
+import type {Plugin} from '@forgeax/engine/plugin';
+import {Transform,sceneEntity,worldResolveSceneEntity} from '@forgeax/engine/scene';
+import audit from './scene-audit.json';
+export default {name:'scene/camera',inject:['world','gameHost'],apply(ctx){
+ const host=ctx.gameHost;if(host?.defaultSceneRoot===undefined)throw Error('Scene root unavailable');
+ const root=host.defaultSceneRoot,camera=worldResolveSceneEntity(ctx.world,root,sceneEntity('scene/main','camera')).unwrap();
+ const channel=new BroadcastChannel('forgeax-scene-'+audit.channelId),sourceId=crypto.randomUUID();const center=audit.camera.center;let angle=Math.PI/4,radius=audit.camera.radius,running=false,frames=0,last=performance.now();const timings:number[]=[];let lastPublished=0;
+ ctx.effect(function*(){ctx.world.addSystem(Update,{name:'scene-camera',after:[FRAME_START_SCAN_SYSTEM_NAME],queries:[],fn:()=>{
+  const input=ctx.world.getResource<InputSnapshot>(INPUT_SNAPSHOT_RESOURCE_KEY),dt=Math.min(ctx.world.getResource(Time).delta,.1),now=performance.now();if(frames>10)timings.push(now-last);if(timings.length>6000)timings.shift();last=now;frames++;
+  if(input.keyboard.justPressedCode('Space'))running=!running;
+  angle+=(Number(input.keyboard.downCode('ArrowRight'))-Number(input.keyboard.downCode('ArrowLeft')))*.7*dt+(running?.16:0)*dt;
+  radius=Math.max(audit.camera.radius*.65,Math.min(audit.camera.radius*1.5,radius+(Number(input.keyboard.downCode('ArrowDown'))-Number(input.keyboard.downCode('ArrowUp')))*5*dt));
+  const pos=[center[0]+Math.cos(angle)*radius,center[1]+audit.camera.height,center[2]+Math.sin(angle)*radius] as const;
+  ctx.world.set(camera,Transform,{pos,quat:Array.from(quat.fromLookAt(quat.create(),pos,center,[0,1,0]))}).unwrap();
+  if(now-lastPublished>100){lastPublished=now;const actual=ctx.world.get(camera,Transform).unwrap();
+   const parts=audit.parts.map((p:any)=>({id:p.id,entityId:p.entityId,loaded:worldResolveSceneEntity(ctx.world,root,sceneEntity('scene/main',['garden',p.bindingKey])).ok}));
+   channel.postMessage({sourceId,position:Array.from(actual.pos),quaternion:Array.from(actual.quat),target:center,running,angle,frames,frameTimes:timings,parts,specSha256:audit.specSha256});
+  }
+ }}).unwrap();yield()=>{ctx.world.removeSystem(Update,'scene-camera').unwrap();channel.close();};},'scene/camera');
+}} satisfies Plugin;

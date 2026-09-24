@@ -1,0 +1,47 @@
+# Local configuration and credentials
+.env
+.env.*
+!.env.example
+**/.env
+**/.env.*
+!**/.env.example
+
+# Runtime state, uploads, generated scenes, model data, and evidence
+workbench/data/
+workbench/combined-tests.log
+prototype/evidence/
+prototype/release/
+prototype/.previous-generated/
+prototype/game/dist/
+prototype/game/assets/generated/
+prototype/game/assets/generated-identity.*
+release/
+*.log
+*.zip
+*.webm
+*.mp4
+*.onnx
+*.safetensors
+*.pt
+*.pth
+
+# Separate upstream repositories and local dependencies
+engine/
+engine
+scene-generator/
+scene-generator
+reconstruction-depth/
+reconstruction-depth
+reconstruction-matching/
+reconstruction-matching
+**/node_modules/
+
+# Local tooling and temporary files
+.DS_Store
+**/__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+dist/
+tmp/
+*.tmp

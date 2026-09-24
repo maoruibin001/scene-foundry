@@ -1,0 +1,23 @@
+import {addChild,box,defineMaterial,emptyScene,paintSurface,sceneNode,transform} from '@forgeax/scene';
+export function generated(recipe:any){
+ const mats=Object.fromEntries(recipe.materials.map((m:any)=>[m.id,defineMaterial({name:m.id,surface:()=>({baseColor:m.color,roughness:m.roughness,metallic:m.metallic})})]));
+ const nodes=recipe.objects.map((o:any)=>{
+  let geometry:any;
+  if(o.shape==='box')geometry=box({width:o.size[0],depth:o.size[1],height:o.size[2]});
+  else if(o.shape==='leaf'){const [l,w,h]=o.size;geometry={kind:'mesh',positions:[0,0,0,l*.48,w*.5,h*.35,l,0,h,l*.48,-w*.5,h*.35,l*.48,0,h*.48],indices:[0,1,4,1,2,4,2,3,4,3,0,4,4,1,0,4,2,1,4,3,2,4,0,3]};}
+  else {
+   const positions:number[]=[],indices:number[]=[],s=o.sides??8;
+   const levels=o.shape==='sphere'?8:1;
+   for(let j=0;j<=levels;j++){
+    const phi=Math.PI*j/levels;const r=o.shape==='sphere'?Math.sin(phi)*o.size[0]/2:j?o.radiusTop:o.radiusBottom;
+    const z=o.shape==='sphere'?(1-Math.cos(phi))*o.size[2]/2:j*o.size[2];
+    for(let i=0;i<s;i++){const a=i/s*Math.PI*2;positions.push(Math.cos(a)*r,Math.sin(a)*r*(o.shape==='sphere'?o.size[1]/o.size[0]:1),z);}
+   }
+   for(let j=0;j<levels;j++)for(let i=0;i<s;i++){const n=(i+1)%s,a=j*s+i,b=j*s+n,c=(j+1)*s+i,d=(j+1)*s+n;indices.push(a,b,c,b,d,c);}
+   if(o.shape!=='sphere')for(let i=1;i<s-1;i++)indices.push(0,i+1,i,s,s+i,s+i+1);
+   geometry={kind:'mesh',positions,indices};
+  }
+  geometry=transform({geometry,x:o.position[0],y:o.position[1],z:o.position[2],yaw:o.rotation});
+  return sceneNode({name:o.id,key:o.id,geometry:paintSurface({geometry,material:mats[o.material]})}).scene;
+ });return addChild({scene:emptyScene(),nodes});
+}

@@ -1,0 +1,7 @@
+import {addChild,emptyScene,sceneNode} from '@forgeax/scene';
+export function reconstructed({scene}:any){
+ return addChild({scene:emptyScene(),nodes:scene.meshes.map((m:any)=>sceneNode({
+  name:m.name,key:m.name,geometry:{kind:'mesh',positions:m.positions,normals:m.normals,uvs:m.uvs,indices:m.indices,
+   material:{id:m.material,surface:{baseColor:[1,1,1,1],roughness:1,metallic:0,baseColorTexture:scene.surfaces[m.material]}}}
+ }).scene)});
+}

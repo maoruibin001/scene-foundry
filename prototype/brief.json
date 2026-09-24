@@ -1,0 +1,16 @@
+{
+  "id": "micro-garden-observatory",
+  "name": "根界 · 微观温室检修站",
+  "semanticBrief": "日常花盆被放大为建筑尺度，根系如高塔，环绕的检修平台、金属支撑和陶土容器形成前中后景。连续移动相机展示相同结构的视差与遮挡。",
+  "targets": ["scene-mapping", "scene-consistency"],
+  "generator": "scene-script",
+  "entry": "garden.scene.ts",
+  "exportName": "garden",
+  "args": [{"segments": 16, "seed": 23}],
+  "packageId": "61b8d6f1-150f-41c7-a2be-b7890d1c7618",
+  "sourceKey": "scene/micro-garden",
+  "engineSha": "f2eb6c0893f1df2310514b95e76dad24c6d2fc0d",
+  "generatorSha": "c3943a5026fc5f32f1b4993d542e1f372656049c",
+  "budget": {"maxTriangles": 20000, "maxMaterials": 16, "consumerBuildMs": 15000},
+  "externalAssets": {"required": false, "status": "not-requested"}
+}

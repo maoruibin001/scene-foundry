@@ -1,0 +1,266 @@
+{
+  "name": "low_poly_tree_recording_scene",
+  "entities": [
+    {
+      "id": "ground_01",
+      "label": "开放中性地面",
+      "kind": "ground",
+      "role": "ground",
+      "position": [
+        0,
+        0,
+        -0.3
+      ],
+      "size": [
+        18,
+        16,
+        0.6
+      ],
+      "color": "#B9D8D5",
+      "accent": "#8FAEAF",
+      "rotation": 0,
+      "requirementIds": [
+        "platform_base",
+        "open_neutral_background"
+      ]
+    },
+    {
+      "id": "platform_01",
+      "label": "方形厚底台",
+      "kind": "platform",
+      "role": "subject",
+      "position": [
+        0,
+        0,
+        0.25
+      ],
+      "size": [
+        14,
+        12,
+        0.5
+      ],
+      "color": "#C8E5E1",
+      "accent": "#91AEB1",
+      "rotation": 0,
+      "requirementIds": [
+        "platform_base",
+        "low_poly_materials"
+      ]
+    },
+    {
+      "id": "tree_planter_01",
+      "label": "中央树木花盆",
+      "kind": "potted_plant",
+      "role": "subject",
+      "position": [
+        0,
+        0,
+        5.1
+      ],
+      "size": [
+        5,
+        5,
+        10
+      ],
+      "color": "#C98558",
+      "accent": "#78C99A",
+      "rotation": 0,
+      "requirementIds": [
+        "central_tree_planter",
+        "low_poly_materials"
+      ]
+    },
+    {
+      "id": "seat_left",
+      "label": "左侧座椅",
+      "kind": "box",
+      "role": "context",
+      "position": [
+        -4.2,
+        0.2,
+        1.25
+      ],
+      "size": [
+        2.4,
+        1.5,
+        0.5
+      ],
+      "color": "#557989",
+      "accent": "#9EBBC0",
+      "rotation": 0,
+      "requirementIds": [
+        "surrounding_seating",
+        "low_poly_materials"
+      ]
+    },
+    {
+      "id": "seat_right",
+      "label": "右侧座椅",
+      "kind": "box",
+      "role": "context",
+      "position": [
+        4.2,
+        0.4,
+        1.25
+      ],
+      "size": [
+        2.4,
+        1.5,
+        0.5
+      ],
+      "color": "#557989",
+      "accent": "#9EBBC0",
+      "rotation": 0,
+      "requirementIds": [
+        "surrounding_seating",
+        "low_poly_materials"
+      ]
+    },
+    {
+      "id": "seat_front",
+      "label": "前侧座椅",
+      "kind": "box",
+      "role": "context",
+      "position": [
+        0,
+        -4.3,
+        1.25
+      ],
+      "size": [
+        2.4,
+        1.5,
+        0.5
+      ],
+      "color": "#557989",
+      "accent": "#9EBBC0",
+      "rotation": 0,
+      "requirementIds": [
+        "surrounding_seating",
+        "low_poly_materials"
+      ]
+    },
+    {
+      "id": "lamp_left",
+      "label": "左侧灯柱",
+      "kind": "lamp",
+      "role": "context",
+      "position": [
+        -5.2,
+        2.8,
+        2.2
+      ],
+      "size": [
+        0.45,
+        0.45,
+        3.2
+      ],
+      "color": "#527687",
+      "accent": "#F6E28A",
+      "rotation": 0,
+      "requirementIds": [
+        "perimeter_light_posts",
+        "low_poly_materials"
+      ]
+    },
+    {
+      "id": "lamp_right",
+      "label": "右侧灯柱",
+      "kind": "lamp",
+      "role": "context",
+      "position": [
+        5.2,
+        2.8,
+        2.2
+      ],
+      "size": [
+        0.45,
+        0.45,
+        3.2
+      ],
+      "color": "#527687",
+      "accent": "#F6E28A",
+      "rotation": 0,
+      "requirementIds": [
+        "perimeter_light_posts",
+        "low_poly_materials"
+      ]
+    },
+    {
+      "id": "lamp_front",
+      "label": "前侧灯柱",
+      "kind": "lamp",
+      "role": "context",
+      "position": [
+        2.8,
+        -4.5,
+        2.2
+      ],
+      "size": [
+        0.45,
+        0.45,
+        3.2
+      ],
+      "color": "#527687",
+      "accent": "#F6E28A",
+      "rotation": 0,
+      "requirementIds": [
+        "perimeter_light_posts",
+        "low_poly_materials"
+      ]
+    }
+  ],
+  "relations": [
+    {
+      "type": "on",
+      "subjects": [
+        "platform_01"
+      ],
+      "target": "ground_01",
+      "gap": 0
+    },
+    {
+      "type": "on",
+      "subjects": [
+        "tree_planter_01",
+        "seat_left",
+        "seat_right",
+        "seat_front",
+        "lamp_left",
+        "lamp_right",
+        "lamp_front"
+      ],
+      "target": "platform_01",
+      "gap": 0
+    },
+    {
+      "type": "around",
+      "subjects": [
+        "seat_left",
+        "seat_right",
+        "seat_front",
+        "lamp_left",
+        "lamp_right",
+        "lamp_front"
+      ],
+      "target": "tree_planter_01",
+      "radius": 5.5,
+      "gap": 1
+    },
+    {
+      "type": "leftOf",
+      "subjects": [
+        "seat_left",
+        "lamp_left"
+      ],
+      "target": "tree_planter_01"
+    },
+    {
+      "type": "rightOf",
+      "subjects": [
+        "seat_right",
+        "lamp_right"
+      ],
+      "target": "tree_planter_01"
+    }
+  ]
+}

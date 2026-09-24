@@ -1,0 +1,31 @@
+import type {} from '@forgeax/engine/app';
+import {Time,Update} from '@forgeax/engine/ecs';
+import {INPUT_SNAPSHOT_RESOURCE_KEY,FRAME_START_SCAN_SYSTEM_NAME,type InputSnapshot} from '@forgeax/engine/input';
+import {quat} from '@forgeax/engine/math';
+import {Camera} from '@forgeax/engine/render';
+import type {Plugin} from '@forgeax/engine/plugin';
+import {Transform,sceneEntity,worldResolveSceneEntity} from '@forgeax/engine/scene';
+import audit from './scene-audit.json';
+import {createCameraMotion,stepCamera,toggleCruise} from './camera-motion';
+export default {name:'scene/camera',inject:['world','gameHost'],apply(ctx){
+ const root=ctx.gameHost.defaultSceneRoot,camera=worldResolveSceneEntity(ctx.world,root,sceneEntity('scene/main','camera')).unwrap();
+ const channel=new BroadcastChannel('forgeax-scene-'+audit.channelId),sourceId=crypto.randomUUID();let selected=0,motion=createCameraMotion(audit.views[0]),frames=0,last=performance.now(),lastPublished=0;const times:number[]=[];
+ const view=(n:number)=>{selected=n;motion=createCameraMotion(audit.views[n]);};
+ channel.onmessage=e=>{if(e.data?.action==='view'&&[0,1].includes(e.data.index))view(e.data.index);};
+ ctx.effect(function*(){ctx.world.addSystem(Update,{name:'scene-camera',after:[FRAME_START_SCAN_SYSTEM_NAME],queries:[],fn:()=>{
+  const input=ctx.world.getResource<InputSnapshot>(INPUT_SNAPSHOT_RESOURCE_KEY),dt=Math.min(ctx.world.getResource(Time).delta,.1),now=performance.now();if(frames>10)times.push(now-last);if(times.length>1200)times.shift();last=now;frames++;
+  if(input.keyboard.justPressedCode('Digit1'))view(0);if(input.keyboard.justPressedCode('Digit2'))view(1);if(input.keyboard.justPressedCode('Space'))toggleCruise(motion);
+  const down=(code:string)=>input.keyboard.downCode(code)||input.keyboard.justPressedCode(code);
+  const dragging=input.mouse.button(0)||input.mouse.button(2),look=input.mouse.movementDelta;
+  stepCamera(motion,{
+   forward:Number(down('KeyW')||down('ArrowUp'))-Number(down('KeyS')||down('ArrowDown')),
+   side:Number(down('KeyD'))-Number(down('KeyA')),up:Number(down('KeyE'))-Number(down('KeyQ')),
+   yaw:(Number(down('ArrowRight'))-Number(down('ArrowLeft')))*dt*1.2+(dragging?look.x*.003:0),
+   pitch:dragging?-look.y*.003:0,fast:down('ShiftLeft')||down('ShiftRight')
+  },dt);
+  const {position:pos,target,running}=motion;
+  ctx.world.set(camera,Transform,{pos,quat:Array.from(quat.fromLookAt(quat.create(),pos,target,[0,1,0]))}).unwrap();
+  if(audit.views[selected].fov)ctx.world.set(camera,Camera,{fov:audit.views[selected].fov}).unwrap();
+  if(now-lastPublished>150){lastPublished=now;const parts=audit.parts.map((p:any)=>({id:p.id,loaded:worldResolveSceneEntity(ctx.world,root,sceneEntity('scene/main',['garden',p.bindingKey])).ok}));channel.postMessage({sourceId,position:pos,target,selectedView:selected,running,frames,frameTimes:times,parts,specSha256:audit.specSha256,cameraControls:'free-inspection-v2'});}
+ }}).unwrap();yield()=>{ctx.world.removeSystem(Update,'scene-camera').unwrap();channel.close();};},'scene/camera');
+}} satisfies Plugin;

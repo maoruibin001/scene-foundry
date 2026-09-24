@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>场景生成 · 过程观察</title>
+    <link rel="stylesheet" href="/process/vendor/xterm.css" />
+    <link rel="stylesheet" href="/process/style.css" />
+  </head>
+  <body class="embedded">
+    <header>
+      <div class="brand">
+        <span class="mark">◈</span>
+        <div>
+          FORGEAX <span class="muted">/ 过程观察</span
+          ><small>让每一步生成都有迹可循</small>
+        </div>
+      </div>
+      <div class="header-right">
+        <span class="pill">只读观测</span><span id="connection">正在读取</span
+        ><button id="refresh">刷新</button>
+      </div>
+    </header>
+    <div class="shell">
+      <aside>
+        <div class="aside-title">生成记录 <span id="total"></span></div>
+        <p id="live" class="muted"></p>
+        <label class="sr-only" for="search">搜索任务</label
+        ><input id="search" placeholder="搜索名称 / 版本 / ID" /><label
+          class="sr-only"
+          for="filter"
+          >筛选记录</label
+        ><select id="filter">
+          <option value="all">全部记录</option>
+          <option value="active">执行中 / 等待</option>
+          <option value="failed">失败 / 超时 / 受阻</option>
+          <option value="passed">已通过</option>
+          <option value="diagnostic">诊断记录</option>
+        </select>
+        <nav id="history" aria-label="历史任务"></nav>
+        <p class="aside-foot">
+          自动读取：详情 5 秒 · 列表 15 秒<br />取消和重试尚未接入
+        </p>
+      </aside>
+      <main id="main"><div class="empty">正在读取真实工件…</div></main>
+    </div>
+    <dialog id="viewer">
+      <form method="dialog"><button>关闭预览</button></form>
+      <h2 id="viewer-title"></h2>
+      <div id="viewer-content"></div>
+    </dialog>
+    <script type="module" src="/process/app.js"></script>
+  </body>
+</html>

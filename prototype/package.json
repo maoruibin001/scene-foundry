@@ -1,0 +1,13 @@
+{
+  "name": "forgeax-asset-pipeline-prototype",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "generate": "bun bin/pipeline.ts generate",
+    "build": "bun bin/pipeline.ts build",
+    "verify": "bun bin/pipeline.ts verify",
+    "preview": "bun bin/pipeline.ts preview",
+    "test": "bun test bin/pipeline.test.ts",
+    "accept": "bun bin/pipeline.ts accept"
+  }
+}

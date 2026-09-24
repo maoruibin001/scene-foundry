@@ -1,0 +1,7 @@
+import {test,expect} from 'bun:test';
+import {validateRecipe,validatePlan,bounds} from './recipe';
+const plan={name:'island',summary:'island',requirements:[{id:'water',text:'blue water',critical:true,weight:5}]};
+const recipe={materials:[{id:'blue',color:[.1,.3,.7,1],roughness:.8,metallic:0}],objects:[{id:'water',label:'Water',requirementIds:['water'],shape:'box',position:[0,0,-.5],size:[20,20,1],rotation:0,material:'blue'}]};
+test('valid submerged bases have finite camera framing',()=>{validatePlan(plan);const r=validateRecipe(structuredClone(recipe),plan);expect(r.objects[0].position[2]).toBe(-.5);const b=bounds(r);expect(b.radius).toBeGreaterThan(20);expect(b.center.every(Number.isFinite)).toBe(true)});
+test('model output cannot become executable code or arbitrary geometry types',()=>{expect(()=>validateRecipe({...recipe,objects:[{...recipe.objects[0],shape:'eval'}]},plan)).toThrow();expect(()=>validateRecipe({...recipe,objects:[{...recipe.objects[0],size:[NaN,1,1]}]},plan)).toThrow();expect(()=>validateRecipe({...recipe,objects:Array.from({length:121},()=>recipe.objects[0])},plan)).toThrow()});
+test('untrusted annotations are preserved as diagnostics and cannot add to frozen requirements',()=>{const r=validateRecipe({...recipe,objects:[{...recipe.objects[0],requirementIds:['water','invented']}]},plan);expect(r.annotationWarnings).toEqual([{object:'water',unknownRequirement:'invented'}]);expect(plan.requirements.length).toBe(1)});

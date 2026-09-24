@@ -1,0 +1,17 @@
+import type {} from '@forgeax/engine/app';
+import type {Plugin} from '@forgeax/engine/plugin';
+import audit from './scene-audit.json';
+export default {name:'scene/ui',inject:['gameHost'],apply(ctx){ctx.effect(()=>{
+ const channel=new BroadcastChannel('forgeax-scene-'+audit.channelId),sources=new Set<string>();channel.onmessage=e=>{if(e.data?.specSha256!==audit.specSha256)return;sources.add(e.data.sourceId);document.documentElement.dataset.sceneAudit=JSON.stringify({...e.data,ambiguousSource:sources.size>1});};
+ const hud=document.createElement('section');hud.id='scene-hud';hud.dataset.sceneUi='recording-controls';
+ hud.style.cssText='pointer-events:auto;position:fixed;left:20px;top:20px;color:#f5f6ec;background:#123735e8;padding:15px 22px;border-left:3px solid #b9e8b8;border-radius:5px;font:14px/1.8 system-ui;z-index:20';
+ const title=document.createElement('strong');title.textContent=audit.name;hud.append(title,document.createElement('br'));
+ const help=document.createElement('span');help.textContent='Space 巡航/暂停 · 方向键移动 · H 隐藏/恢复 · R 开始/停止录屏';hud.append(help);
+ const record=document.createElement('button');record.textContent='开始录屏';record.style.cssText='margin-left:12px;padding:5px 10px;cursor:pointer';hud.append(record);
+ const download=document.createElement('a');download.textContent='保存录屏';download.download='scene-tour.webm';download.hidden=true;download.style.cssText='margin-left:12px;color:#b9e8b8';hud.append(download);
+ (ctx.gameHost?.uiRoot??document.body).append(hud);let recorder:MediaRecorder|undefined,objectUrl:string|undefined;let chunks:BlobPart[]=[];
+ const toggleRecording=()=>{if(recorder?.state==='recording'){recorder.stop();record.textContent='开始录屏';return;}const canvas=document.querySelector('canvas');if(!canvas)throw Error('Canvas missing');chunks=[];download.hidden=true;const activeRecorder=new MediaRecorder(canvas.captureStream(30),{mimeType:'video/webm;codecs=vp8'});recorder=activeRecorder;recorder.ondataavailable=e=>{if(e.data.size)chunks.push(e.data)};recorder.onstop=()=>{activeRecorder.stream.getTracks().forEach(t=>t.stop());if(objectUrl)URL.revokeObjectURL(objectUrl);const blob=new Blob(chunks,{type:'video/webm'});download.dataset.bytes=String(blob.size);if(!blob.size){record.textContent='录屏失败：无画面数据';return;}objectUrl=URL.createObjectURL(blob);download.href=objectUrl;download.hidden=false;};document.documentElement.dataset.sceneRecordingStartedAt=String(Date.now());recorder.start(1000);record.textContent='停止录屏';};
+ record.onclick=toggleRecording;
+ const keys=(e:KeyboardEvent)=>{if(e.repeat)return;if(e.code==='KeyH'||e.code==='F1'){e.preventDefault();hud.hidden=!hud.hidden;}if(e.code==='KeyR'){e.preventDefault();toggleRecording();}};document.addEventListener('keydown',keys);
+ return()=>{channel.close();if(recorder?.state==='recording')recorder.stop();if(objectUrl)URL.revokeObjectURL(objectUrl);hud.remove();document.removeEventListener('keydown',keys);};
+},'scene/ui');}} satisfies Plugin;

@@ -1,0 +1,11 @@
+{
+  "repository": "https://github.com/ByteDance-Seed/Depth-Anything-3",
+  "codeSha": "3d835ec1a5802d64a8b8b15f817a1ab54809bfe4",
+  "model": "depth-anything/DA3-SMALL",
+  "modelRevision": "e08cab65ca0ec38e7826075418411ab90cab4da3",
+  "checkpoint": "DA3-SMALL/model.safetensors",
+  "architecture": "da3-small",
+  "license": "Apache-2.0",
+  "scope": "多图相对深度与相机姿态；不可见区域和真实米制尺度不由本模型证明",
+  "checkpointSha256": "364492e38a3a06d221ac75da7f6621ada3f2361cd24fde11ba79091e9f40efcf"
+}
