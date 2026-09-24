@@ -1,7 +1,7 @@
 import {test,expect} from 'bun:test';
 import {validateLayout,validateAsset,assembleScene,layoutSchema,assetSchema,LAYOUT_PROMPT,ASSET_PROMPT,type SceneLayout,type AssetGeometry} from './layout';
 import {compileGeometryProgram} from './program';
-import {blockoutScene} from './blockout';
+import {blockoutScene,blockoutSchema} from './blockout';
 import {validateSpace,applySurface,spaceSchema,surfaceSchema,type SpaceLayout,type SurfacePlan} from './layout-stages';
 const pose={position:[0,0,0] as [number,number,number],rotation:[0,0,0] as [number,number,number],scale:[1,1,1] as [number,number,number]};
 const plan={requirements:[{id:'required_shape',critical:true,count:2}]};
@@ -31,6 +31,7 @@ test('单资产不能改身份、材质和共享尺寸；未齐全场景拒绝�
  expect(()=>assembleScene(l,[],plan,2)).toThrow('占位物');expect(()=>assembleScene(l,[asset(),asset()],plan,2)).toThrow('身份重复');
 });
 test('灰模一次报告所有越界模板与实际轴范围，供模型纠正',()=>{const space=layout();space.program.templates.push({...space.program.templates[0],id:'second'});const parts=(id:string,position:number[])=>({id,position,rotation:[0,0,0],scale:[1,1,1],material:'blockout',uvScale:[1,1],shape:{type:'box',size:[1,1,.2],radius:0}});const value={templates:[{id:'novel',parts:[parts('first',[10,1,.2])]},{id:'second',parts:[parts('other',[1,10,.2])]}]};expect(()=>blockoutScene(space,value,plan,2)).toThrow(/novel.*X 轴实际.*second.*Y 轴实际/);});
+test('灰模模型 schema 和校验同时禁止散布形状',()=>{const variants=blockoutSchema().properties.templates.items.properties.parts.items.properties.shape.anyOf;expect(variants.map((variant:any)=>variant.properties.type.enum[0])).toEqual(['box','lathe','extrusion','tube','grid']);const value={templates:[{id:'novel',parts:[{...pose,id:'window_posts',material:'blockout',uvScale:[1,1],shape:{type:'scatter'}}]}]};expect(()=>blockoutScene(layout(),value,plan,2)).toThrow('模板 novel 的部件 window_posts 禁止 scatter');});
 test('拆分提示词只有一种顶层输出；不含样例名称或坐标',()=>{
  expect(LAYOUT_PROMPT).toContain('只输出 scene-layout-v1');expect(LAYOUT_PROMPT).not.toContain('只返回 geometry-v1');
  expect(ASSET_PROMPT).toContain('只输出一个 asset-geometry-v1');expect(ASSET_PROMPT).not.toContain('只返回 geometry-v1');
