@@ -7,7 +7,7 @@
 !**/.env.example
 
 # Runtime state, uploads, generated scenes, model data, and evidence
-workbench/data/
+workbench/data
 workbench/combined-tests.log
 prototype/evidence/
 prototype/release/

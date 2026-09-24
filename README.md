@@ -4,6 +4,8 @@ Scene Foundry is a standalone repository for the scene generation pipeline and i
 
 This repository contains the pipeline source, UI, tests, and a small Engine project template. It does **not** contain historical jobs, uploaded images, model weights, credentials, generated scenes, or the ForgeaX Engine and Scene Generator source. Those two upstream repositories are currently private. Access to them is required for a full scene build, even though this repository is public. The model provider is also an external prerequisite.
 
+The [source coverage record](docs/source-coverage.md) identifies which parts of the live local workbench are represented here and the deliberate differences in the public copy.
+
 ## Layout
 
 - `workbench/src/`: pipeline, provider adapters, assessment, and HTTP server.
