@@ -1,3 +1,4 @@
+import {assertSpatialAccepted} from './spatial-order';
 import {acceptSpatialLayout} from './blockout';
 import {improvement} from '../improvement-governance';
 import {restoreSavedRefinement} from './refinement-recovery';
@@ -35,29 +36,30 @@ function prepareScene(job:any,plan:any,dir:string,value:any,textures:any,provena
 }
 export async function runGeneralScene({job,plan,dir,signal,stage,command,preview,resetPreview,evaluate}:any){
  const images=(job.images??(job.image?[job.image]:[])).map((i:any)=>({path:join(UPLOADS,i.file),mime:i.mime}));
- job.generationMethod='general-geometry-v3';job.iteration=0;
- const scene=await stage('generate',async()=>{
+ job.generationMethod='general-geometry-v3';job.stageTrackingVersion='exclusive-stages-v1';job.iteration=0;
+ const scene=await (async()=>{
   const validate=(value:any)=>{const s=validateScene(value,plan,images.length),parts=s.program.instances.reduce((n,i)=>n+s.program.templates.find(t=>t.id===i.template)!.parts.length,0),c=sceneComplexity(s,job.complexity,parts);if(!c.passed)throw Error('所选复杂度未满足：'+JSON.stringify(c.checks));return s;};
   const source=job.reuseSceneFrom?join(runDir(job.reuseSceneFrom),'generated-scene.json'):null;
   const progress=(phase:string,completed:number,total:number,current:string|null)=>{generationPhase(job,phase);job.generationProgress={phase,completed,total,current};event(job,'generation-progress',phase+(total?' '+completed+'/'+total:'')+(current?' · '+current:''));};
-  const generationDir=join(dir,'generation'),ctx:any={job,plan,images,dir:generationDir,signal,onProgress:(phase:string)=>progress(phase,0,0,null)};
+  const generationDir=join(dir,'generation'),ctx:any={job,plan,images,dir:generationDir,signal,stage,onProgress:(phase:string)=>progress(phase,0,0,null)};
   progress(source?(job.refineScene?'根据真实画面反馈修正场景':'复用完整场景'):'规划共享布局',0,0,null);
   const restored=job.reuseCheckpoint?checkpoints.restore(job.reuseCheckpoint,job,generationDir):null;
   let layout:any=null;
   try{
   ctx.acceptSpace=(space:any)=>acceptSpatialLayout(space,ctx,command,stage);
-  layout=source?null:restored?.layout??await generateLayout(ctx);job.stage='generate';saveJob(job);const reused=source?validate(job.reuseRefinementOutput?restoreSavedRefinement(job,plan,images,generationDir,signal):job.refineScene?await (job.refinementMode==='camera-alignment'?alignCameras:refineScene)(job,plan,images,generationDir,signal):read(source)):null;
+  layout=source?null:restored?.layout??await generateLayout(ctx);saveJob(job);const reused=source?validate(job.reuseRefinementOutput?restoreSavedRefinement(job,plan,images,generationDir,signal):job.refineScene?await (job.refinementMode==='camera-alignment'?alignCameras:refineScene)(job,plan,images,generationDir,signal):read(source)):null;
   if(restored){const sourceObservation=join(runDir(restored.manifest.sourceJobId),'generation/reference-observations.json');if(existsSync(sourceObservation))ctx.observation=read(sourceObservation);const checked=await ctx.acceptSpace(restored.layout);if(JSON.stringify(checked.program.instances)!==JSON.stringify(restored.layout.program.instances)||JSON.stringify(checked.cameras)!==JSON.stringify(restored.layout.cameras))throw Error('SPATIAL_GATE_FAILED：检查点布局已修改，不能继续复用旧布局资产，请从确认基准重新生成');}
   if(reused){const original=read(join(runDir(job.reuseSceneFrom),'job.json'));const prior=original.blockout?.space;if(!prior)throw Error('REFERENCE_SPATIAL_REPLAN_REQUIRED：历史候选缺少空间关系基准，请从已确认图片重新生成');await acceptSpatialLayout({...prior,program:{...prior.program,instances:reused.program.instances},cameras:reused.cameras,entities:reused.entities},{...ctx,existingScene:reused},command,stage);}
   if(layout){save(join(generationDir,'plan.json'),plan);for(const image of images)if(!(job.images??(job.image?[job.image]:[])).some((i:any)=>join(UPLOADS,i.file)===image.path&&i.id===digest(readFileSync(image.path))))throw Error('参考图片内容与检查点来源不一致');}
+  assertSpatialAccepted(job,layout??reused);
   const steps=layout?.program.templates.map(t=>({id:t.id,label:t.label,status:'pending'}))??[],checkpoint=layout?{...generationProvenance(ctx,layout),steps}:null;
   if(checkpoint)save(join(generationDir,'checkpoints.json'),checkpoint);
   const materials=join(dir,'materials');mkdirSync(materials,{recursive:true});save(join(materials,'texture-request.json'),{references:images,textures:(layout??reused)!.textures,reused:resolveTextureReuse((layout??reused)!,images.map(i=>digest(readFileSync(i.path))))});
   progress('提取并记录材质来源',0,layout?.program.templates.length??0,null);
-  await command([join(ROOT,'data/reconstruction-env/bin/python'),join(ROOT,'src/geometry/textures.py'),materials]);
-  const textures=read(join(materials,'texture-registry.json')),provenance=read(join(materials,'texture-provenance.json'));
+  const {textures,provenance}=await stage('materials',async()=>{await command([join(ROOT,'data/reconstruction-env/bin/python'),join(ROOT,'src/geometry/textures.py'),materials]);return {textures:read(join(materials,'texture-registry.json')),provenance:read(join(materials,'texture-provenance.json'))};});
   let value=reused;
   if(layout){
+   const assets=await stage('assets',async()=>{assertSpatialAccepted(job,layout);
    const assets=restored?.assets.map((a:any)=>validateAsset(a.value,layout.program.templates.find(t=>t.id===a.id)!,layout,textures).value)??[];
    const ready=new Set(assets.map((a:any)=>a.template.id));for(const step of steps)if(ready.has(step.id))step.status='reused';
    cacheCheckpointAssets(job,plan,layout,textures,checkpoints.matching(job).slice(0,8).flatMap(c=>{try{return [checkpoints.load(c.id,job)]}catch{return []}}));
@@ -74,12 +76,12 @@ export async function runGeneralScene({job,plan,dir,signal,stage,command,preview
     try{const asset=await generateOneAsset({...ctx,readyAt,signal:workerSignal},layout,brief,textures);step.status='passed';completed++;persistCheckpoint();return asset;}
     catch(error){step.status=workerSignal.aborted?'cancelled':'failed';throw error;}
     finally{active.delete(brief.id);save(join(generationDir,'checkpoints.json'),checkpoint);progress(phase,completed,steps.length,[...active.values()].join('、')||null);}
-   });assets.push(...generated);
-   progress('组装并检查完整场景',steps.length,steps.length,null);value=validate(assembleScene(layout,assets,plan,images.length));
+   });assets.push(...generated);return assets;});
+   progress('组装并检查完整场景',steps.length,steps.length,null);return await stage('assembly',async()=>{assertSpatialAccepted(job,layout);value=validate(assembleScene(layout,assets,plan,images.length));return prepareScene(job,plan,dir,value!,textures,provenance);});
   }
-  return prepareScene(job,plan,dir,value!,textures,provenance);
+  return await stage('assembly',async()=>{assertSpatialAccepted(job,value);return prepareScene(job,plan,dir,value!,textures,provenance);});
   }finally{finishGeneration(job,job.structure?.passed?'passed':signal.aborted?'cancelled':'failed');if(layout&&existsSync(join(dir,'materials/texture-registry.json'))){try{const cp=checkpoints.register({job,planFile:join(dir,'plan.json'),generationDir,textureFile:join(dir,'materials/texture-registry.json'),provenance:{kind:job.reuseCheckpoint?'continuation':'job',pipelineVersion:job.pipelineVersion,parentCheckpoint:job.reuseCheckpoint??null}});job.checkpointId=cp.id;event(job,'checkpoint','已保存可续跑检查点：'+cp.assets.length+'/'+cp.total+' 类资产');}catch(error){event(job,'checkpoint-error','检查点未保存：'+String(error));}}}
- });
+ })();
  const proto=join(ROOT,'../prototype/bin/pipeline.ts'),maxRepairs=Math.min(job.iterationPolicy?.maxVisualRepairs??0,improvement.remaining(job.improvementId));
  let lastIndex=0;
  try{

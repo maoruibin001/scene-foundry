@@ -30,6 +30,8 @@ bun run start
 
 Before running a model-backed job, set an explicit local call limit in `.env`, choose an available model, and verify your CLI login. For a Messages API provider, use `PIPELINE_PROVIDER=messages-api` and supply the provider URL, API key, model, and call limit through local environment variables. Never commit `.env` or provider credentials.
 
+The **并行与队列** page shows running and waiting scenes and lets you set the scene, model-request, and build/capture concurrency limits. Limits persist in ignored local data. Lowering a limit waits for active work to drain; it does not interrupt a running job. The generation record and task detail pages show the finer observation, space, surface, asset, assembly, and evaluation stages.
+
 ## Checks
 
 From `workbench/`:

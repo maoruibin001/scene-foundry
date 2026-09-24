@@ -11,15 +11,16 @@ import type {Texture} from './program';
 import {textureCandidates,resolveTextureReuse} from './texture-library';
 import {assetInput} from './asset-input';
 import {assetCache,assetKey} from './asset-cache';
-export type GenerationContext={job:any;plan:any;images:{path:string;mime:string}[];dir:string;signal:AbortSignal;readyAt?:number;onProgress?:(phase:string)=>void;observation?:any;acceptSpace?:(space:any)=>Promise<any>;revision?:{previousAsset:any;feedback:string;frames:{path:string;mime:string;name:string}[]}};
+export type GenerationContext={job:any;plan:any;images:{path:string;mime:string}[];dir:string;signal:AbortSignal;readyAt?:number;onProgress?:(phase:string)=>void;stage?:(name:string,work:()=>Promise<any>)=>Promise<any>;observation?:any;acceptSpace?:(space:any)=>Promise<any>;revision?:{previousAsset:any;feedback:string;frames:{path:string;mime:string;name:string}[]}};
 export async function generateLayout(ctx:GenerationContext){
  const {job,plan,images,dir,signal}=ctx;mkdirSync(dir,{recursive:true});
- ctx.onProgress?.('逐图观察地标、遮挡与机位依据');ctx.observation=await observeReferences(ctx);
+ if(!ctx.stage||!ctx.acceptSpace)throw Error('SPATIAL_GATE_REQUIRED：生成流程必须提供独立阶段记录和灰模验收');
+ ctx.onProgress?.('逐图观察地标、遮挡与机位依据');ctx.observation=await ctx.stage('observe',()=>observeReferences(ctx));
  ctx.onProgress?.('规划空间与参考机位');
- let space=await callValidated({modelSettings:job.modelSettings,role:'scene-space',signal,maxTokens:9000,images,system:SPACE_PROMPT,schemaContext:{requirementIds:plan.requirements.map((r:any)=>r.id)},text:JSON.stringify({input:job.prompt,scoring:scoringGuidance(job.policy),referenceImages:images.length,generationBrief:job.generationBrief,observation:ctx.observation,plan,productionRules:SPEC.rules})},dir,v=>{if(!Array.isArray(v.spatialOpenings))throw Error('新空间规划必须声明spatialOpenings；无开口时填空数组');return bindObservedSpace(validateSpace(v,plan,images.length,job.complexity),ctx.observation)});
- if(ctx.acceptSpace)space={...space,value:await ctx.acceptSpace(space.value)};
+ let space=await ctx.stage('space',()=>callValidated({modelSettings:job.modelSettings,role:'scene-space',signal,maxTokens:9000,images,system:SPACE_PROMPT,schemaContext:{requirementIds:plan.requirements.map((r:any)=>r.id)},text:JSON.stringify({input:job.prompt,scoring:scoringGuidance(job.policy),referenceImages:images.length,generationBrief:job.generationBrief,observation:ctx.observation,plan,productionRules:SPEC.rules})},dir,v=>{if(!Array.isArray(v.spatialOpenings))throw Error('新空间规划必须声明spatialOpenings；无开口时填空数组');return bindObservedSpace(validateSpace(v,plan,images.length,job.complexity),ctx.observation)}));
+ space={...space,value:await ctx.acceptSpace(space.value)};
  save(join(dir,'space.json'),space.value);ctx.onProgress?.('规划材质与光照');
- const surface=await callValidated({modelSettings:job.modelSettings,role:'scene-surface',signal,maxTokens:6500,images,system:SURFACE_PROMPT,text:JSON.stringify({input:job.prompt,referenceImages:images.length,plan,space:space.value,materialBudget:job.generationBrief.budget.maximumMaterials,reusableTextures:textureCandidates(images.map(i=>digest(readFileSync(i.path))))})},dir,v=>{const layout=applySurface(space.value,v,plan,images.length,job.complexity);resolveTextureReuse(layout,images.map(i=>digest(readFileSync(i.path))));return v;});
+ const surface=await ctx.stage('surface',()=>callValidated({modelSettings:job.modelSettings,role:'scene-surface',signal,maxTokens:6500,images,system:SURFACE_PROMPT,text:JSON.stringify({input:job.prompt,referenceImages:images.length,plan,space:space.value,materialBudget:job.generationBrief.budget.maximumMaterials,reusableTextures:textureCandidates(images.map(i=>digest(readFileSync(i.path))))})},dir,v=>{const layout=applySurface(space.value,v,plan,images.length,job.complexity);resolveTextureReuse(layout,images.map(i=>digest(readFileSync(i.path))));return v;}));
  save(join(dir,'surface.json'),surface.value);const result=applySurface(space.value,surface.value,plan,images.length,job.complexity);
  save(join(dir,'layout.json'),result);return result;
 }

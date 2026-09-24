@@ -1,3 +1,4 @@
+import {modelPool,assertProviderOpen,pauseProvider} from './concurrency';
 import {reserveModelCall} from './improvement-governance';
 import {PROMPT_CONTRACT} from './prompts';
 import {type Complexity} from './complexity';
@@ -17,15 +18,17 @@ export const JUDGE_MODEL=process.env.PIPELINE_JUDGE_MODEL??MODEL;
 export const defaultModelSettings=(level:Complexity='simple'):ModelSettings=>PROVIDER==='codex-cli'?recommendedModelSettings(level):({model:MODEL,reasoningEffort:CODEX_EFFORT});
 export const MODEL_LIMIT=parseCallLimit(process.env.PIPELINE_MAX_CALLS);
 export const isConfigured=(model=MODEL)=>PROVIDER==='codex-cli'?codexLogin(model):Boolean(BASE&&KEY);
-let used=0;
-export function budget(selectedModel=MODEL,checkConfigured=true){return {provider:PROVIDER,executable:PROVIDER==='codex-cli'?CODEX_BIN:null,providerLabel:PROVIDER==='codex-cli'?'本地 Codex · '+(codexRouteInfo(selectedModel)?.providerId??'路由未就绪'):'模型 API',reasoningEffort:PROVIDER==='codex-cli'?CODEX_EFFORT:null,...budgetSnapshot(MODEL_LIMIT,used),model:MODEL,judgeModel:JUDGE_MODEL,host:PROVIDER==='codex-cli'?'本地 Codex CLI':BASE?new URL(BASE).host:null,configured:checkConfigured?isConfigured(selectedModel):false,executionRoute:codexRouteInfo(selectedModel),routeError:codexRouteError()};}
-export function hasBudget(required=1){return callAllowance(MODEL_LIMIT,used,required);}
+let used=0,legacyLedger:string|null=null;
+function totalUsed(){return used+(legacyLedger&&existsSync(legacyLedger)?JSON.parse(readFileSync(legacyLedger,'utf8')).used??0:0);}
+export function budget(selectedModel=MODEL,checkConfigured=true){return {provider:PROVIDER,executable:PROVIDER==='codex-cli'?CODEX_BIN:null,providerLabel:PROVIDER==='codex-cli'?'本地 Codex · '+(codexRouteInfo(selectedModel)?.providerId??'路由未就绪'):'模型 API',reasoningEffort:PROVIDER==='codex-cli'?CODEX_EFFORT:null,...budgetSnapshot(MODEL_LIMIT,totalUsed()),model:MODEL,judgeModel:JUDGE_MODEL,host:PROVIDER==='codex-cli'?'本地 Codex CLI':BASE?new URL(BASE).host:null,configured:checkConfigured?isConfigured(selectedModel):false,executionRoute:codexRouteInfo(selectedModel),routeError:codexRouteError()};}
+export function hasBudget(required=1){return callAllowance(MODEL_LIMIT,totalUsed(),required);}
 export function configureLedger(path:string){if(existsSync(path))used=JSON.parse(readFileSync(path,'utf8')).used??0;return ()=>writeFileSync(path,JSON.stringify({used,max:MODEL_LIMIT}));}
-let persist=()=>{};export function setLedger(path:string){persist=configureLedger(PROVIDER==='codex-cli'?path.replace(/\.json$/,'-codex.json'):path);}
+let persist=()=>{};export function setLedger(path:string){legacyLedger=PROVIDER==='codex-cli'?path.replace(/\.json$/,'-codex.json'):path;persist=configureLedger(legacyLedger.replace(/\.json$/,'-concurrent.json'));}
 export function parseModelJson(text:string){const s=text.trim().replace(/^```(?:json)?\s*/,'').replace(/\s*```$/,'');try{return JSON.parse(s)}catch{return JSON.parse(s.replace(/("(?:rotation|radiusBottom|radiusTop|roughness|metallic|sides)"\s*:\s*-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)\](?=\s*[,}])/g,'$1'))}}
 export async function callModel(input:{system:string,text:string,images?:{path:string,mime:string}[],maxTokens:number,role:string,signal?:AbortSignal,schemaContext?:ModelSchemaContext,modelSettings?:ModelSettings},dir:string){
- input.signal?.throwIfAborted();
- if(!isConfigured())throw Error('PROVIDER_NOT_CONFIGURED：需要配置模型服务或登录本机 Codex');
+ return modelPool.use(dir+':'+input.role,input.signal,async()=>{
+ input.signal?.throwIfAborted();assertProviderOpen();
+ if(!isConfigured(input.modelSettings?.model??MODEL))throw Error('PROVIDER_NOT_CONFIGURED：需要配置模型服务或登录本机 Codex');
  if(!hasBudget())throw Error('MODEL_BUDGET_EXHAUSTED：本轮模型调用上限已到');
  writeFileSync(join(dir,input.role+'-prompt.json'),JSON.stringify({language:'zh-CN',engine:'ForgeaX Engine',contract:PROMPT_CONTRACT,system:input.system,input:input.text},null,2));
  reserveModelCall(dir,input.role);used++;persist();const model=input.modelSettings?.model??(input.role==='judge'?JUDGE_MODEL:MODEL);
@@ -40,4 +43,5 @@ export async function callModel(input:{system:string,text:string,images?:{path:s
  if(!body.model||body.model!==model)throw Error('MODEL_ROUTE_UNVERIFIED：响应模型与请求不一致，停止后续付费调用');
  if(!text||body.stop_reason==='max_tokens')throw Error('MODEL_OUTPUT_INCOMPLETE');
  const value=parseModelJson(text);writeFileSync(join(dir,input.role+'-parsed.json'),JSON.stringify(value,null,2));return {value,receipt};
+ }).catch(error=>{pauseProvider(error);throw error;});
 }

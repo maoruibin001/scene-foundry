@@ -183,7 +183,7 @@ export class Source {
       const value = r.json(`${base}/${name}`);
       if (value) files[name] = value;
     }
-    for (const folder of ["", "generation/", "generation/refinement/", "generation/iteration-1/refinement/", "generation/iteration-2/refinement/"])
+    for (const folder of ["", "generation/", "generation/refinement/", "generation/blockout/0/", "generation/blockout/1/", "generation/blockout/2/", "generation/space-repair-1/", "generation/space-repair-2/", "generation/iteration-1/refinement/", "generation/iteration-2/refinement/"])
       for (const f of this.reader.list(`${base}/${folder}`, 96)) {
         if (FILE.test(f)) {
           const rel = folder + f,

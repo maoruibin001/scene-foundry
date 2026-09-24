@@ -3,7 +3,9 @@ import { validateProgress } from "./progress-contract";
 export const LABELS: Record<string, string> = {
   input: "接收输入",
   plan: "提取需求",
-  generate: "生成与组装",
+  generate: "旧版生成总阶段",
+  observe: "图片观察与跨视角对应",
+  graybox: "空间灰模与关系验收",
   space: "空间与机位",
   surface: "材质与光照",
   layout: "共享布局",
@@ -150,7 +152,7 @@ export function normalize(
   const knownOrder = [
     "input",
     "plan",
-    "generate",
+    ...(job.stageTrackingVersion === "exclusive-stages-v1" ? ["observe","space","graybox","surface","materials","assets","assembly"] : ["generate"]),
     "export",
     "build",
     "verify",

@@ -1,0 +1,6 @@
+import {test,expect} from 'bun:test';
+import {assertSpatialAccepted} from './spatial-order';
+const space={program:{instances:[{id:'wall',position:[0,0,0]}]},cameras:[{referenceIndex:1,position:[1,2,3]}]};
+const valid=()=>({blockout:{status:'passed',space:structuredClone(space),rounds:[{passed:true,runtimeDigest:'actual-build',frames:['reference-1.png']}]}});
+test('asset entry refuses missing, failed or evidence-free graybox verdicts',()=>{for(const job of [{},{blockout:{status:'running'}},{...valid(),blockout:{...valid().blockout,status:'failed'}},{...valid(),blockout:{...valid().blockout,rounds:[{passed:true}]}}])expect(()=>assertSpatialAccepted(job,space)).toThrow('SPATIAL_GATE_REQUIRED');});
+test('material changes may proceed but moving accepted instances or cameras requires graybox revalidation',()=>{expect(()=>assertSpatialAccepted(valid(),{...space,textures:['new-material']})).not.toThrow();const moved=structuredClone(space);moved.cameras[0].position=[8,9,10];expect(()=>assertSpatialAccepted(valid(),moved)).toThrow('SPATIAL_GATE_CHANGED');const movedWall=structuredClone(space);movedWall.program.instances[0].position=[4,0,0];expect(()=>assertSpatialAccepted(valid(),movedWall)).toThrow('SPATIAL_GATE_CHANGED');});

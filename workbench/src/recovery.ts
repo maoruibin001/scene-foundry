@@ -1,4 +1,5 @@
 import {hasSavedRefinement} from './geometry/refinement-recovery';
+import {existsSync} from 'node:fs';
 import {join} from 'node:path';
 import {checkpoints,CheckpointStore,type Registration} from './geometry/checkpoints';
 import {runDir} from './store';
@@ -16,6 +17,8 @@ export function recoveryInfo(job:any,all:any[],store:CheckpointStore=checkpoints
  let scan:any=null,scanError:string|null=null;try{scan=store.inspect(recoveryRegistration(job,dir));}catch(error){scanError=String(error);}
  const saved=store.matching(job)[0],count=scan?.content.assets.length??-1,useLocal=!!scan&&count>=(saved?.completed??-1);
  const completed=useLocal?count:saved?.completed,total=useLocal?scan.content.total:saved?.total;
+ if(total===undefined&&job.plan&&existsSync(join(dir,'plan-response.txt'))&&(['scene-observation-','scene-observation-invalid-'].some(prefix=>existsSync(join(dir,'generation',prefix+'response.txt'))&&existsSync(join(dir,'generation',prefix+'receipt.json')))))return {available:true,mode:'observation',completed:0,total:0,reason:'保留已完成需求和观察输出；重新校验图片编号与证据后从空间规划继续，不重复观察调用'};
+ if(total===undefined&&job.plan&&existsSync(join(dir,'plan-response.txt')))return {available:true,mode:'plan',completed:0,total:0,reason:'复用已完成需求，从未完成的图片观察或空间步骤继续，不重复需求调用'};
  if(total===undefined)return {available:true,mode:'restart',completed:0,total:0,reason:'还没有可复用的完整布局；保留原始输入，重新开始生成',scanError};
  return {available:true,mode:'generation',source:useLocal?'local':'checkpoint',checkpointId:useLocal?null:saved?.id,completed:completed??0,total:total??0,missing:total===undefined?null:total-completed,issues:scan?.issues??[],reason:total===undefined?(scanError??'没有完整布局或可恢复检查点'):useLocal?'已检查磁盘中的完整资产':'使用已验证检查点',scanError};
 }
