@@ -1,5 +1,5 @@
 import {test,expect} from 'bun:test';
-import {queryJobHistory} from './job-history';
+import {queryJobHistory,stateJobSummary} from './job-history';
 const job=(id:string,extra:any={})=>({id,createdAt:'2026-09-22T08:00:00.000Z',prompt:'红白 Lighthouse 灯塔',mode:'prompt',complexity:'simple',status:'passed',profile:{id:'f'.repeat(64),model:'luna',reasoningEffort:'low'},pipelineVersion:{id:'version-a',label:'v1-rc.1'},stages:{build:{status:'passed',durationMs:1000},judge:{durationMs:2000}},quality:{score:90},runtime:{images:['view-1.png'],video:'scene-tour.webm'},...extra});
 const jobs=Array.from({length:45},(_,i)=>job(String(i).padStart(3,'0'),{createdAt:new Date(Date.UTC(2026,8,22,8,i)).toISOString()}));
 const query=(p:string,rows=jobs)=>queryJobHistory(rows,new URLSearchParams(p),[{id:'version-a',label:'v1'}],[{id:'batch-a',name:'回归批次'}]);
@@ -22,4 +22,10 @@ test('compact output keeps exact inputs and evidence links, without exposing ful
  const row=query('',[job('a',{prompt:'<script>alert(1)</script>\n完整描述',image:{id:'image-a',file:'a.png',name:'原图.png'},mode:'image_prompt',events:[{private:'large'}],sceneIR:{entities:[1]},error:'failure detail'})]).items[0];
  expect(row.prompt).toBe('<script>alert(1)</script>\n完整描述');expect(row.image?.name).toBe('原图.png');expect(row.durationMs).toBe(3000);expect(row.thumbnail).toContain('view-1.png');expect(row.downloadable).toBe(true);expect('events' in row).toBe(false);expect('sceneIR' in row).toBe(false);
  expect(query('',[job('b',{status:'running'})]).items[0].downloadable).toBe(false);
+});
+test('state summary keeps navigation and calibration fields without large execution evidence',()=>{
+ const row=stateJobSummary(job('a',{updatedAt:'2026-09-22T08:05:00.000Z',plan:{name:'灯塔'},review:{score:90},runtime:{images:['view-1.png'],frameData:'x'.repeat(10000)},assessmentProfile:{id:'assessment-profile'},image:{name:'参考图.png'}}));
+ expect(row).toMatchObject({id:'a',updatedAt:'2026-09-22T08:05:00.000Z',plan:{name:'灯塔'},image:{name:'参考图.png'},benchEligible:true,assessmentProfileId:'assessment-profile'});
+ expect('runtime' in row).toBe(false);expect('review' in row).toBe(false);expect(JSON.stringify(row).length).toBeLessThan(1000);
+ expect(stateJobSummary(job('b',{status:'running',review:{score:90}})).benchEligible).toBe(false);
 });

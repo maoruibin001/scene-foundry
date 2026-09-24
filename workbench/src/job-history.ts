@@ -3,6 +3,7 @@ import {versionOf} from './versions';
 const STATUSES=['passed','failed','blocked','cancelled','needs_review','running','queued','not_passed'];
 const MODES=['prompt','image','image_prompt'],LEVELS=['simple','medium','complex'];
 const ended=(j:any)=>!['queued','running'].includes(j.status);
+export function stateJobSummary(j:any){return {id:j.id,createdAt:j.createdAt,updatedAt:j.updatedAt,status:j.status,prompt:j.prompt,image:j.image?{name:j.image.name}:null,mode:j.mode,complexity:j.complexity,pipelineVersion:j.pipelineVersion?{id:j.pipelineVersion.id,label:j.pipelineVersion.label}:null,profile:{id:j.profile.id,provider:j.profile.provider,model:j.profile.model,reasoningEffort:j.profile.reasoningEffort},plan:j.plan?{name:j.plan.name}:null,benchEligible:ended(j)&&Boolean(j.runtime&&j.review),assessmentProfileId:(j.assessmentProfile??j.profile).id,_summary:true};}
 const choice=(p:URLSearchParams,key:string,values:string[])=>{const v=p.get(key)||'';if(v&&!values.includes(v))throw Error('无效筛选项：'+key);return v;};
 function integer(p:URLSearchParams,key:string,fallback:number,max:number){const s=p.get(key);if(s===null||s==='')return fallback;if(!/^\d+$/.test(s))throw Error('分页参数无效：'+key);const n=Number(s);if(!Number.isSafeInteger(n)||n<1||n>max)throw Error('分页参数超出范围：'+key);return n;}
 function time(p:URLSearchParams,key:string){const v=p.get(key);if(!v)return null;const n=Date.parse(v);if(!/T.*(?:Z|[+-]\d\d:\d\d)$/.test(v)||!Number.isFinite(n))throw Error('时间必须包含时区：'+key);return n;}
