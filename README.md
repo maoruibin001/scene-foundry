@@ -6,6 +6,8 @@ This repository contains the pipeline source, UI, tests, and a small Engine proj
 
 The [source coverage record](docs/source-coverage.md) identifies which parts of the live local workbench are represented here and the deliberate differences in the public copy.
 
+For a clean installation and a complete browser smoke run, follow the [from-zero runbook](docs/run-from-zero.md).
+
 ## Layout
 
 - `workbench/src/`: pipeline, provider adapters, assessment, and HTTP server.
