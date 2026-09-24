@@ -1,6 +1,6 @@
 # 从零运行 Scene Foundry（macOS）
 
-本手册从一个**空目录**克隆公开仓库，准备固定版本的私有依赖，在独立端口启动工作台，并通过正常网页入口生成、运行和验收一个场景。不要把旧工作台的 `data/`、`.env` 或已构建的依赖复制过来；它们会掩盖新装环境的问题。
+本手册从一个**空目录**克隆公开仓库，准备固定版本的私有依赖，在独立端口启动工作台，并通过正常网页入口尝试生成、运行和验收一个场景。不要把旧工作台的 `data/`、`.env` 或已构建的依赖复制过来；它们会掩盖新装环境的问题。[2026-09-24 新目录实测记录](clean-run-validation-2026-09-24.md)显示安装与静态 Engine 模板可运行，但模型驱动的完整场景生成尚未通过；请勿把本手册的步骤当作成功认证。
 
 ## 1. 前提与边界
 
@@ -32,10 +32,21 @@ git -C scene-generator rev-parse HEAD
 cd workbench
 bun test ./src
 cd ..
-bun test prototype/bin/pipeline.test.ts
+(cd prototype && bun test bin/pipeline.test.ts)
 ```
 
 `bootstrap.py` 会克隆 `prototype/brief.json` 指定的两个精确提交，安装、构建 Engine 与 Scene Generator，并建立模板项目的本地 Engine 类型链接。已有但提交不符或被修改的依赖会使脚本停止；它不会私自切换已有 checkout。测试通过只证明源码和模板集成，不等于模型路由、浏览器运行或生成质量已通过。
+
+`bun test` 请按上面的工作目录执行：生成任务会在 `workbench/data/versions/` 保存源码快照，从仓库根目录按文件名搜索测试时可能把快照里的旧测试也运行一次。
+
+若要在调用模型前单独检查 Engine 构建链，可以运行仓库自带的固定程序化模板：
+
+```sh
+(cd prototype && bun run generate && bun run build && bun run verify)
+(cd prototype && ASSET_PIPELINE_PORT=19978 bun run preview)
+```
+
+第二条命令会持续运行预览服务。另开浏览器访问 `http://localhost:19978/`，检查能看到“根界 · 微观温室检修站”的三维画面，再按 `Ctrl-C` 停止。它只验证固定模板的导出、构建、资产解析和预览；**不能代替第 5 节的模型生成验收**。
 
 ## 4. 配置模型和独立端口
 

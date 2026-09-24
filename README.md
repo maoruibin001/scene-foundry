@@ -6,7 +6,7 @@ This repository contains the pipeline source, UI, tests, and a small Engine proj
 
 The [source coverage record](docs/source-coverage.md) identifies which parts of the live local workbench are represented here and the deliberate differences in the public copy.
 
-For a clean installation and a complete browser smoke run, follow the [from-zero runbook](docs/run-from-zero.md).
+For a clean installation and the browser acceptance procedure, follow the [from-zero runbook](docs/run-from-zero.md). The [latest fresh-clone validation record](docs/clean-run-validation-2026-09-24.md) distinguishes the checks that passed from the model-backed generation step that remains blocked.
 
 ## Layout
 
@@ -41,7 +41,7 @@ bun test ./src
 After the private Engine and Scene Generator dependencies are prepared, run the template integration test from the repository root:
 
 ```sh
-bun test prototype/bin/pipeline.test.ts
+(cd prototype && bun test bin/pipeline.test.ts)
 ```
 
 The web page and API starting successfully do not establish that a model route, Engine build, runtime capture, or visual quality gate has passed. The current pipeline is a local prototype; production certification still requires independent calibration and fixed evaluation sets.

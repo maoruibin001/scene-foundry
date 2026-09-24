@@ -13,6 +13,7 @@ prototype/evidence/
 prototype/release/
 prototype/.previous-generated/
 prototype/game/dist/
+prototype/game/.forgeax/
 prototype/game/assets/generated/
 prototype/game/assets/generated-identity.*
 release/
