@@ -1,6 +1,7 @@
 import {test,expect} from 'bun:test';
 import {validateLayout,validateAsset,assembleScene,layoutSchema,assetSchema,LAYOUT_PROMPT,ASSET_PROMPT,type SceneLayout,type AssetGeometry} from './layout';
 import {compileGeometryProgram} from './program';
+import {blockoutScene} from './blockout';
 import {validateSpace,applySurface,spaceSchema,surfaceSchema,type SpaceLayout,type SurfacePlan} from './layout-stages';
 const pose={position:[0,0,0] as [number,number,number],rotation:[0,0,0] as [number,number,number],scale:[1,1,1] as [number,number,number]};
 const plan={requirements:[{id:'required_shape',critical:true,count:2}]};
@@ -25,10 +26,11 @@ test('布局不能超支、引用缺失资产或丢弃关键需求及参考视�
 test('单资产不能改身份、材质和共享尺寸；未齐全场景拒绝组装',()=>{
  const l=layout(),brief=l.program.templates[0];let a=asset();a.template.id='other';expect(()=>validateAsset(a,brief,l,{})).toThrow('身份');
  a=asset();a.template.parts[0].material='invented';expect(()=>validateAsset(a,brief,l,{})).toThrow('材质');
- a=asset();a.template.parts[0].position=[10,0,0];expect(()=>validateAsset(a,brief,l,{})).toThrow('边界');
+ a=asset();a.template.parts[0].position=[10,0,0];expect(()=>validateAsset(a,brief,l,{})).toThrow(/X 轴实际 \[10, 13\].*允许 \[0, 3\]/);
  a=asset();a.template.parts=Array.from({length:9},(_,i)=>({...a.template.parts[0],id:'part'+i}));expect(()=>validateAsset(a,brief,l,{})).toThrow('预算');
  expect(()=>assembleScene(l,[],plan,2)).toThrow('占位物');expect(()=>assembleScene(l,[asset(),asset()],plan,2)).toThrow('身份重复');
 });
+test('灰模一次报告所有越界模板与实际轴范围，供模型纠正',()=>{const space=layout();space.program.templates.push({...space.program.templates[0],id:'second'});const parts=(id:string,position:number[])=>({id,position,rotation:[0,0,0],scale:[1,1,1],material:'blockout',uvScale:[1,1],shape:{type:'box',size:[1,1,.2],radius:0}});const value={templates:[{id:'novel',parts:[parts('first',[10,1,.2])]},{id:'second',parts:[parts('other',[1,10,.2])]}]};expect(()=>blockoutScene(space,value,plan,2)).toThrow(/novel.*X 轴实际.*second.*Y 轴实际/);});
 test('拆分提示词只有一种顶层输出；不含样例名称或坐标',()=>{
  expect(LAYOUT_PROMPT).toContain('只输出 scene-layout-v1');expect(LAYOUT_PROMPT).not.toContain('只返回 geometry-v1');
  expect(ASSET_PROMPT).toContain('只输出一个 asset-geometry-v1');expect(ASSET_PROMPT).not.toContain('只返回 geometry-v1');

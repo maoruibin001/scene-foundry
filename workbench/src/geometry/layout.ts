@@ -56,7 +56,7 @@ export function validateAsset(value:AssetGeometry,brief:AssetBrief,layout:SceneL
  assert(value.template.parts.every(p=>brief.materialIds.includes(p.material)),'资产使用了未分配的材质');
  const program:GeometryProgram={version:'geometry-v1',name:brief.label,materials:layout.program.materials.filter(m=>brief.materialIds.includes(m.id)),templates:[value.template],instances:[{id:'check',label:brief.label,template:brief.id,position:[0,0,0],rotation:[0,0,0],scale:[1,1,1],requirementIds:[]}]};
  validateGeometryProgram(program);const {bounds,triangles}=compileGeometryProgram(program,textures);
- for(let axis=0;axis<3;axis++){const span=brief.bounds.max[axis]-brief.bounds.min[axis],tolerance=Math.max(.01,span*.05);assert(bounds.min[axis]>=brief.bounds.min[axis]-tolerance&&bounds.max[axis]<=brief.bounds.max[axis]+tolerance,'资产几何超出共享布局边界：'+brief.id);}
+ for(let axis=0;axis<3;axis++){const span=brief.bounds.max[axis]-brief.bounds.min[axis],tolerance=Math.max(.01,span*.05);assert(bounds.min[axis]>=brief.bounds.min[axis]-tolerance&&bounds.max[axis]<=brief.bounds.max[axis]+tolerance,`资产几何超出共享布局边界：${brief.id}；${'XYZ'[axis]} 轴实际 [${bounds.min[axis]}, ${bounds.max[axis]}]，允许 [${brief.bounds.min[axis]}, ${brief.bounds.max[axis]}]（容差 ${tolerance}）。请调整 shape 局部坐标与部件 position 的合成结果，不要修改冻结的布局边界`);}
  const openings=assertAssetOpenings({program:{...layout.program,templates:[value.template],instances:layout.program.instances.filter(i=>i.template===brief.id)},spatialOpenings:layout.spatialOpenings},brief.id);
  return {value,bounds,triangles,openings};
 }

@@ -7,7 +7,7 @@
 - macOS 上可执行 `git`、`python3`、`bun`、`node`、`corepack`、`codex`；Node 附带或另外安装 Corepack。先执行 `command -v git python3 bun node corepack codex` 检查。使用的版本以克隆仓库和 `prototype/brief.json` 固定的依赖提交为准。
 - Git 凭证须能读取 `ForgeaXGame/forgeax-engine` 和 `ForgeaXGame/forgeax-ex-scene-generator` 两个私有仓库。`git ls-remote https://github.com/ForgeaXGame/forgeax-engine.git HEAD` 和对 Scene Generator 的同样检查都应成功。公开仓库本身不足以构建完整场景。
 - Codex CLI 须已登录，`codex login status` 应成功。本例使用工作台模型列表中可用的 `gpt-6-luna` / `low`；若列表没有它，先选择同样支持图片的低成本模型并相应修改 `.env`，不要让程序静默改用默认的高成本模型。
-- 至少留出若干 GB 磁盘空间。依赖克隆、Engine 构建和每个任务的录屏、截图都保存在本地；实际占用随依赖和场景变化。下面的 `PIPELINE_MAX_CALLS=20` 只限制**这个工作台的调用次数**，不是账号费用或订阅额度上限。
+- 至少留出若干 GB 磁盘空间。依赖克隆、Engine 构建和每个任务的录屏、截图都保存在本地；实际占用随依赖和场景变化。下面的 `PIPELINE_MAX_CALLS=30` 是这个新目录所有任务合计的调用上限，用于容纳一次简单样例与有限的格式纠正；它不是账号费用或订阅额度上限。
 
 ## 2. 克隆到新目录
 
@@ -54,7 +54,7 @@ PIPELINE_PROVIDER=codex-cli
 PIPELINE_CODEX_BIN=$codex_bin
 PIPELINE_MODEL=gpt-6-luna
 PIPELINE_CODEX_EFFORT=low
-PIPELINE_MAX_CALLS=20
+PIPELINE_MAX_CALLS=30
 PORT=19977
 EOF
 ```
