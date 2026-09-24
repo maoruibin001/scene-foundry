@@ -18,14 +18,14 @@ const arr=(items:any)=>({type:'array',items});
 const obj=(properties:any)=>({type:'object',properties,required:Object.keys(properties),additionalProperties:false});
 const choice=(...values:string[])=>({type:'string',enum:values});
 const nullableNum={type:['number','null']};
-export type ModelSchemaContext={requirementIds?:string[];repairReferences?:RepairGoalReferences;repairComplexity?:Complexity};
+export type ModelSchemaContext={requirementIds?:string[];referenceCount?:number;repairReferences?:RepairGoalReferences;repairComplexity?:Complexity};
 export function modelSchema(role:string,context?:ModelSchemaContext):any {
  if(role==='scene-repair-plan')return repairGoalsSchema(context?.repairReferences,context?.repairComplexity?repairBudget(context.repairComplexity):LEGACY_REPAIR_BUDGET);
  if(role==='scene-openings')return openingObservationSchema();
  if(role==='scene-spatial-refine')return spatialRefinementSchema();
  if(role==='scene-alignment')return alignmentSchema();
  if(role==='scene-refine')return refinementSchema(context?.repairComplexity);
- if(role==='scene-observation')return observationSchema();
+ if(role==='scene-observation')return observationSchema(context?.referenceCount);
  if(role==='scene-blockout')return blockoutSchema();
  if(role==='scene-space-judge')return spaceJudgeSchema();
  if(role==='scene-space')return spaceSchema(context?.requirementIds);
