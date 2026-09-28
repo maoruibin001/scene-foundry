@@ -21,6 +21,7 @@ Install Bun, Node.js, Python 3, Corepack/pnpm, and the locally authenticated `co
 
 ```sh
 python3 prototype/bin/bootstrap.py
+python3 scripts/setup-python.py
 cp workbench/.env.example workbench/.env
 cd workbench
 bun run start
@@ -28,9 +29,13 @@ bun run start
 
 `bootstrap.py` clones `ForgeaXGame/forgeax-engine` and `ForgeaXGame/forgeax-ex-scene-generator` beside `prototype/`, verifies their exact commits, and builds their local outputs. Existing checkouts are verified without being switched. The server listens on `127.0.0.1:19774` by default; set `PORT` to use another port. Open the URL printed at startup.
 
+`setup-python.py` requires Python 3.10–3.12 and prepares the pinned Pillow, NumPy, and OpenCV image dependencies in the ignored data directory. Use a compatible interpreter such as `python3.12` if the default `python3` is a different version. The environment follows `PIPELINE_DATA_DIR` when set.
+
 Before running a model-backed job, set an explicit local call limit in `.env`, choose an available model, and verify your CLI login. For a Messages API provider, use `PIPELINE_PROVIDER=messages-api` and supply the provider URL, API key, model, and call limit through local environment variables. Never commit `.env` or provider credentials.
 
 The **并行与队列** page shows running and waiting scenes and lets you set the scene, model-request, and build/capture concurrency limits. Limits persist in ignored local data. Lowering a limit waits for active work to drain; it does not interrupt a running job. The generation record and task detail pages show the finer observation, space, surface, asset, assembly, and evaluation stages.
+
+Generation settings select matching depth, validated reuse or a fresh start, and first-pass validation or bounded quality repair. Detail pages retain partial output, recovery information, per-criterion judgments, repair audits, material provenance, production timing, and downloadable output. A first-score time target is recorded as a target awaiting measured validation. Set `PIPELINE_EXECUTION_ENABLED=0` for an explicitly frozen observation session; normal standalone execution is enabled when this setting is absent.
 
 ## Checks
 

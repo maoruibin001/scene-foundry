@@ -34,3 +34,4 @@ test('repair evidence distinguishes level support from rotated footprint overflo
  const e=supportEvidence(child,parent);expect(Math.abs(e.heightGap)).toBeLessThan(.0001);expect(e.footprintContained).toBe(false);expect(e.requiredSupportSize[1]).toBeGreaterThan(14);
  const enlarged={...parent,size:[Math.max(16,e.requiredSupportSize[0]),e.requiredSupportSize[1],.8]};expect(supportEvidence(child,enlarged).footprintContained).toBe(true);
 });
+test('草稿即使所有可见项满分也只算needs_review，原分数保留',()=>{const result=assess({...j,partialOutput:{missing:[{id:'missing'}]}},review,runtime);expect(result.quality.score).toBe(100);expect(result.status).toBe('needs_review');expect(result.spec.status).toBe('needs_review');expect(result.realizationStatus).toBe('needs_review');});

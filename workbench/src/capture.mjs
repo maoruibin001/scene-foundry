@@ -1,3 +1,5 @@
+import {closeCaptureResources} from './capture-shutdown.mjs';
+import {captureBrowserExecutable} from './capture-browser.mjs';
 import {recordingSink} from './recording-sink.mjs';
 import {createBrowserCapture} from '../../engine/packages/engine/dist/facades/devkit.mjs';
 import {readFile,writeFile} from 'node:fs/promises';
@@ -7,7 +9,7 @@ import {analyzeRun} from './runtime-metrics.mjs';
 const [root,url,output]=process.argv.slice(2),browser=createBrowserCapture(root);let session,sink;
 const step=name=>console.log(JSON.stringify({phase:name,at:new Date().toISOString()}));
 try{
- step('open');session=await browser.open({backend:'auto',serverUrl:url,headless:true,width:960,height:640,requireUi:true,outputDir:output});const page=session.page,errors=[];page.on('pageerror',e=>errors.push(String(e)));page.on('console',m=>{if(m.type()==='error')errors.push(m.text())});
+ step('open');session=await browser.open({browser:captureBrowserExecutable(),backend:'auto',serverUrl:url,headless:true,width:960,height:640,requireUi:true,outputDir:output});const page=session.page,errors=[];page.on('pageerror',e=>errors.push(String(e)));page.on('console',m=>{if(m.type()==='error')errors.push(m.text())});
  await page.locator('#scene-hud').waitFor({state:'visible'});await session.capture(undefined,{output:join(output,'with-ui.png'),requireUi:true,timeoutMs:30000});
  await page.locator('canvas').click();await page.keyboard.press('h');
  const visibleUi=()=>page.evaluate(()=>Array.from(document.querySelectorAll('[data-scene-ui]')).filter(e=>e.getBoundingClientRect().width>0&&e.getBoundingClientRect().height>0).length);
@@ -24,4 +26,4 @@ try{
  const hashes=await Promise.all(images.map(async n=>createHash('sha256').update(await readFile(join(output,n))).digest('hex')));
  const result={...metrics,hard:{...metrics.hard,runtime:fps>0,hudToggle:hidden&&restored,noErrors:errors.length===0},images,hashes,video:'scene-tour.webm',recording:{...recordingReceipt,source:'MediaRecorder output exposed by scene UI',browserSaveInteraction:'not measured by capture; independent normal UI download receipt is required'},durationMs:Date.now()-start,poses:samples.map(({frameTimes,...s})=>s),submittedFps:fps,errors,engineReport:report,distManifestDigest:createHash('sha256').update(await readFile(join(root,'dist/forgeax-dist.json'))).digest('hex')};
  await writeFile(join(output,'runtime.json'),JSON.stringify(result,null,2));await writeFile(join(output,'frame-times.json'),JSON.stringify(samples.at(-1).frameTimes));console.log(JSON.stringify({ok:Object.values(result.hard).every(Boolean),fps,hard:result.hard,missingParts:metrics.missingParts}));
-}finally{step('close-recording-sink');await sink?.close();step('close-capture-page');if(session)await session.page.close({runBeforeUnload:false});step('close-capture-session');await session?.close();step('capture-closed');}
+}finally{await closeCaptureResources(session,sink,message=>console.log(message));}

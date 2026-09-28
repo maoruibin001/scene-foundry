@@ -1,3 +1,5 @@
+import {improvement} from './improvement-governance';
+import {qualityDecision,qualityFailure} from './quality-diagnosis';
 import {hasSavedRefinement} from './geometry/refinement-recovery';
 import {existsSync} from 'node:fs';
 import {join} from 'node:path';
@@ -10,14 +12,15 @@ export function recoveryInfo(job:any,all:any[],store:CheckpointStore=checkpoints
  const followup=all.find(j=>j.recoverySourceJobId===job.id&&activeJob(j));
  if(followup)return {available:false,mode:'active',continuationId:followup.id,reason:'已有恢复任务正在执行'};
  if(activeJob(job)||job.status==='passed'||job.nativeCase)return {available:false,mode:'none',reason:activeJob(job)?'任务正在执行':'此记录不需要恢复'};
- if(job.runtime&&job.plan&&job.structure&&['judge','spec','gate'].includes(job.stage))return {available:true,mode:'assessment',reason:'完整场景和运行证据已保存，只需继续验收'};
- if(job.sceneProgram)return {available:true,mode:'scene',reason:'完整场景已保存；继续构建、运行和验收，不重复生成或修正调用'};
+ if(job.runtime&&job.plan&&job.structure&&((!job.partialOutput&&['judge','spec','gate','complete'].includes(job.stage))||(job.partialOutput&&!job.quality)))return {available:true,mode:'assessment',reason:job.partialOutput?'已有真实草稿未完成评分，优先补齐评分；不重新生成资产':'完整场景和运行证据已保存，只需继续验收'};
+ if(job.improvementId&&qualityFailure(job)&&existsSync(improvement.path(job.improvementId))){const decision=qualityDecision(improvement.get(job.improvementId));if(decision.action==='diagnose')return {available:false,mode:'diagnosis',reason:decision.reason+'；先查看原因分析与优化方案，不能原样续跑'};}
+ if(job.sceneProgram&&!job.partialOutput)return {available:true,mode:'scene',reason:'完整场景已保存；继续构建、运行和验收，不重复生成或修正调用'};
  if(hasSavedRefinement(job,dir))return {available:true,mode:'refinement-output',reason:'已有完整模型修改输出；先按当前契约重新校验，再构建、运行和评分。校验失败即停止，不重复生成修改'};
- if(job.refineScene)return {available:true,mode:'refinement',reason:'保留原始场景与验收反馈，重新执行未完成的修正步骤'};
+ if(job.refineScene)return {available:true,mode:'refinement',reason:'保留原始场景与验收反馈；若有已验证候选，恢复目标、预览与累计额度，只继续未完成步骤'};
  let scan:any=null,scanError:string|null=null;try{scan=store.inspect(recoveryRegistration(job,dir));}catch(error){scanError=String(error);}
  const saved=store.matching(job)[0],count=scan?.content.assets.length??-1,useLocal=!!scan&&count>=(saved?.completed??-1);
  const completed=useLocal?count:saved?.completed,total=useLocal?scan.content.total:saved?.total;
- if(total===undefined&&job.plan&&existsSync(join(dir,'plan-response.txt'))&&(['scene-observation-','scene-observation-invalid-'].some(prefix=>existsSync(join(dir,'generation',prefix+'response.txt'))&&existsSync(join(dir,'generation',prefix+'receipt.json')))))return {available:true,mode:'observation',completed:0,total:0,reason:'保留已完成需求和观察输出；重新校验图片编号与证据后从空间规划继续，不重复观察调用'};
+ if(total===undefined&&job.plan&&existsSync(join(dir,'plan-response.txt'))&&((existsSync(join(dir,'generation','reference-observations.json'))&&existsSync(join(dir,'generation','observation-reuse.json')))||['scene-observation-','scene-observation-invalid-'].some(prefix=>existsSync(join(dir,'generation',prefix+'response.txt'))&&existsSync(join(dir,'generation',prefix+'receipt.json')))))return {available:true,mode:'observation',completed:0,total:0,reason:'复用已完成需求、观察和有效空间规划；只恢复未完成步骤，已有输出先校验再使用'};
  if(total===undefined&&job.plan&&existsSync(join(dir,'plan-response.txt')))return {available:true,mode:'plan',completed:0,total:0,reason:'复用已完成需求，从未完成的图片观察或空间步骤继续，不重复需求调用'};
  if(total===undefined)return {available:true,mode:'restart',completed:0,total:0,reason:'还没有可复用的完整布局；保留原始输入，重新开始生成',scanError};
  return {available:true,mode:'generation',source:useLocal?'local':'checkpoint',checkpointId:useLocal?null:saved?.id,completed:completed??0,total:total??0,missing:total===undefined?null:total-completed,issues:scan?.issues??[],reason:total===undefined?(scanError??'没有完整布局或可恢复检查点'):useLocal?'已检查磁盘中的完整资产':'使用已验证检查点',scanError};

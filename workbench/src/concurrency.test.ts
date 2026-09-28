@@ -1,5 +1,5 @@
 import {test,expect} from 'bun:test';
-import {PermitPool,SceneQueue,validateLimits} from './concurrency';
+import {PermitPool,SceneQueue,validateLimits,externalHandover} from './concurrency';
 const tick=()=>new Promise(r=>setTimeout(r,0));
 const deferred=()=>{let resolve!:()=>void;return {promise:new Promise<void>(r=>resolve=r),done:()=>resolve()};};
 test('scene jobs overlap up to cap and next starts as soon as one finishes',async()=>{
@@ -28,3 +28,5 @@ test('200-job batch keeps scene and aggregate model caps and continues after an 
  for(let i=0;i<200;i++)q.enqueue('batch-'+i,'experiment-'+i,async()=>{peakScenes=Math.max(peakScenes,q.active.size);try{await Promise.all(Array.from({length:3},(_,k)=>models.use(i+':'+k,undefined,async()=>{active++;peak=Math.max(peak,active);try{await tick();if(i===4&&k===0)throw Error('one case failed');}finally{active--;}})).map(p=>p.catch(()=>{})));}finally{if(++done===200)complete.done();}});
  await complete.promise;await tick();expect(done).toBe(200);expect(peakScenes).toBe(3);expect(peak).toBe(4);expect(q.pending).toHaveLength(0);expect(models.active.size).toBe(0);
 });
+
+test('legacy worker never proxies cancel back to itself',()=>{expect(externalHandover({pid:process.pid})).toBe(false);expect(externalHandover({pid:process.pid},-1)).toBe(true);expect(externalHandover(null)).toBe(false);});

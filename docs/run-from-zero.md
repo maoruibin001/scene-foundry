@@ -4,7 +4,7 @@
 
 ## 1. 前提与边界
 
-- macOS 上可执行 `git`、`python3`、`bun`、`node`、`corepack`、`codex`；Node 附带或另外安装 Corepack。先执行 `command -v git python3 bun node corepack codex` 检查。使用的版本以克隆仓库和 `prototype/brief.json` 固定的依赖提交为准。
+- macOS 上可执行 `git`、`python3`、`bun`、`node`、`corepack`、`codex`；Node 附带或另外安装 Corepack。图像依赖使用 Python 3.10–3.12；先执行 `command -v git python3 bun node corepack codex` 和 `python3 --version` 检查。若默认 Python 版本不符，下面的环境准备命令用 `python3.12` 等已安装的兼容解释器执行。使用的版本以克隆仓库和 `prototype/brief.json` 固定的依赖提交为准。
 - Git 凭证须能读取 `ForgeaXGame/forgeax-engine` 和 `ForgeaXGame/forgeax-ex-scene-generator` 两个私有仓库。`git ls-remote https://github.com/ForgeaXGame/forgeax-engine.git HEAD` 和对 Scene Generator 的同样检查都应成功。公开仓库本身不足以构建完整场景。
 - Codex CLI 须已登录，`codex login status` 应成功。本例使用工作台模型列表中可用的 `gpt-6-luna` / `low`；若列表没有它，先选择同样支持图片的低成本模型并相应修改 `.env`，不要让程序静默改用默认的高成本模型。
 - 至少留出若干 GB 磁盘空间。依赖克隆、Engine 构建和每个任务的录屏、截图都保存在本地；实际占用随依赖和场景变化。下面的 `PIPELINE_MAX_CALLS=30` 是这个新目录所有任务合计的调用上限，用于容纳一次简单样例与有限的格式纠正；它不是账号费用或订阅额度上限。
@@ -27,6 +27,7 @@ git rev-parse HEAD
 
 ```sh
 python3 prototype/bin/bootstrap.py
+python3 scripts/setup-python.py
 git -C engine rev-parse HEAD
 git -C scene-generator rev-parse HEAD
 cd workbench
@@ -36,6 +37,8 @@ cd ..
 ```
 
 `bootstrap.py` 会克隆 `prototype/brief.json` 指定的两个精确提交，安装、构建 Engine 与 Scene Generator，并建立模板项目的本地 Engine 类型链接。已有但提交不符或被修改的依赖会使脚本停止；它不会私自切换已有 checkout。测试通过只证明源码和模板集成，不等于模型路由、浏览器运行或生成质量已通过。
+
+`setup-python.py` 会在 `workbench/data/reconstruction-env/` 创建虚拟环境，安装固定版本的 Pillow、NumPy 和 OpenCV，用于贴图提取、几何诊断图及录屏取帧。它不下载深度模型或模型权重，也不执行模型请求。若设置了 `PIPELINE_DATA_DIR`，环境也建立在该数据目录中；自定义目录测试与启动服务时须使用同一个设置。
 
 `bun test` 请按上面的工作目录执行：生成任务会在 `workbench/data/versions/` 保存源码快照，从仓库根目录按文件名搜索测试时可能把快照里的旧测试也运行一次。
 
@@ -97,7 +100,7 @@ python3 scripts/create-demo-reference.py workbench/data/demo-reference.png
 ```
 
 1. 打开 `http://127.0.0.1:19977/`，进入“新建场景”。选择“图片 + 描述”，上传 `workbench/data/demo-reference.png`。
-2. 描述填写：`海边礁石上的红白灯塔，右侧有一座蓝色检修平台；保留灯塔、礁石和平台的相对位置。` 选择“简单”和“标准生成”。手动确认模型为 `gpt-6-luna`、思考深度为 `low`，资产并发保持默认。点击“准备参考方案”。
+2. 描述填写：`海边礁石上的红白灯塔，右侧有一座蓝色检修平台；保留灯塔、礁石和平台的相对位置。` 选择“简单”、标准还原和仅首轮验证；首次安装验收采用完全从头生成，避免复用旧资产掩盖问题。手动确认模型为 `gpt-6-luna`、思考深度为 `low`，资产并发保持默认。点击“准备参考方案”。
 3. 在“确认场景参考图”页检查实际上传的图片，点击“确认这些参考图”，再点击“开始场景生成”。这两步是正常产品流程，不能通过直接写任务文件跳过。
 4. 在任务详情页观察阶段和“查看执行过程”。完成后检查资产与物料、Engine 运行截图、模型调用回执、质量与规范结果。`生成记录` 应能找到本次任务。质量不达标或外部条件受阻时保留实际状态与错误，不把 HTTP 200 或出现任务记录称为生成成功。
 

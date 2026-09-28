@@ -68,8 +68,8 @@ export function validateSavedRefinement(snapshot:SavedRefinement,target:any,plan
   assert(paths.includes(folder+'/openings/observations.json')&&paths.includes(folder+'/openings/receipt.json')&&evidence.sourceDigest===meta.sourceDigest&&evidence.observationsDigest===digest(JSON.stringify(observation)),'历史开口观察证据缺失或变化');
   source=applyOpeningObservation(source,observation,refs.length);
  }
- const editBudget=patch.version==='scene-refinement-v3'?repairBudget(target.complexity):LEGACY_REPAIR_BUDGET;
- if(patch.version==='scene-refinement-v3')assert(same(meta.repairBudget,editBudget),'保存的编辑额度与复杂度不一致');
+ const editBudget=['scene-refinement-v3','scene-refinement-v4','scene-refinement-v5'].includes(patch.version)?repairBudget(target.complexity):LEGACY_REPAIR_BUDGET;
+ if(['scene-refinement-v3','scene-refinement-v4','scene-refinement-v5'].includes(patch.version))assert(same(meta.repairBudget,editBudget),'保存的编辑额度与复杂度不一致');
  const goals=validateRepairGoals(read(join(dir,folder,'repair-goals.json')),source,plan,refs.length,meta.frameNames,editBudget);
  const next=applyRefinement(source,patch,plan,refs.length,target.complexity);resolveTextureReuse(next,refs);
  const changes=assertPlannedRepair(source,next,goals);

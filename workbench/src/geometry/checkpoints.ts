@@ -1,3 +1,5 @@
+import {freshCheckpointScope} from '../reuse-mode';
+import {verifyAssetReview} from './asset-review';
 import {mkdirSync,existsSync,readFileSync,writeFileSync,readdirSync,renameSync,rmSync,lstatSync} from 'node:fs';
 import {join,dirname} from 'node:path';
 import {randomUUID} from 'node:crypto';
@@ -8,7 +10,7 @@ import {validateLayout,validateAsset,type SceneLayout,type AssetGeometry} from '
 
 const canonical=(v:any):any=>v===undefined?null:v===null||typeof v!=='object'?v:Array.isArray(v)?v.map(canonical):Object.fromEntries(Object.keys(v).sort().map(k=>[k,canonical(v[k])]));
 const hash=(v:any)=>digest(JSON.stringify(canonical(v)));
-export function checkpointInput(job:any){return {prompt:job.prompt??'',complexity:job.complexity,images:(job.images??(job.image?[job.image]:[])).map((i:any)=>({id:i.id,mime:i.mime})),modelSettings:settingsOf(job)??null,provider:job.profile?.provider??null,engineSha:job.profile?.engineSha??null,generatorSha:job.profile?.generatorSha??null};}
+export function checkpointInput(job:any){return {...freshCheckpointScope(job),prompt:job.prompt??'',complexity:job.complexity,images:(job.images??(job.image?[job.image]:[])).map((i:any)=>({id:i.id,mime:i.mime})),modelSettings:settingsOf(job)??null,provider:job.profile?.provider??null,engineSha:job.profile?.engineSha??null,generatorSha:job.profile?.generatorSha??null};}
 export type Registration={job:any;planFile:string;generationDir:string;textureFile:string;provenance?:any;evidence?:Record<string,string>;skipInvalidAssets?:boolean};
 /** Immutable generated payloads; restoring one never counts as a fresh generation. */
 export class CheckpointStore{
@@ -36,7 +38,7 @@ export class CheckpointStore{
    try{
    const source=read(record);if(source.status!=='passed'){issues.push({id:brief.id,reason:'资产尚未完成'});continue;}
    const value=read(file);if(source.geometrySha256!==digest(JSON.stringify(value))||source.layoutSha256!==digest(JSON.stringify(layout))||source.planSha256!==digest(JSON.stringify(plan))||hash(source.referenceSha256)!==hash(input.images.map((i:any)=>i.id))||hash(source.modelSettings)!==hash(input.modelSettings))throw Error('资产检查点来源与布局不一致：'+brief.id);
-   validateAsset(value,brief,layout,textures);assets.push({id:brief.id,source:{pipelineVersion:source.pipelineVersion,geometrySha256:source.geometrySha256}});add('assets/'+brief.id+'/geometry.json',file);add('assets/'+brief.id+'/checkpoint.json',record);receipts(folder,'assets/'+brief.id+'/');
+   validateAsset(value,brief,layout,textures);assets.push({id:brief.id,source:{pipelineVersion:source.pipelineVersion,geometrySha256:source.geometrySha256}});add('assets/'+brief.id+'/geometry.json',file);add('assets/'+brief.id+'/checkpoint.json',record);const review=join(folder,'asset-visual-review.json');if(existsSync(review)&&verifyAssetReview(value,read(review)))add('assets/'+brief.id+'/asset-visual-review.json',review);receipts(folder,'assets/'+brief.id+'/');
    }catch(error){if(!skipInvalidAssets)throw error;for(let i=assets.length-1;i>=0;i--)if(assets[i].id===brief.id)assets.splice(i,1);for(const name of Object.keys(buffers))if(name.startsWith('assets/'+brief.id+'/'))delete buffers[name];issues.push({id:brief.id,reason:String(error)});}
   }
   for(const [name,file] of Object.entries(evidence)){if(!/^[a-zA-Z0-9_-]+\.(json|txt)$/.test(name))throw Error('来源证据名称无效');add('evidence/'+name,file);}

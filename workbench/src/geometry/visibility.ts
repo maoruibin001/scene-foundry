@@ -2,7 +2,7 @@ import {basis,type Camera} from './camera-fit';
 import {compileGeometryProgram,type Texture} from './program';
 import type {SceneInput} from './scene-contract';
 
-export const VISIBILITY_METHOD='opaque-geometry-visibility-v1';
+export const VISIBILITY_METHOD='opaque-geometry-visibility-v2';
 export const VISIBILITY_PROMPT='若输入有geometryVisibility，最后追加的是对应机位的彩色编号几何诊断图：原图在前、actualFrameNames实际截图居中、diagnosticImages诊断图最后。数字从palette映射到真实实例和模板；visibleParts给出主要可见部件、材质与归一化范围，instanceOcclusions给出不同物体的前后遮挡，nearestPartOcclusions也包含同一物体内部层次。对照真实截图和原图，把主要差距落实到实际实例、部件与材料；不要只看包围盒猜谁挡住了谁。诊断图不包含光照和材质外观，不是新的目标图；透明表面被排除、面积只是低分辨率几何采样。正常表皮盖住底层、家具遮住地面都是合理现象，不能把遮挡量直接当成错误或自动按面积选择修改。结合参考图判断可见桌面、通道、开口和前中后景应有的关系，保留正确遮挡。';
 type Point=[number,number,number];
 type Mesh={name:string;entityId:string;geometry:{positions:number[];indices:number[]}};
@@ -57,8 +57,8 @@ export function sceneVisibility(source:SceneInput,textures:Record<string,Texture
   if(m.color[3]<.95)return true;if(!m.textureId)return false;const texture=textures[m.textureId];if(!texture)return true;
   const bytes=Buffer.from(texture.rgba8,'base64');for(let i=3;i<bytes.length;i+=4)if(bytes[i]<255)return true;return false;
  }).map(m=>m.id);
- const allMeta=source.program.instances.flatMap(instance=>source.program.templates.find(t=>t.id===instance.template)!.parts.map(part=>({instanceId:instance.id,label:instance.label,templateId:instance.template,partId:part.id,materialId:part.material,textureId:source.program.materials.find(m=>m.id===part.material)!.textureId})));
- if(allMeta.length!==compiled.meshes.length||allMeta.some((m,i)=>compiled.meshes[i].name!==m.instanceId+'__'+m.partId+'__'+m.materialId))throw Error('编译网格顺序与可见性身份不一致');
+ const allMeta=source.program.instances.flatMap(instance=>source.program.templates.find(t=>t.id===instance.template)!.parts.map(part=>{const binding=instance.surfaceOverrides?.find(o=>o.sourceMaterialId===part.material),materialId=binding?.targetMaterialId??part.material;return {instanceId:instance.id,label:instance.label,templateId:instance.template,partId:part.id,sourceMaterialId:part.material,materialId,textureId:source.program.materials.find(m=>m.id===materialId)!.textureId};}));
+ if(allMeta.length!==compiled.meshes.length||allMeta.some((m,i)=>compiled.meshes[i].name!==m.instanceId+'__'+m.partId+'__'+m.sourceMaterialId||compiled.meshes[i].geometry.material.id!==m.materialId))throw Error('编译网格顺序与可见性身份不一致');
  const kept=allMeta.map((m,i)=>({m,mesh:compiled.meshes[i]})).filter(x=>!excluded.includes(x.m.materialId));
  const meshes=kept.map(x=>x.mesh),metadata=kept.map(x=>x.m),palette=source.program.instances.map((i,n)=>({number:n+1,instanceId:i.id,label:i.label,templateId:i.template}));
  const views=source.cameras.map(camera=>{

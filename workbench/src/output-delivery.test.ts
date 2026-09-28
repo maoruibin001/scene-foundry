@@ -1,0 +1,20 @@
+import {test,expect} from 'bun:test';
+import {mkdtempSync,mkdirSync,writeFileSync,rmSync,symlinkSync} from 'node:fs';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
+import {digest,save,read} from './store';
+import {deliveryInfo,preserveOutput,failureDisposition} from './output-delivery';
+import {deliveryHTML} from '../public/delivery-ui.js';
+function fixture(folder=''){
+ const root=mkdtempSync(join(tmpdir(),'output-contract-')),dir=join(root,folder);for(const p of ['runtime','project/game/dist','project/evidence'])mkdirSync(join(dir,p),{recursive:true});
+ const job:any={id:'job',status:'running',stage:'assets',profile:{engineSha:'engine',generatorSha:'generator'},pipelineVersion:{id:'v1'}};
+ const manifest='{"engine":"ForgeaX"}',image='actual-render-evidence';writeFileSync(join(dir,'project/game/dist/forgeax-dist.json'),manifest);writeFileSync(join(dir,'runtime/view.png'),image);
+ save(join(dir,'runtime/runtime.json'),{distManifestDigest:digest(manifest),hard:{runtime:true,noErrors:true,entitiesLoaded:true,framing:false},images:['view.png'],hashes:[digest(image)]});save(join(dir,'project/evidence/run-report.json'),{engineSha:'engine',generatorSha:'generator',distManifestDigest:digest(manifest),stages:Object.fromEntries(['engine-build','asset-verify','asset-ready','engine-status'].map(k=>[k,{status:'passed'}]))});return {root,dir,job,cleanup:()=>rmSync(root,{recursive:true,force:true})};
+}
+test('灰模可运行即交付，之后模型中断也不假称成品评分通过',()=>{const f=fixture('generation/blockout/0');try{f.job.status='blocked';f.job.error='PROVIDER_HTTP_402 insufficient_quota';const d=deliveryInfo(f.job,f.root);expect(d.available).toBe(true);expect(d.best?.kind).toBe('graybox');expect(d.best?.score).toBeNull();expect(d.best?.hardChecks.framing).toBe(false);expect(d.execution.fault?.kind).toBe('external');expect(deliveryHTML({...f.job,delivery:d})).toContain('未完成成品评分');}finally{f.cleanup()}});
+test('评审失败前保留真实成品快照；修正破坏当前产物仍可打开旧输出',()=>{const f=fixture();try{expect(preserveOutput(f.job,f.root,'','scene')).not.toBeNull();writeFileSync(join(f.dir,'project/game/dist/forgeax-dist.json'),'broken');f.job.status='failed';f.job.error='judge unavailable';const d=deliveryInfo(f.job,f.root);expect(d.available).toBe(true);expect(d.best?.folder).toStartWith('delivery/outputs/scene-');expect(d.best?.qualityStatus).toBe('not_assessed');expect(d.best?.score).toBeNull();}finally{f.cleanup()}});
+test('图像/构建摘要损坏不提供运行成功入口',()=>{for(const path of ['runtime/view.png','project/game/dist/forgeax-dist.json']){const f=fixture();try{writeFileSync(join(f.root,path),'corrupt');expect(deliveryInfo(f.job,f.root).available).toBe(false);}finally{f.cleanup()}}});
+test('没有真实输出的早期失败明确称为交付失败',()=>{const f=fixture();try{rmSync(join(f.root,'runtime/runtime.json'));f.job.status='failed';const d=deliveryInfo(f.job,f.root);expect(d.state).toBe('unavailable');expect(deliveryHTML({...f.job,delivery:d})).toContain('交付失败');}finally{f.cleanup()}});
+test('部分草稿即使存在旧评分也不能显示为成品通过',()=>{const f=fixture();try{f.job.partialOutput={missing:[{id:'wall',label:'墙'}],completed:1,total:2};save(join(f.root,'quality.json'),{status:'passed',score:99});const d=deliveryInfo(f.job,f.root);expect(d.best?.kind).toBe('partial');expect(d.best?.score).toBeNull();expect(d.best?.qualityStatus).toBe('not_assessed');}finally{f.cleanup()}});
+test('输出路径和图片链接不可逃逸任务目录',()=>{const f=fixture(),external=mkdtempSync(join(tmpdir(),'outside-output-'));try{writeFileSync(join(external,'x'),'x');symlinkSync(join(external,'x'),join(f.root,'runtime/out.png'));const r=read(join(f.root,'runtime/runtime.json'));r.images=['out.png'];r.hashes=[digest('x')];save(join(f.root,'runtime/runtime.json'),r);expect(deliveryInfo(f.job,f.root).available).toBe(false);}finally{f.cleanup();rmSync(external,{recursive:true,force:true})}});
+test('预算限制不称为外部不可抗力，工具契约错误归管线配置',()=>{expect(failureDisposition('MODEL_BUDGET_EXHAUSTED').kind).toBe('budget');expect(failureDisposition('本角色禁止修复工具').kind).toBe('configuration');expect(failureDisposition('PROVIDER_RECOVERY_EXHAUSTED PROVIDER_TIMEOUT').retryable).toBe(true);expect(failureDisposition('PROVIDER_HTTP_503').retryable).toBe(true)});

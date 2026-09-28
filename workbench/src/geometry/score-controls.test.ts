@@ -1,0 +1,4 @@
+import {test,expect} from 'bun:test';
+import {verifyScoreControl,scoreControlEvidence} from './score-controls';
+import {mkdtempSync,mkdirSync,writeFileSync,rmSync} from 'node:fs';import {tmpdir} from 'node:os';import {join} from 'node:path';
+test('变更的对照证据排除并注明原因，不提供新分数',()=>{const root=mkdtempSync(join(tmpdir(),'score-control-'));try{mkdirSync(join(root,'run'));writeFileSync(join(root,'run/job.json'),'{}');writeFileSync(join(root,'review.json'),'{}');const record={sourceJobId:'run',folder:root,files:{'review.json':'not-the-real-hash'}};expect(()=>verifyScoreControl(record,id=>join(root,id))).toThrow('对照产物变化');mkdirSync(join(root,'registry'));writeFileSync(join(root,'registry/broken.json'),JSON.stringify(record));const r=scoreControlEvidence({},undefined,join(root,'registry'),id=>join(root,id));expect(r.controls).toHaveLength(0);expect(r.excluded).toHaveLength(1);}finally{rmSync(root,{recursive:true,force:true});}});

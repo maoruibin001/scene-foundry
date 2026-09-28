@@ -1,0 +1,11 @@
+import {test,expect} from 'bun:test';
+import {validateCriteriaMigration} from './plan-criteria';
+import {validateGroundedPlan} from './grounding';
+import {CRITERION_DIMENSIONS} from './atomic-criteria';
+import {roleSettings,OPTIMIZATION_POLICY} from './generation-policy';
+const prompt='还原参考图片里的木门';
+const frozen=()=>validateGroundedPlan({name:'测试场景',summary:prompt,capabilities:['mapping'],assumptions:[],requirements:[{id:'R1',text:prompt,critical:true,weight:5,source:'prompt',evidence:[prompt],count:null}]},prompt);
+const result=()=>{const p=frozen();return {...p,requirements:p.requirements.map(({evidenceSpans,...r}:any)=>r),acceptanceCriteria:CRITERION_DIMENSIONS.map((dimension,i)=>({id:'C'+i,requirementId:'R1',dimension,description:'可观察项目'+i,source:'prompt',evidence:[prompt],critical:true,weight:1}))};};
+test('迁移先重建派生引用，不要求模型输出 schema 外字段，历史计划保持不变',()=>{const p=frozen(),before=JSON.stringify(p),r=validateCriteriaMigration(result(),p,prompt);expect(r.requirements[0].evidenceSpans).toEqual([prompt]);expect(JSON.stringify(p)).toBe(before);});
+test('重新派生引用不允许改变实际需求或证据',()=>{const v=result();v.requirements[0].text='偷偷改变需求';expect(()=>validateCriteriaMigration(v,frozen(),prompt)).toThrow('不能修改冻结需求');const e=result();e.requirements[0].evidence=['虚构引用'];expect(()=>validateCriteriaMigration(e,frozen(),prompt)).toThrow();});
+test('已指定的 codex6 Azure Astra 路由按阶段降档，最终评审保留深度',()=>{const b={model:'gpt-6-astra-aihub-azure',reasoningEffort:'xhigh'};expect(roleSettings(b,'plan',OPTIMIZATION_POLICY)?.reasoningEffort).toBe('medium');expect(roleSettings(b,'judge',OPTIMIZATION_POLICY)).toEqual(b);});

@@ -46,3 +46,9 @@ reconstruction-matching
 dist/
 tmp/
 *.tmp
+
+# Local candidate acceptance controls and one-off machine-specific launchers
+workbench/acceptance-control.json
+workbench/src/candidate-codex.py
+workbench/src/subscription-codex.py
+workbench/src/redirect.ts

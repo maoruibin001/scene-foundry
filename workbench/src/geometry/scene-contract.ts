@@ -1,3 +1,4 @@
+import {lightingSchema,validateLighting,LIGHTING_RULES,type SceneLighting} from './lighting';
 import {geometryProgramSchema,GEOMETRY_RULES} from './program-schema';
 import {validateGeometryProgram,type GeometryProgram} from './program';
 import {openingsSchema,validateOpenings,OPENINGS_PROMPT,type SpatialOpening} from './openings';
@@ -11,8 +12,8 @@ export function semanticCounts(entities:{category:string}[]):Record<string,numbe
  for(const e of entities)counts[e.category]=(counts[e.category]??0)+1;
  return counts;
 }
-export type SceneInput={spatialOpenings?:SpatialOpening[];textureReuse?:{textureId:string;assetId:string;reason:string}[];version:'scene-v1';program:GeometryProgram;entities:{instanceId:string;role:'subject'|'context'|'ground';category:string}[];cameras:{name:string;referenceIndex:number|null;position:number[];target:number[];fov:number}[];textures:{id:string;referenceIndex:number;quad:number[][];size:number;description:string}[];lighting:{direction:number[];color:number[];intensity:number;ambientColor:number[];ambientIntensity:number;points:{position:number[];color:number[];intensity:number;range:number}[]};assumptions:string[]};
-export function sceneSchema(ids?:string[]){return obj({spatialOpenings:openingsSchema(),textureReuse:arr(obj({textureId:str,assetId:str,reason:str})),version:{type:'string',enum:['scene-v1']},program:geometryProgramSchema(ids),entities:arr(obj({instanceId:str,role:{type:'string',enum:['subject','context','ground']},category:categorySchema})),cameras:arr(obj({name:str,referenceIndex:{type:['integer','null']},position:vector,target:vector,fov:num})),textures:arr(obj({id:str,referenceIndex:{type:'integer'},quad:{type:'array',minItems:4,maxItems:4,items:{type:'array',minItems:2,maxItems:2,items:num}},size:{type:'integer',enum:[256,512]},description:str})),lighting:obj({direction:vector,color:vector,intensity:num,ambientColor:vector,ambientIntensity:num,points:arr(obj({position:vector,color:vector,intensity:num,range:num}))}),assumptions:arr(str)});}
+export type SceneInput={spatialOpenings?:SpatialOpening[];textureReuse?:{textureId:string;assetId:string;reason:string}[];version:'scene-v1';program:GeometryProgram;entities:{instanceId:string;role:'subject'|'context'|'ground';category:string}[];cameras:{name:string;referenceIndex:number|null;position:number[];target:number[];fov:number}[];textures:{id:string;referenceIndex:number;quad:number[][];size:number;description:string}[];lighting:SceneLighting;assumptions:string[]};
+export function sceneSchema(ids?:string[]){return obj({spatialOpenings:openingsSchema(),textureReuse:arr(obj({textureId:str,assetId:str,reason:str})),version:{type:'string',enum:['scene-v1']},program:geometryProgramSchema(ids),entities:arr(obj({instanceId:str,role:{type:'string',enum:['subject','context','ground']},category:categorySchema})),cameras:arr(obj({name:str,referenceIndex:{type:['integer','null']},position:vector,target:vector,fov:num})),textures:arr(obj({id:str,referenceIndex:{type:'integer'},quad:{type:'array',minItems:4,maxItems:4,items:{type:'array',minItems:2,maxItems:2,items:num}},size:{type:'integer',enum:[256,512]},description:str})),lighting:lightingSchema(),assumptions:arr(str)});}
 const assert=(ok:any,message:string)=>{if(!ok)throw Error(message)};
 const finite=(n:any,min:number,max:number)=>typeof n==='number'&&Number.isFinite(n)&&n>=min&&n<=max;
 const vec=(v:any,min=-100,max=100)=>Array.isArray(v)&&v.length===3&&v.every(n=>finite(n,min,max));
@@ -36,8 +37,7 @@ export function validateSceneContext(s:Omit<SceneInput,'version'|'program'>&{pro
  }
  const reuse=s.textureReuse??[];assert(Array.isArray(reuse)&&new Set(reuse.map(x=>x.textureId)).size===reuse.length&&reuse.every(x=>s.textures.some(t=>t.id===x.textureId)&&/^[a-f0-9]{64}$/.test(x.assetId)&&typeof x.reason==='string'&&x.reason.trim()),'材质复用声明无效');
  for(const m of s.program.materials)if(m.textureId)assert(s.textures.some(t=>t.id===m.textureId),'材质引用了未声明的图像片段');
- const light=s.lighting;assert(light&&vec(light.direction,-1,1)&&Math.hypot(...light.direction)>.01&&vec(light.color,0,1)&&vec(light.ambientColor,0,1)&&finite(light.intensity,0,8)&&finite(light.ambientIntensity,.02,2)&&Array.isArray(light.points)&&light.points.length<=16,'光照参数无效');
- for(const p of light.points)assert(vec(p.position)&&vec(p.color,0,1)&&finite(p.intensity,0,10)&&finite(p.range,.1,30),'局部光照参数无效');
+ validateLighting(s.lighting);
  assert(Array.isArray(s.assumptions)&&s.assumptions.every(x=>typeof x==='string'),'推断说明无效');return s;
 }
 export function validateSceneTopology(s:Pick<SceneInput,'entities'|'cameras'|'assumptions'>&{program:Pick<GeometryProgram,'instances'>},plan:any,referenceCount:number){
@@ -58,6 +58,7 @@ export const SCENE_RULES=`所有可见布局、材质片段、相机位置和补
 entities 为 program.instances 的逐一分类；category 使用自由定义的中文语义类别名称（1至56字符，无首尾空白或控制字符，同类实体使用相同名称），不作为资产ID或路径，role 标识 subject/context/ground。建筑或地面可作为 context/ground，关键物件为 subject。每个明确数量需求只由对应完整物体实例绑定，不让配件重复计数。
 cameras 至少两个不同位置，最多六个；每张参考图必须有一个 referenceIndex 对应的相机，可增加 referenceIndex:null 的检查机位。坐标与 program 同为 Z 向上；fov 是垂直视场弧度。通过实际场景尺寸和图中的透视估计位置、朝向、镜头，不把相机放到墙里或靠远处俯视来掩盖细节。
 textures 可从本次参考图提取最多 24 个局部材质片段：id、referenceIndex、quad、size、description。quad 是未裁剪原图上的四角归一化坐标，顺序为左上、右上、右下、左下，支持透视纠正；size 仅 256 或 512。优先选清楚、无遮挡的重复纹理或真实物件表面。不得包含水印、黑边、标注，不能取整幅图贴成背景冒充场景；每片最多原图 30% 面积。纹理是照片颜色，会包含原图光照，不称为完美无光照反射率。无图片时 textures 为空，不捏造资源。重复表面用部件 uvScale 控制尺度，避免巨大砖块、木纹拉伸；已贴图材质 color 通常用 [1,1,1,1]，按实物设置 roughness/metallic。
-lighting 提供一个方向光 direction/color/intensity、ambientColor/ambientIntensity 和最多 16 个实际有依据的局部 points(position/color/intensity/range)。光照应还原输入的方向与层次，同时关键对象可辨。所有向量继续使用 Z 向上。assumptions 用中文列出不可见区域、相机和尺度估计；不把推断说成已观察事实。
+lighting.backgroundColor 为真实场景外部可见背景的线性 RGB 色（不新增物体），仅当图片有对应天空或窗外亮区证据时设置，否则 null 沿用原值。lighting 提供一个方向光 direction/color/intensity、ambientColor/ambientIntensity 和最多 16 个实际有依据的局部 points(position/color/intensity/range)。光照应还原输入的方向与层次，同时关键对象可辨。${LIGHTING_RULES}
+所有向量继续使用 Z 向上。assumptions 用中文列出不可见区域、相机和尺度估计；不把推断说成已观察事实。
 `;
 export const SCENE_PROMPT=`根据全部参考图和冻结需求，生成一个可自由观察的完整三维场景，返回 scene-v1 JSON。program 使用通用几何契约。\n${SCENE_RULES}\n${OPENINGS_PROMPT}\n${GEOMETRY_RULES}`;

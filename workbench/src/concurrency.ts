@@ -37,21 +37,23 @@ export const owner={id:randomUUID(),pid:process.pid,root:import.meta.dirname,sta
 const settingsPath=join(DATA,'concurrency.json');
 let limits=validateLimits(existsSync(settingsPath)?read(settingsPath):DEFAULT_LIMITS);
 let legacyCache:{at:number;items:any[]}={at:0,items:[]};
+export function externalHandover(handover:any,pid=process.pid){return !!handover&&handover.pid!==pid&&alive(handover.pid);}
 export function legacyJobs(){
  if(Date.now()-legacyCache.at<500)return legacyCache.items;
  const file=join(DATA,'scheduler-handover.json'),handover=existsSync(file)?read(file):null;
- const items=handover&&alive(handover.pid)?listJobs().filter(j=>!j.executionOwner&&(!j.endedAt&&j.startedAt||j.status==='queued')&&j.pipelineVersion?.id===handover.pipelineVersionId).map(j=>({id:j.id,key:j.improvementId??j.id,status:j.startedAt?'running':j.status,modelReservation:j.executionSettings?.assetConcurrency??6,endpoint:handover.endpoint,pid:handover.pid})):[];
+ const items=externalHandover(handover)?listJobs().filter(j=>(j.executionOwner?j.executionOwner.pid===handover.pid: j.pipelineVersion?.id===handover.pipelineVersionId)&&(!j.endedAt&&j.startedAt||j.status==='queued')).map(j=>({id:j.id,key:j.improvementId??j.id,status:j.startedAt?'running':j.status,modelReservation:j.executionSettings?.assetConcurrency??6,endpoint:handover.endpoint,pid:handover.pid})):[];
  legacyCache={at:Date.now(),items};return items;
 }
 export function ownerAlive(job:any){return job.executionOwner?alive(job.executionOwner.pid):legacyJobs().some(x=>x.id===job.id);}
-export function claimCoordinator(){const path=join(DATA,'scheduler-owner.json');if(existsSync(path)){const prior=read(path);if(alive(prior.pid))throw Error('已有并行调度器运行，不能重复领取任务：'+prior.pid);unlinkSync(path);}writeFileSync(path,JSON.stringify(owner),{flag:'wx'});process.once('exit',()=>{if(existsSync(path)&&read(path).id===owner.id)unlinkSync(path);});}
+export function authorizedHandover(prior:any,handover:any,successorRoot:string){return !!handover&&handover.pid===prior.pid&&handover.ownerId===prior.id&&handover.successorRoot===successorRoot&&handover.endpoint?.startsWith('http://127.0.0.1:');}
+export function claimCoordinator(){const path=join(DATA,'scheduler-owner.json');if(existsSync(path)){const prior=read(path),file=join(DATA,'scheduler-handover.json'),handover=existsSync(file)?read(file):null;if(alive(prior.pid)&&!authorizedHandover(prior,handover,owner.root))throw Error('已有并行调度器运行，不能重复领取任务：'+prior.pid);unlinkSync(path);}writeFileSync(path,JSON.stringify(owner),{flag:'wx'});process.once('exit',()=>{if(existsSync(path)&&read(path).id===owner.id)unlinkSync(path);});}
 const legacyActive=()=>legacyJobs().filter(j=>j.status==='running');
 export const modelPool=new PermitPool(limits.models,()=>legacyActive().reduce((n,j)=>n+j.modelReservation,0));
 export const renderPool=new PermitPool(limits.renders,()=>legacyActive().length?1:0);
 export const sceneQueue=new SceneQueue(limits.scenes,()=>legacyJobs().length,(id,e)=>console.error('SCENE_SCHEDULER_ERROR',id,String(e)),()=>legacyJobs().map(j=>j.key));
 const circuitPath=join(DATA,'scheduler-pause.json');
 if(existsSync(circuitPath))sceneQueue.paused=read(circuitPath).reason;
-export function pauseProvider(error:unknown){const s=String(error);if(!/MODEL_BUDGET_EXHAUSTED|MODEL_ROUTE_UNVERIFIED|PROVIDER_NOT_CONFIGURED|PROVIDER_HTTP_(?:401|402|403|429)|insufficient[_ ]quota|余额不足|额度耗尽|quota exceeded|usage limit/i.test(s))return;sceneQueue.paused=s;save(circuitPath,{reason:s,at:Date.now()});}
+export function pauseProvider(error:unknown){const s=String(error);if(!/MODEL_BUDGET_EXHAUSTED|MODEL_ROUTE_UNVERIFIED|CODEX_ROUTE_UNVERIFIED|PROVIDER_NOT_CONFIGURED|PROVIDER_HTTP_(?:401|402|403)|insufficient[_ ]quota|余额不足|额度耗尽|quota exceeded|usage limit/i.test(s))return;sceneQueue.paused=s;save(circuitPath,{reason:s,at:Date.now()});}
 export function assertProviderOpen(){if(sceneQueue.paused)throw Error('PROVIDER_PAUSED：'+sceneQueue.paused);}
 export function resumeScheduler(){sceneQueue.paused=null;if(existsSync(circuitPath))unlinkSync(circuitPath);sceneQueue.drain();}
 export function updateConcurrency(value:any){limits=validateLimits(value);save(settingsPath,limits);modelPool.setLimit(limits.models);renderPool.setLimit(limits.renders);sceneQueue.setLimit(limits.scenes);return schedulerSnapshot();}

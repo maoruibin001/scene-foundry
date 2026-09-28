@@ -12,10 +12,10 @@ test('invalid confidence retains diagnostic score but never yields success',()=>
 
 test('一次提交内自动修正通过不能计作首稿通过',()=>{const b={id:'b',cases:[{id:'c',mode:'prompt'}]};const r=batchGate(b,[{batchId:'b',caseId:'c',attempt:1,status:'passed',firstDraft:{status:'failed',score:55.7}}]);expect(r.n).toBe(1);expect(r.passed).toBe(1);expect(r.firstPass).toBe(0);});
 
-test('空间权重提高后按新权重计算，历史续跑仍按冻结版本得到原分数',()=>{
+test('材质权重提升后正确重算，历史版本与续跑保留原权重',()=>{
  const r=structuredClone(review);r.dimensions.find(d=>d.id==='spatial')!.score=3;
  const before=JSON.stringify(r),current=qualityGate(plan,r,hard);
- expect(current).toMatchObject({score:78.4,status:'failed',policy:{version:'scene-quality-v4',dimensionWeights:{coverage:32,spatial:40,shape:12,material:8,readability:8}}});
+ expect(current).toMatchObject({score:79.2,status:'failed',policy:{version:'scene-quality-v4.1',dimensionWeights:{coverage:28,spatial:32,shape:12,material:20,readability:8}}});
  expect(current.dimensions.reduce((n,d)=>n+d.weight,0)).toBe(100);
  for(const version of ['scene-quality-v2','scene-quality-v3']){
   const legacy={...DEFAULT_POLICY,version};delete legacy.dimensionWeights;const saved=JSON.stringify(legacy);
@@ -24,6 +24,8 @@ test('空间权重提高后按新权重计算，历史续跑仍按冻结版本�
   expect(restored.dimensions.find(d=>d.id==='spatial')!.weight).toBe(25);
   expect(JSON.stringify(legacy)).toBe(saved);
  }
+ const v4={...DEFAULT_POLICY,version:'scene-quality-v4'};delete v4.dimensionWeights;
+ expect(qualityGate(plan,r,hard,v4)).toMatchObject({score:78.4,status:'failed',policy:{dimensionWeights:{coverage:32,spatial:40,shape:12,material:8,readability:8}}});
  expect(JSON.stringify(r)).toBe(before);
  expect(scoringGuidance(DEFAULT_POLICY).dimensions).toEqual(current.dimensions.map(({score,reason,frames,points,...d})=>d));
 });

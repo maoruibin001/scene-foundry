@@ -4,7 +4,7 @@ import {inputKey} from './versions';
 const a='a'.repeat(64),b='b'.repeat(64),c='c'.repeat(64);
 test('重试与重建保留全部参考图顺序、文字和复杂度',()=>{
  const job={prompt:'按三张图还原同一空间',image:{id:a},images:[{id:b},{id:a},{id:c}],complexity:'complex'};
- expect(generationInput(job)).toEqual({prompt:job.prompt,imageIds:[b,a,c],complexity:'complex'});
+ expect(generationInput(job)).toEqual({prompt:job.prompt,imageIds:[b,a,c],complexity:'complex',matchingLevel:'detailed'});
  expect(referenceImageIds(generationInput(job))).toEqual([b,a,c]);
 });
 test('固定评测案例完整保留多图，不退化成首图评测',()=>{

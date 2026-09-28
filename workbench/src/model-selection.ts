@@ -24,6 +24,12 @@ export function modelTimeoutMs(effort:string,role?:string){
  return ({none:120000,minimal:120000,low:120000,medium:180000,high:300000,xhigh:480000,max:600000,ultra:900000} as Record<string,number>)[effort]??120000;
 }
 
+/** 活跃输出允许延长；恢复时给慢调用更多时间，但仍受单阶段总预算约束。 */
+export function modelTimeoutPolicy(effort:string,role:string,attempt=0,remainingMs=3600000){
+ const base=role==='judge'?900000:modelTimeoutMs(effort,role),timeoutMs=Math.min(Math.round(base*(attempt?1.5:1)),remainingMs);
+ return {timeoutMs,maxTimeoutMs:role==='judge'?timeoutMs:Math.min(timeoutMs*2,remainingMs,45*60*1000),activityWindowMs:Math.min(5*60*1000,timeoutMs),extensionMs:Math.min(5*60*1000,timeoutMs)};
+}
+
 export const COMPLEXITY_MODEL_DEFAULTS:Record<Complexity,Readonly<ModelSettings>>={
  simple:{model:process.env.PIPELINE_MODEL??'gpt-6-astra',reasoningEffort:'high'},
  medium:{model:process.env.PIPELINE_MODEL??'gpt-6-astra',reasoningEffort:'high'},

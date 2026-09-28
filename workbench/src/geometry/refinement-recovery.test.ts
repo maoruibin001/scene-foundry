@@ -64,3 +64,5 @@ test('新版实例移除可以重验恢复，保留原场景且不能借恢复�
  goals.goals[0].instanceIds=['main'];save(join(f.folder,'repair-goals.json'),goals);
  expect(()=>validateSavedRefinement(freezeSavedRefinement(f.job,f.dir),f.target,f.plan,f.images,f.locate)).toThrow('未选择');
 }finally{rmSync(f.root,{recursive:true,force:true});}});
+
+test('v5 表面协议恢复仍使用冻结编辑额度并保留旧来源',()=>{const f=fixture();try{const p={...f.patch,version:'scene-refinement-v5',surfaceUpdates:[],screenTargets:[],removeInstances:[]};save(join(f.folder,'scene-refine-parsed.json'),p);writeFileSync(join(f.folder,'scene-refine-response.txt'),JSON.stringify(p));const m=read(join(f.folder,'source.json'));m.repairBudget=repairBudget('simple');save(join(f.folder,'source.json'),m);expect(validateSavedRefinement(freezeSavedRefinement(f.job,f.dir),f.target,f.plan,f.images,f.locate).next.program.instances[0].position).toEqual([.2,0,0]);m.repairBudget=repairBudget('complex');save(join(f.folder,'source.json'),m);expect(()=>validateSavedRefinement(freezeSavedRefinement(f.job,f.dir),f.target,f.plan,f.images,f.locate)).toThrow('编辑额度');}finally{rmSync(f.root,{recursive:true,force:true})}});

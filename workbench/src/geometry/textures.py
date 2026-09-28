@@ -20,8 +20,17 @@ def extract(root):
             width,height=texture['width'],texture['height'];raw=base64.b64decode(texture['rgba8'],validate=True)
             if not (0<width<=1024 and 0<height<=1024 and len(raw)==width*height*4):raise ValueError('复用材质像素无效')
             output=root/(t['id']+'.png');Image.frombytes('RGBA',(width,height),raw).save(output)
+            channels=[]
+            for channel in ['normalTexture','metallicRoughnessTexture']:
+                if channel not in texture:continue
+                companion=texture[channel]
+                data=base64.b64decode(companion['rgba8'],validate=True)
+                if companion['width']!=width or companion['height']!=height or companion['colorSpace']!='linear' or len(data)!=width*height*4:raise ValueError('成套材质通道的像素、线性颜色空间或UV对齐无效')
+                if any(k in companion for k in ['normalTexture','metallicRoughnessTexture']):raise ValueError('成套材质通道不能嵌套')
+                path=root/(t['id']+'-'+channel+'.png');Image.frombytes('RGBA',(width,height),data).save(path)
+                channels.append({'channel':channel,'file':path.name,'sha256':hashlib.sha256(path.read_bytes()).hexdigest(),'pixelSha256':hashlib.sha256(data).hexdigest(),'colorSpace':'linear'})
             registry[t['id']]=texture
-            receipts.append({'id':t['id'],'description':t['description'],'assetId':resource['assetId'],'reason':resource['reason'],'source':resource['source'],'referenceSha256':resource['referenceSha256'],'file':output.name,'sha256':hashlib.sha256(output.read_bytes()).hexdigest(),'pixelSha256':hashlib.sha256(raw).hexdigest(),'method':'复用资源库现有像素，不重复生成；来源保留，视觉质量待本次验收'})
+            receipts.append({'id':t['id'],'description':t['description'],'assetId':resource['assetId'],'reason':resource['reason'],'source':resource['source'],'referenceSha256':resource['referenceSha256'],'file':output.name,'sha256':hashlib.sha256(output.read_bytes()).hexdigest(),'pixelSha256':hashlib.sha256(raw).hexdigest(),'channels':channels,'method':'复用资源库现有像素，不重复生成；成套通道按同一UV绑定，来源保留，视觉质量待本次验收'})
             continue
         index=t['referenceIndex']-1
         if not 0<=index<len(request['references']):raise ValueError('参考图引用越界')

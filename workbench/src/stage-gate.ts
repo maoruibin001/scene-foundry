@@ -1,3 +1,4 @@
+import {executionInterrupted} from './provider-recovery';
 import {createHash} from 'node:crypto';
 import {DEFAULT_POLICY,dimensionsFor,HARD_CHECKS,automaticGeneration,qualityGate} from './quality';
 import {assessmentHardChecks} from './assessment';
@@ -56,7 +57,7 @@ export function stageGate(batch:any,jobs:any[]){
    try{dimensionsFor(j.quality.policy);const actual=qualityGate(j.plan,j.review,assessmentHardChecks(j,j.runtime),batch.policy);if(actual.status!=='passed'||actual.score!==j.quality.score)throw Error();}catch{reasons.push('需求、分项与真实评审不能重现通过成绩');}
    passed=reasons.length===0;
   }
-  return {id:c.id,jobId:j.id,status:j.status,score:Number.isFinite(j.quality?.score)?j.quality.score:null,passed,firstPass:passed&&firstPass,terminal:terminal.has(j.status),reasons,excluded:all.length-original.length};
+  return {id:c.id,jobId:j.id,status:j.status,score:Number.isFinite(j.quality?.score)?j.quality.score:null,passed,firstPass:passed&&firstPass,terminal:terminal.has(j.status)&&!executionInterrupted(j),executionInterrupted:executionInterrupted(j),reasons,excluded:all.length-original.length};
  });
  const complete=cases.length===10&&cases.every((c:any)=>c.terminal),passed=cases.filter((c:any)=>c.passed).length,invalid=errors.length>0||cases.some((c:any)=>c.reasons.length>0);
  return {version:STAGE_VERSION,status:invalid?'invalid':!complete?'in_progress':passed>=8?'passed':'failed',sampleCount:10,submitted:cases.filter((c:any)=>c.jobId).length,passed,rate:passed/10,firstPass:cases.filter((c:any)=>c.firstPass).length,complete,cases,errors,minimumPassed:8,maxVisualRepairs:2,certifiesStableVersion:false};

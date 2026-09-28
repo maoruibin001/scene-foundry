@@ -15,7 +15,7 @@ export function assertVisibilityCamera(camera:SceneInput['cameras'][number],pose
 
 export function prepareVisibilityEvidence(source:SceneInput,textures:Record<string,Texture>,folder:string,sourceDir:string,runtime:any,frames:string[]){
  const started=Date.now(),report=sceneVisibility(source,textures),path=join(folder,'visibility.json');save(path,report);
- const command=Bun.spawnSync([join(ROOT,'data/reconstruction-env/bin/python'),join(ROOT,'src/geometry/visibility-map.py'),path],{stdout:'pipe',stderr:'pipe'});
+ const command=Bun.spawnSync([join(DATA,'reconstruction-env/bin/python'),join(ROOT,'src/geometry/visibility-map.py'),path],{stdout:'pipe',stderr:'pipe'});
  if(command.exitCode!==0)throw Error('几何诊断图绘制失败：'+new TextDecoder().decode(command.stderr).slice(-1800));
  const rendered=JSON.parse(new TextDecoder().decode(command.stdout));if(rendered.length!==report.views.length)throw Error('几何诊断机位不完整');
  const images=rendered.map((r:any,index:number)=>{

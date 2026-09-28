@@ -61,3 +61,14 @@ test('未加载网格和静止相机不能被多机位截图冒充运行通过',
  samples[5].parts[0].loaded=false;expect(analyzeSceneRun(samples,audit).hard.entitiesLoaded).toBe(false);
  for(const s of samples)s.position=[0,1,5];expect(analyzeSceneRun(samples,audit).hard.cameraMotion).toBe(false);
 });
+
+test('通用导出将聚光灯注册到同一 Engine 场景并保留物理参数回执',()=>{
+ const s=scene();s.lighting.spots=[{position:[2,3,4],direction:[0,1,-1],color:[1,.8,.6],intensity:45,range:8,innerConeDeg:25,outerConeDeg:60,castShadow:true}];
+ const registry={patch:{width:1,height:1,rgba8:Buffer.from([70,120,160,255]).toString('base64'),colorSpace:'srgb' as const}},root=mkdtempSync(join(tmpdir(),'scene-spot-'));
+ try{prepareGeometryProject(root,s.program,registry,{id:'fixture',summary:'聚光灯导出验证',scene:s,provenance:{test:true}});
+ const world=readFileSync(join(root,'game/assets/world.pack.ts'),'utf8');
+ expect(world).toContain('Skylight, PointLight, SpotLight, perspective');expect(world).toContain('Skylight,PointLight,SpotLight,Name');expect(world).toContain('spotLight0:');
+ const receipt=JSON.parse(readFileSync(join(root,'lighting-export.json'),'utf8'));
+ expect(receipt.authored.spots).toEqual(s.lighting.spots);expect(receipt.exportedSpots.spotLight0.components.SpotLight.intensity).toBe(45);
+ }finally{rmSync(root,{recursive:true,force:true})}
+});

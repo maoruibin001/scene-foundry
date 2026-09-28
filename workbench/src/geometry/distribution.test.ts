@@ -34,6 +34,7 @@ test('数量、种子、尺度、递归嵌套及全场景预算在展开前拒�
  const p=fixture(),s=p.templates[0].parts[0].shape as any;s.count=2048;s.element={type:'box',size:[1,1,1],radius:.1};
  expect(()=>validateGeometryProgram(p)).toThrow('三角形预算');
  const union=geometryProgramSchema().properties.templates.items.properties.parts.items.properties.shape.anyOf;
- const scatter=union.find(s=>s.properties.type.enum[0]==='scatter')!;expect(scatter.properties.element.anyOf).toHaveLength(5);
+ const scatter=union.find(s=>s.properties.type.enum[0]==='scatter')!;
+ expect(scatter.properties.element.anyOf.map(s=>s.properties.type.enum[0]).sort()).toEqual(['box','cloth','cushion','extrusion','grid','lathe','shell','tube']);
  expect(scatter.additionalProperties).toBe(false);expect(scatter.properties.count.maximum).toBe(2048);
 });

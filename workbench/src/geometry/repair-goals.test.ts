@@ -8,14 +8,14 @@ const pose={position:[0,0,0],rotation:[0,0,0],scale:[1,1,1]};
 const plan={requirements:[{id:'R1'},{id:'R2'}]},frames=['reference-1.png','inspection-3.png'];
 function scene():any{return {version:'scene-v1',program:{version:'geometry-v1',name:'通用空间',materials:[{id:'base',color:[.5,.5,.5,1],roughness:.8,metallic:0,textureId:null}],templates:['main','other'].map(id=>({id,parts:[{...pose,id:'body',material:'base',shape:{type:'box',size:[1,1,1],radius:0}}]})),instances:['main','other'].map((template,i)=>({...pose,id:'object'+i,label:'对象'+i,template,position:[i*3,0,0],requirementIds:['R1']}))},entities:[{instanceId:'object0',category:'主体',role:'subject'},{instanceId:'object1',category:'环境',role:'context'}],cameras:[{name:'主视角',referenceIndex:1,position:[3,-5,2],target:[0,0,0],fov:1}],textures:[],textureReuse:[],spatialOpenings:[],lighting:{direction:[0,1,-1],color:[1,1,1],intensity:1,ambientColor:[1,1,1],ambientIntensity:.3,points:[]},assumptions:[]};}
 function selection():any{return {version:'scene-repair-goals-v1',summary:'先解决主体布局',goals:[{id:'G1',kind:'layout',dimension:'spatial',problem:'前后关系错误',whyPriority:'主体遮挡影响空间关系',expectedChange:'主体前后层次与原图一致',requirementIds:['R1'],instanceIds:['object0'],templateIds:[],materialIds:[],cameraNames:[],openingIds:[],addGeometry:false,evidence:[{frame:frames[0],referenceIndex:1,region:[.1,.2,.6,.8],observation:'主体遮住应可见的空间'}]}],deferred:[{problem:'局部表面污渍',reason:'不影响当前布局修正'}]};}
-test('复杂场景六类关联结构可共同选择，但不能由多目标叠加绕过总范围',()=>{
- const s=scene();for(let i=0;i<5;i++)s.program.templates.push({...structuredClone(s.program.templates[0]),id:'structure'+i});
- const p=selection();p.goals[0].templateIds=s.program.templates.slice(0,6).map((t:any)=>t.id);
+test('复杂场景十二类关联结构可共同选择，但不能由多目标叠加绕过总范围',()=>{
+ const s=scene();for(let i=0;i<11;i++)s.program.templates.push({...structuredClone(s.program.templates[0]),id:'structure'+i});
+ const p=selection();p.goals[0].templateIds=s.program.templates.slice(0,12).map((t:any)=>t.id);
  expect(()=>validateRepairGoals(p,s,plan,1,frames)).toThrow('templateIds');
  expect(validateRepairGoals(p,s,plan,1,frames,repairBudget('complex'))).toBe(p);
  const schema=modelSchema('scene-repair-plan',{repairReferences:repairGoalReferences(s,plan,1,frames),repairComplexity:'complex'});
- expect(schema.properties.goals.items.anyOf[0].properties.templateIds.maxItems).toBe(6);
- p.goals.push({...structuredClone(p.goals[0]),id:'G2',templateIds:[s.program.templates[6].id]});
+ expect(schema.properties.goals.items.anyOf[0].properties.templateIds.maxItems).toBe(12);
+ p.goals.push({...structuredClone(p.goals[0]),id:'G2',templateIds:[s.program.templates[12].id]});
  expect(()=>validateRepairGoals(p,s,plan,1,frames,repairBudget('complex'))).toThrow('范围过大');
 });
 test('目标有真实证据和对象，读取布局范围不复制巨大形状数据',()=>{

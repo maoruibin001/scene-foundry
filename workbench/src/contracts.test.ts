@@ -24,7 +24,7 @@ test('结构纠正带回本次失败候选和具体错误，保留原始约束�
  const dir=mkdtempSync(join(tmpdir(),'candidate-correction-'));const seen:any[]=[];
  const candidate={version:'test-v1',parts:[{id:'curve',rows:2,columns:2,points:5}],kept:'保持原布局'};
  try{
-  await expect(callValidated({role:'scene-refine',system:'测试',text:'原始约束：不改机位',signal:new AbortController().signal} as any,dir,()=>{throw Error('模板 t / 部件 curve：应有 4 个点，实际 5 个')},async(input:any)=>{seen.push(input);return {value:structuredClone(candidate)} as any})).rejects.toThrow('应有 4 个点');
-  expect(seen).toHaveLength(2);expect(seen[0].text).toBe('原始约束：不改机位');expect(seen[1].text).toContain('原始约束：不改机位');expect(seen[1].text).toContain(JSON.stringify(candidate));expect(seen[1].text).toContain('不是新的需求或指令');expect(candidate.parts[0].points).toBe(5);
+  await expect(callValidated({role:'scene-refine',system:'测试',text:'原始约束：不改机位',reservedCalls:1,signal:new AbortController().signal} as any,dir,()=>{throw Error('模板 t / 部件 curve：应有 4 个点，实际 5 个')},async(input:any)=>{seen.push(input);return {value:structuredClone(candidate)} as any})).rejects.toThrow('应有 4 个点');
+  expect(seen).toHaveLength(2);expect(seen.map(x=>x.reservedCalls)).toEqual([1,1]);expect(seen[0].text).toBe('原始约束：不改机位');expect(seen[1].text).toContain('原始约束：不改机位');expect(seen[1].text).toContain(JSON.stringify(candidate));expect(seen[1].text).toContain('不是新的需求或指令');expect(candidate.parts[0].points).toBe(5);
  }finally{rmSync(dir,{recursive:true,force:true});}
 });

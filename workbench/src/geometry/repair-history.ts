@@ -1,6 +1,10 @@
-import {existsSync,readFileSync} from 'node:fs';
-import {join} from 'node:path';
+import {scoreControlEvidence} from './score-controls';
+import {assessmentOnly} from '../assessment-kind';
+import {existsSync,readFileSync,realpathSync} from 'node:fs';
+import {join,dirname,resolve,sep} from 'node:path';
 import {digest,listJobs,read,runDir} from '../store';
+import {repairOutcome,repairOutcomeContext} from './repair-outcome';
+import {verifiedBestScore} from './verified-best-score';
 import {comparableAssessment,sameAssessmentSettings} from './refinement-baseline';
 
 const same=(a:any,b:any)=>JSON.stringify(a)===JSON.stringify(b);
@@ -11,15 +15,19 @@ const dimensions=(quality:any)=>Object.fromEntries((quality?.dimensions??[]).map
 /** 证据契约变化不抹掉已核验的历史观测，但跨契约成绩不得与当前评分比较。 */
 export function repairHistory(job:any,scene:any,referenceSha256:string[],options:{jobs?:any[];locate?:(id:string)=>string}={}){
  const locate=options.locate??runDir,currentDigest=digest(JSON.stringify(scene));
- const candidates=options.jobs??listJobs(),verified:any[]=[],invalid:any[]=[],seen=new Set<string>();
- for(const candidate of candidates){
+ const jobs=options.jobs??listJobs(),verified:any[]=[],invalid:any[]=[],seen=new Set<string>();
+ for(const candidate of jobs){
+  if(assessmentOnly(candidate))continue;
   if(candidate.id!==job.id&&!terminal.has(candidate.status))continue;
   if(candidate.prompt!==job.prompt||candidate.complexity!==job.complexity||!same(candidate.images?.map((i:any)=>i.id)??[],referenceSha256)||!same(candidate.policy,job.policy)||!sameAssessmentSettings(candidate,job))continue;
   if(candidate.profile?.engineSha!==job.profile?.engineSha||candidate.profile?.generatorSha!==job.profile?.generatorSha)continue;
   const root=locate(candidate.id),snapshots=[0,1,2].filter(i=>existsSync(join(root,'iterations',String(i),'candidate.json')));
   const rounds:(number|null)[]=snapshots.length?snapshots:terminal.has(candidate.status)?[null]:[];
   for(const round of rounds){
-   const dir=round===null?root:join(root,'iterations',String(round)),folder=join(root,'generation',...(round&&round>0?['iteration-'+round]:[]),'refinement');
+   const dir=round===null?root:join(root,'iterations',String(round)),standard=join(root,'generation',...(round&&round>0?['iteration-'+round]:[]),'refinement');
+   const candidates=[standard];
+   if(round===null){candidates.push(join(root,'refinement'));const ref=candidate.repairGoals?.artifactPath;if(typeof ref==='string'&&ref.endsWith('/repair-goals.json')){const requested=resolve(root,dirname(ref));if(requested.startsWith(resolve(root)+sep)&&existsSync(requested)&&realpathSync(requested).startsWith(realpathSync(root)+sep))candidates.push(requested);}}
+   const folder=candidates.find(path=>existsSync(join(path,'source.json'))&&existsSync(join(path,'receipt.json')))??standard;
    if(!existsSync(join(folder,'source.json'))||!existsSync(join(dir,'quality.json')))continue;
    let sourceDigest:string|undefined,sceneDigest:string|undefined;
    try{
@@ -39,18 +47,19 @@ export function repairHistory(job:any,scene:any,referenceSha256:string[],options
     const key=digest(JSON.stringify([meta.sourceDigest,afterDigest,runtime.hashes]));if(seen.has(key))continue;seen.add(key);
     const goals=existsSync(join(folder,'repair-goals.json'))?read(join(folder,'repair-goals.json')):null;
     const patch=read(join(folder,'patch.json'));
-    const assessmentProfile=candidate.assessmentProfile??candidate.profile,baselineProfile=meta.baselineProfile??candidate.profile;
-    const comparableWithinAttempt=comparableAssessment({profile:baselineProfile},{profile:assessmentProfile});
+    const assessmentProfile=candidate.assessmentProfile??candidate.profile,baselineProfile=meta.baselineProfile;
+    const comparableWithinAttempt=!!baselineProfile&&comparableAssessment({profile:baselineProfile,plan:{acceptanceCriteria:meta.sourceCriteria??null}},{profile:assessmentProfile,plan:candidate.plan});
     const gain=comparableWithinAttempt?Math.round((quality.score-meta.qualityBefore.score)*10)/10:null;
     const comparableToCurrentAssessment=comparableAssessment(candidate,job);
     verified.push({jobId:candidate.id,iteration:round,pipelineVersion:candidate.pipelineVersion,endedAt:snap?.cycle.endedAt??candidate.endedAt,
-     sourceDigest:meta.sourceDigest,sceneDigest:afterDigest,
+     sourceDigest:meta.sourceDigest,sceneDigest:afterDigest,validationKind:candidate.validationKind??'pipeline',
      status:snap?.cycle.status??candidate.status,scoreBefore:meta.qualityBefore.score,scoreAfter:quality.score,scoreGain:gain,dimensionsBefore:dimensions(meta.qualityBefore),dimensionsAfter:dimensions(quality),
      scoreComparison:{comparableWithinAttempt,comparableToCurrentAssessment,assessmentProtocolSha256:assessmentProfile?.assessmentProtocolSha256??null,baselineProtocolSha256:baselineProfile?.assessmentProtocolSha256??null,scope:comparableToCurrentAssessment?'与当前评估契约一致；分差仅限本次历史修正前后':'仅为原评估契约下的历史记录；不得与当前分数比较、计算提分或预测本轮结果'},
      conclusion:!comparableWithinAttempt?'历史修正前后评估契约不同，不计算分差；仅参考有证据支持的观测':quality.status==='passed'?'历史记录在原验收条件下通过':gain!==null&&gain>=2?'历史修正总分上升，但仍未通过完整验收':'历史修正未证明足够收益；不得仅重复同一策略',
-     selectedGoals:(goals?.goals??[]).map((g:any)=>({kind:g.kind,dimension:g.dimension,problem:summary(g.problem,600),expectedChange:summary(g.expectedChange,600),templateIds:g.templateIds,instanceIds:g.instanceIds,materialIds:g.materialIds,cameraNames:g.cameraNames})),
+     roundAudit:repairOutcomeContext(repairOutcome({scoreControls:scoreControlEvidence(candidate,meta.sourceDigest,undefined,locate),jobId:candidate.id,sourceJobId:meta.sourceJobId,before:meta.qualityBefore,after:quality,reviewBefore:existsSync(join(folder,'baseline','review.json'))?read(join(folder,'baseline','review.json')):existsSync(join(parentDir,'review.json'))?read(join(parentDir,'review.json')):{},reviewAfter:review,goals,patch,budget:meta.repairBudget,historicalBest:verifiedBestScore({...candidate,startedAt:snap?.cycle.startedAt??candidate.startedAt},{jobs,locate}),comparable:comparableWithinAttempt&&comparableToCurrentAssessment})),
+     selectedGoals:(goals?.goals??[]).map((g:any)=>({requirementIds:g.requirementIds??[],kind:g.kind,dimension:g.dimension,problem:summary(g.problem,600),expectedChange:summary(g.expectedChange,600),templateIds:g.templateIds,instanceIds:g.instanceIds,materialIds:g.materialIds,cameraNames:g.cameraNames})),
      deferred:(goals?.deferred??[]).map((d:any)=>({problem:summary(d.problem,400),reason:summary(d.reason,400)})),
-     actualChanges:{reason:summary(patch.reason),templateIds:[...new Set([...(patch.parts??[]).map((p:any)=>p.templateId),...(patch.shapes??[]).map((p:any)=>p.templateId),...(patch.removeParts??[]).map((p:any)=>p.templateId)])],instanceIds:(patch.instances??[]).map((i:any)=>i.id),removedInstanceIds:(patch.removeInstances??[]).map((i:any)=>i.instanceId),cameraNames:(patch.cameras??[]).map((c:any)=>c.name)},
+     actualChanges:{reason:summary(patch.reason),templateIds:[...new Set([...(patch.parts??[]).map((p:any)=>p.templateId),...(patch.surfaceUpdates??[]).map((p:any)=>p.templateId),...(patch.shapes??[]).map((p:any)=>p.templateId),...(patch.removeParts??[]).map((p:any)=>p.templateId)])],instanceIds:[...new Set([...(patch.instances??[]).map((i:any)=>i.id),...(patch.screenTargets??[]).map((i:any)=>i.instanceId)])],removedInstanceIds:(patch.removeInstances??[]).map((i:any)=>i.instanceId),cameraNames:(patch.cameras??[]).map((c:any)=>c.name)},
      assessment:{summary:summary(review.summary),dimensions:(review.dimensions??[]).map((d:any)=>({id:d.id,score:d.score,reason:summary(d.reason,500)})),unmetRequirements:(review.requirements??[]).filter((r:any)=>r.verdict!=='met').map((r:any)=>({id:r.id,verdict:r.verdict,reason:summary(r.reason,500)}))},
      evidence:{sourceJobId:meta.sourceJobId,frameHashes:runtime.hashes,qualitySha256:digest(readFileSync(join(dir,'quality.json'))),reviewSha256:digest(readFileSync(join(dir,'review.json')))}
     });

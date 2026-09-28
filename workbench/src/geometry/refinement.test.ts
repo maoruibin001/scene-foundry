@@ -1,3 +1,4 @@
+import {mergeRefinementPatches} from './repair-batches';
 import {test,expect} from 'bun:test';
 import {applyRefinement,refinementSchema,REFINEMENT_PROMPT} from './refinement';
 import {assertPlannedRepair} from './repair-goals';
@@ -19,7 +20,7 @@ test('复杂场景完整关联修改超过旧32上限；历史协议仍不能借
  expect(()=>applyRefinement(s,{...p,version:'scene-refinement-v2'},plan,1,'complex')).toThrow('修正数量超限：parts');
  expect(modelSchema('scene-refine',{repairComplexity:'complex'}).properties.parts.maxItems).toBe(96);
  expect(modelSchema('scene-refine',{repairComplexity:'medium'}).properties.parts.maxItems).toBe(64);
- expect(refinementSchema().properties.parts.maxItems).toBe(32);expect(repairBudget('complex').templates).toBe(6);
+ expect(refinementSchema().properties.parts.maxItems).toBe(32);expect(repairBudget('complex').templates).toBe(12);
 });
 test('扩大编辑范围仍拒绝超出当前额度或总场景预算',()=>{
  const {s,p}=complexRepairFixture();p.parts=Array.from({length:97},(_,i)=>({templateId:'subject',part:{...structuredClone(s.program.templates[0].parts[0]),id:'extra'+i}}));
@@ -70,7 +71,7 @@ test('移除错误重复实例及语义，同时保留原场景、共享几何�
  expect(n.program.templates).toEqual(s.program.templates);expect(n.program.materials).toEqual(s.program.materials);expect(n.cameras).toEqual(s.cameras);expect(JSON.stringify(s)).toBe(before);
  const selected:any={goals:[{id:'G1',kind:'layout',instanceIds:['extra'],templateIds:[],materialIds:[],cameraNames:[],addGeometry:false}]};
  expect(assertPlannedRepair(s,n,selected).removedInstanceIds).toEqual(['extra']);selected.goals[0].instanceIds=['one'];expect(()=>assertPlannedRepair(s,n,selected)).toThrow('未选择');
- expect(refinementSchema().properties.version.enum).toEqual(['scene-refinement-v3']);
+ expect(refinementSchema().properties.version.enum).toEqual(['scene-refinement-v5']);
 });
 test('删除必须有原对象、依据与新版契约，不能同时更新或新增同一实例',()=>{
  for(const mutate of [(p:any)=>p.removeInstances[0].instanceId='unknown',(p:any)=>p.removeInstances[0].reason=' ',(p:any)=>p.removeInstances.push({...p.removeInstances[0]}),(p:any)=>p.instances=[duplicateScene().program.instances[1]],(p:any)=>p.addEntities=[duplicateScene().entities[1]],(p:any)=>p.version='scene-refinement-v1',(p:any)=>delete p.removeInstances]){
@@ -83,4 +84,44 @@ test('删除不能破坏明确数量、关键需求、复杂度或冻结开口�
  s.program.instances[0].requirementIds=[];expect(()=>applyRefinement(s,p,plan,1,'simple')).toThrow('关键需求');
  const medium=duplicateScene();medium.program.instances=Array.from({length:8},(_,i)=>({...medium.program.instances[0],id:i?'extra'+i:'one'}));medium.entities=medium.program.instances.map((i:any,k:number)=>({instanceId:i.id,role:k?'context':'subject',category:'类别'+k%3}));p.removeInstances[0].instanceId='extra1';expect(()=>applyRefinement(medium,p,plan,1,'medium')).toThrow('原复杂度');
  const opening=duplicateScene();opening.spatialOpenings=[{id:'door',instanceId:'extra'}];p.removeInstances[0].instanceId='extra';expect(()=>applyRefinement(opening,p,plan,1,'simple')).toThrow('冻结开口');
+});
+
+test('光照修复显式设置背景颜色，省略或null保留历史背景，非法值拒绝',()=>{
+ const source=scene(),p=patch();p.lighting={...source.lighting,backgroundColor:[.5,.4,.3]};
+ const next=applyRefinement(source,p,plan,1,'simple');expect(next.lighting.backgroundColor).toEqual([.5,.4,.3]);
+ for(const value of [undefined,null]){const q=patch();q.lighting={...next.lighting,intensity:2,backgroundColor:value};expect(applyRefinement(next,q,plan,1,'simple').lighting.backgroundColor).toEqual([.5,.4,.3]);}
+ p.lighting.backgroundColor=[2,0,0];expect(()=>applyRefinement(source,p,plan,1,'simple')).toThrow('背景颜色无效');
+ expect(source.lighting.backgroundColor).toBeUndefined();
+});
+
+test('表面小补丁无需输出顶点且保留几何、姿态和旧场景，同时落实表面目标',()=>{
+ const source=scene(),p={...patch(),version:'scene-refinement-v4',removeInstances:[],instances:[],surfaceUpdates:[{templateId:'subject',partId:'body',material:null,uvScale:[2,3],uvTransform:{offset:[.1,.2],rotation:0,flipU:false,flipV:true},smoothAngle:30}]},before=JSON.stringify(source);
+ const next=applyRefinement(source,p,plan,1,'simple');expect(JSON.stringify(source)).toBe(before);expect(next.program.templates[0].parts[0].shape).toEqual(source.program.templates[0].parts[0].shape);expect(next.program.instances).toEqual(source.program.instances);expect(next.program.templates[0].parts[0].uvScale).toEqual([2,3]);
+ const goals={goals:[{id:'surface',kind:'surface',templateIds:['subject'],instanceIds:[],materialIds:['base'],cameraNames:[],addGeometry:false}]};expect(()=>assertPlannedRepair(source,next,goals)).not.toThrow();
+ p.parts=[{templateId:'subject',part:source.program.templates[0].parts[0]}];expect(()=>applyRefinement(source,p,plan,1,'simple')).toThrow('同时表面修改');
+ p.parts=[];p.surfaceUpdates[0].partId='missing';expect(()=>applyRefinement(source,p,plan,1,'simple')).toThrow('不存在');
+ p.surfaceUpdates[0].partId='body';p.version='scene-refinement-v3';expect(()=>applyRefinement(source,p,plan,1,'simple')).toThrow('历史修正协议');
+});
+
+test('v5 图像位置约束不能混入旧协议或同时覆盖实例位姿',()=>{const s=scene(),p={...patch(),version:'scene-refinement-v5',surfaceUpdates:[],screenTargets:[],removeInstances:[]};expect(applyRefinement(s,p,plan,1,'simple').program.instances[0].rotation[2]).toBe(.4);p.screenTargets=[{instanceId:'one',reason:'图像依据',views:[]}];expect(()=>applyRefinement(s,p,plan,1,'simple')).toThrow('冲突');p.version='scene-refinement-v4';expect(()=>applyRefinement(s,p,plan,1,'simple')).toThrow('历史修正协议');});
+
+const bundle=(parts:any[])=>({...mergeRefinementPatches(parts),version:'scene-refinement-batches-v1',batches:parts});
+test('独立批次分别遵守编辑上限，合并后仍遵守总场景预算且可恢复',()=>{
+ const {s,p}=complexRepairFixture(),base=s.program.templates[0].parts[0];
+ s.program.templates[0].parts=Array.from({length:120},(_,i)=>({...structuredClone(base),id:'body'+i,position:[i*.02,0,0]}));
+ const a={...p,version:'scene-refinement-v5',screenTargets:[],surfaceUpdates:[],parts:s.program.templates[0].parts.slice(0,60).map((v:any)=>({templateId:'subject',part:{...v,uvScale:[2,2]}}))};
+ const b={...a,parts:s.program.templates[0].parts.slice(60).map((v:any)=>({templateId:'subject',part:{...v,uvScale:[3,3]}}))};
+ const before=JSON.stringify(s),set=bundle([a,b]);
+ expect(()=>applyRefinement(s,mergeRefinementPatches([a,b]),plan,1,'complex')).toThrow('超限');
+ const next=applyRefinement(s,set,plan,1,'complex');expect(next.program.templates[0].parts.filter((v:any)=>v.uvScale)).toHaveLength(120);expect(JSON.stringify(s)).toBe(before);
+ expect(()=>applyRefinement(s,bundle([a,a]),plan,1,'complex')).toThrow('冲突');
+ set.parts=[];expect(()=>applyRefinement(s,set,plan,1,'complex')).toThrow('汇总');
+ const seed=scene(),make=(prefix:string)=>({...patch(),version:'scene-refinement-v5',screenTargets:[],surfaceUpdates:[],removeInstances:[],instances:Array.from({length:4},(_,i)=>({...seed.program.instances[0],id:prefix+i})),addEntities:Array.from({length:4},(_,i)=>({...seed.entities[0],instanceId:prefix+i}))});
+ expect(()=>applyRefinement(seed,bundle([make('a'),make('b')]),plan,1,'simple')).toThrow('复杂度');
+});
+
+test('同轮形状和机位修改后仍可应用多视图位置约束，不强迫分开多轮',()=>{
+ const s=scene();s.cameras[1].referenceIndex=2;
+ const p={...patch(),version:'scene-refinement-v5',instances:[],removeInstances:[],surfaceUpdates:[],screenTargets:[{instanceId:'one',reason:'两张图轮廓完整',views:[{referenceIndex:1,rect:[.4,.4,.6,.6]},{referenceIndex:2,rect:[.4,.4,.6,.6]}]}],parts:[{templateId:'subject',part:{...s.program.templates[0].parts[0],shape:{type:'box',size:[.9,1,1],radius:0}}}],cameras:[{...s.cameras[0],position:[3.1,-4,2]}]};
+ const before=JSON.stringify(s),out=applyRefinement(s,p,plan,2,'simple');expect(out.program.templates[0].parts[0].shape.size[0]).toBe(.9);expect(out.cameras[0].position[0]).toBe(3.1);expect(JSON.stringify(s)).toBe(before);
 });

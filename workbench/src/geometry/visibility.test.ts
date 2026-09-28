@@ -50,3 +50,5 @@ test('物体表皮和底层不会吞掉跨物体遮挡；运行机位不一致�
  for(const p of [{...pose,fov:1.1},{...pose,position:[1,1,5]},{...pose,selectedView:1},{}])expect(()=>assertVisibilityCamera(c,p,0,1600,900)).toThrow('采集机位');
  expect(()=>assertVisibilityCamera(c,pose,0,1600,1000)).toThrow('画幅');
 });
+
+test('诊断使用实例覆盖后的真实材质和透明度，身份仍能回指原模板部件',()=>{const s=scene();s.program.materials.push({...s.program.materials[0],id:'transparent',color:[1,1,1,.2],textureId:null});s.program.instances[0].surfaceOverrides=[{sourceMaterialId:'surface',targetMaterialId:'transparent',uvScale:null}];let r=sceneVisibility(s);expect(r.views[0].instances.map(i=>i.instanceId)).toEqual(['back']);s.program.materials[1].color[3]=1;r=sceneVisibility(s);expect(r.views[0].parts[0]).toMatchObject({instanceId:'front',sourceMaterialId:'surface',materialId:'transparent',partId:'panel'});});

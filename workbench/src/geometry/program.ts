@@ -1,9 +1,12 @@
+import {type CurvedShape,curvedTriangles,drawCurved} from './curved-surfaces';
+import {mapSurfaceUvs,smoothSurfaceNormals,validateSurfaceMapping,type UvTransform} from './surface-mapping';
 import {MeshBuilder,triangulatePolygon,norm,type V} from './mesh';
 import {RANGE} from './constraints';
 import {distributedPoses,type Distribution} from './distribution';
+import {textureSurface,validTextureBundle,type TextureBundle} from './texture-bundle';
 
 // 数据契约只描述构造操作，不枚举家具、建筑或其他物体类别。
-export type PrimitiveShape =
+export type PrimitiveShape = CurvedShape
  | {type:'box';size:V;radius:number}
  | {type:'lathe';profile:number[][];segments:number;arc?:number|null;start?:number|null}
  | {type:'extrusion';outline:number[][];depth:number}
@@ -12,13 +15,14 @@ export type PrimitiveShape =
 export type Shape=PrimitiveShape|({type:'scatter';element:PrimitiveShape}&Distribution);
 export type Pose={position:V;rotation:V;scale:V};
 export type Material={id:string;color:[number,number,number,number];roughness:number;metallic:number;textureId:string|null};
-export type Part=Pose&{id:string;material:string;shape:Shape;uvScale?:[number,number]};
+export type SurfaceOverride={sourceMaterialId:string;targetMaterialId:string;uvScale:[number,number]|null;uvTransform?:UvTransform|null};
+export type Part=Pose&{id:string;material:string;shape:Shape;uvScale?:[number,number];uvTransform?:UvTransform|null;smoothAngle?:number|null};
 export type GeometryProgram={
  version:'geometry-v1';name:string;materials:Material[];
  templates:{id:string;parts:Part[]}[];
- instances:(Pose&{id:string;label:string;template:string;requirementIds:string[]})[];
+ instances:(Pose&{id:string;label:string;template:string;requirementIds:string[];surfaceOverrides?:SurfaceOverride[]})[];
 };
-export type Texture={width:number;height:number;rgba8:string;colorSpace:'srgb'|'linear'};
+export type Texture=TextureBundle;
 export const GEOMETRY_LIMITS={templates:64,instances:256,partsPerTemplate:128,expandedParts:2048,triangles:250000,materials:128,segments:64,profilePoints:128,gridPoints:1024};
 function assert(ok:unknown,message:string):asserts ok{if(!ok)throw Error(message);}
 const finite=(n:unknown,min:number,max:number)=>typeof n==='number'&&Number.isFinite(n)&&n>=min&&n<=max;
@@ -40,14 +44,15 @@ function outline(points:number[][]){
  }
  triangulatePolygon(points);
 }
-function shapeTriangles(s:Shape){
+export function shapeTriangles(s:Shape){
  switch(s?.type){
+  case 'cushion':case 'cloth':case 'shell':return curvedTriangles(s);
   case 'scatter':{
    assert(Number.isInteger(s.count)&&s.count>=1&&s.count<=RANGE.scatterMax,'散布数量无效');
    assert(Number.isInteger(s.seed)&&s.seed>=0&&s.seed<=0xffffffff,'散布种子须为32位无符号整数');
    assert(['box','ellipsoid'].includes(s.volume)&&vector(s.size,RANGE.positiveMin,RANGE.max)&&vector(s.rotationRange,0,Math.PI*2),'散布空间或旋转范围无效');
    assert(Array.isArray(s.scaleRange)&&s.scaleRange.length===2&&s.scaleRange.every(v=>finite(v,RANGE.positiveMin,RANGE.max))&&s.scaleRange[0]<=s.scaleRange[1],'散布缩放范围无效');
-   assert(s.element&&['box','lathe','extrusion','tube','grid'].includes(s.element.type),'散布元素须为单个基础构造，不允许嵌套散布');
+   assert(s.element&&['box','lathe','extrusion','tube','grid','cushion','cloth','shell'].includes(s.element.type),'散布元素须为单个基础构造，不允许嵌套散布');
    return s.count*shapeTriangles(s.element);
   }
   case 'box':assert(vector(s.size,.001,100)&&finite(s.radius,0,Math.min(...s.size)/2),'箱体尺寸或圆角无效');return s.radius?432:12;
@@ -79,12 +84,25 @@ export function validateGeometryProgram(program:GeometryProgram,requirementIds?:
  const estimates=new Map<string,number>();
  for(const t of p.templates){
   assert(Array.isArray(t.parts)&&t.parts.length>0&&t.parts.length<=GEOMETRY_LIMITS.partsPerTemplate,'模板部件数量无效');unique(t.parts,'部件');let estimate=0;
-  for(const part of t.parts){pose(part);assert(materials.has(part.material),'部件引用不存在的材质');if(part.uvScale!==undefined)assert(Array.isArray(part.uvScale)&&part.uvScale.length===2&&part.uvScale.every(n=>finite(n,.01,100)),'贴图比例无效');try{estimate+=shapeTriangles(part.shape);}catch(error){throw Error('模板 '+t.id+' / 部件 '+part.id+'：'+(error instanceof Error?error.message:String(error)));}}estimates.set(t.id,estimate);
+  for(const part of t.parts){pose(part);validateSurfaceMapping(part);assert(materials.has(part.material),'部件引用不存在的材质');if(part.uvScale!==undefined)assert(Array.isArray(part.uvScale)&&part.uvScale.length===2&&part.uvScale.every(n=>finite(n,.01,100)),'贴图比例无效');try{estimate+=shapeTriangles(part.shape);}catch(error){throw Error('模板 '+t.id+' / 部件 '+part.id+'：'+(error instanceof Error?error.message:String(error)));}}estimates.set(t.id,estimate);
  }
  let triangles=0,parts=0;
- for(const i of p.instances){pose(i);assert(templates.has(i.template),'实例引用不存在的模板');assert(typeof i.label==='string'&&i.label.trim().length>0,'实例缺少语义名称');assert(Array.isArray(i.requirementIds)&&new Set(i.requirementIds).size===i.requirementIds.length&&i.requirementIds.every(r=>typeof r==='string'&&(!requirementIds||requirementIds.includes(r))),'实例引用未知需求');triangles+=estimates.get(i.template)!;parts+=p.templates.find(t=>t.id===i.template)!.parts.length;}
+ for(const i of p.instances){pose(i);assert(templates.has(i.template),'实例引用不存在的模板');assert(typeof i.label==='string'&&i.label.trim().length>0,'实例缺少语义名称');assert(Array.isArray(i.requirementIds)&&new Set(i.requirementIds).size===i.requirementIds.length&&i.requirementIds.every(r=>typeof r==='string'&&(!requirementIds||requirementIds.includes(r))),'实例引用未知需求');
+  const used=new Set(p.templates.find(t=>t.id===i.template)!.parts.map(p=>p.material));
+  validateSurfaceOverrides(i.surfaceOverrides,materials,used,i.id);
+  triangles+=estimates.get(i.template)!;parts+=p.templates.find(t=>t.id===i.template)!.parts.length;}
  assert(parts<=GEOMETRY_LIMITS.expandedParts&&triangles<=GEOMETRY_LIMITS.triangles,'展开后的几何超过部件或三角形预算：展开部件 '+parts+'/'+GEOMETRY_LIMITS.expandedParts+'；估算三角形 '+triangles+'/'+GEOMETRY_LIMITS.triangles+'；散布数量和模板实例数均计入展开预算，请减少本轮新增细节，保留既有关键结构。');
  return {triangles,parts};
+}
+/** 几何共享不代表外观共享；覆盖必须真正命中模板中的材质，禁止静默丢失。 */
+export function validateSurfaceOverrides(value:SurfaceOverride[]|undefined,materials:Set<string>,sources:Set<string>,instanceId:string){
+ if(value===undefined)return;
+ assert(Array.isArray(value)&&new Set(value.map(x=>x?.sourceMaterialId)).size===value.length,'实例表面覆盖重复或无效：'+instanceId);
+ for(const b of value){
+  assert(b&&sources.has(b.sourceMaterialId)&&materials.has(b.targetMaterialId),'实例表面覆盖未命中材质：'+instanceId+' / '+b?.sourceMaterialId);
+  validateSurfaceMapping(b);
+  assert(b.uvScale===null||(Array.isArray(b.uvScale)&&b.uvScale.length===2&&b.uvScale.every(n=>finite(n,.01,100))),'实例贴图比例无效：'+instanceId);
+ }
 }
 function rotate(v:V,r:V):V{
  const [a,b,c]=r,[x,y,z]=v,ya=y*Math.cos(a)-z*Math.sin(a),za=y*Math.sin(a)+z*Math.cos(a),xb=x*Math.cos(b)+za*Math.sin(b),zb=-x*Math.sin(b)+za*Math.cos(b);
@@ -95,6 +113,7 @@ function transformNormal(v:V,p:Pose):V{return norm(rotate(v.map((n,k)=>n/p.scale
 function draw(g:MeshBuilder,part:Part){
  const m=part.material,s=part.shape;
  switch(s.type){
+  case 'cushion':case 'cloth':case 'shell':drawCurved(g,m,s);break;
   case 'scatter':{
    const elementBuilder=new MeshBuilder(id=>({surface:g.material(id).surface}));
    draw(elementBuilder,{...part,shape:s.element});
@@ -126,18 +145,29 @@ function draw(g:MeshBuilder,part:Part){
 // 贴图仅从调用者验证过的注册表绑定；模型不能指定本地路径或任意 URL。
 export function compileGeometryProgram(program:GeometryProgram,textures:Record<string,Texture>={}){
  const estimate=validateGeometryProgram(program);
- const materials=new Map(program.materials.map(m=>[m.id,m]));
- for(const m of program.materials)if(m.textureId){const t=textures[m.textureId];assert(t&&Number.isInteger(t.width)&&Number.isInteger(t.height)&&t.width>0&&t.height>0&&t.width<=1024&&t.height<=1024&&['srgb','linear'].includes(t.colorSpace)&&typeof t.rgba8==='string'&&atob(t.rgba8).length===t.width*t.height*4,'贴图未绑定或像素数据无效：'+m.textureId);}
- const resolve=(id:string)=>{const m=materials.get(id)!;return {surface:{baseColor:m.color,roughness:m.roughness,metallic:m.metallic,...(m.textureId?{baseColorTexture:textures[m.textureId]}:{})}};};
+ // 每次编译重新校验；同次编译中共享不可变贴图与材质绑定，避免按网格反复解码像素。
+ const textureBindings=new Map<string,ReturnType<typeof textureSurface>>();
+ for(const m of program.materials)if(m.textureId&&!textureBindings.has(m.textureId)){
+  assert(validTextureBundle(textures[m.textureId]),'贴图未绑定或像素数据无效：'+m.textureId);
+  textureBindings.set(m.textureId,textureSurface(textures[m.textureId]));
+ }
+ const materials=new Map(program.materials.map(m=>[m.id,{surface:{baseColor:m.color,roughness:m.roughness,metallic:m.metallic,...(m.textureId?textureBindings.get(m.textureId):{})}}]));
+ const resolve=(id:string)=>materials.get(id)!;
  const used=new Set(program.instances.map(i=>i.template));
  const library=new Map(program.templates.filter(t=>used.has(t.id)).map(t=>[t.id,t.parts.map(part=>{
   const g=new MeshBuilder(resolve);g.group=part.id;draw(g,part);const mesh=g.meshes()[0];assert(mesh&&mesh.geometry.indices.length>0,'部件没有可渲染三角形：'+part.id);
-  if(part.uvScale)mesh.geometry.uvs=mesh.geometry.uvs.map((n:number,k:number)=>n*part.uvScale![k%2]);
-  for(let k=0;k<mesh.geometry.positions.length;k+=3){mesh.geometry.positions.splice(k,3,...transformPoint(mesh.geometry.positions.slice(k,k+3) as V,part));mesh.geometry.normals.splice(k,3,...transformNormal(mesh.geometry.normals.slice(k,k+3) as V,part));}return mesh;
+  const baseUvs=[...mesh.geometry.uvs];mesh.geometry.uvs=mapSurfaceUvs(baseUvs,part.uvScale,part.uvTransform);
+  const smoothAngle=part.smoothAngle??(['lathe','tube','cushion','shell','cloth'].includes(part.shape.type)?45:part.shape.type==='grid'?30:0);
+  if(smoothAngle)mesh.geometry.normals=smoothSurfaceNormals(mesh.geometry,smoothAngle);
+  for(let k=0;k<mesh.geometry.positions.length;k+=3){mesh.geometry.positions.splice(k,3,...transformPoint(mesh.geometry.positions.slice(k,k+3) as V,part));mesh.geometry.normals.splice(k,3,...transformNormal(mesh.geometry.normals.slice(k,k+3) as V,part));}return {...mesh,baseUvs,uvTransform:part.uvTransform,uvScale:part.uvScale??[1,1]};
  })]));
  const meshes:any[]=[],min:V=[Infinity,Infinity,Infinity],max:V=[-Infinity,-Infinity,-Infinity];
  for(const instance of program.instances)for(const original of library.get(instance.template)!){
-  const source=original.geometry,geometry={...source,positions:[...source.positions],normals:[...source.normals]};
+  const source=original.geometry,binding=instance.surfaceOverrides?.find(b=>b.sourceMaterialId===source.material.id);
+  const geometry={...source,positions:[...source.positions],normals:[...source.normals],
+   ...(binding?{material:{id:binding.targetMaterialId,...resolve(binding.targetMaterialId)}}:{}),
+   ...(binding&&(binding.uvScale||binding.uvTransform)?{uvs:mapSurfaceUvs(original.baseUvs,binding.uvScale??original.uvScale,binding.uvTransform??original.uvTransform)}:{}),
+  };
   for(let k=0;k<geometry.positions.length;k+=3){const point=transformPoint(geometry.positions.slice(k,k+3) as V,instance);assert(point.every(n=>finite(n,-1000,1000)),'展开后的坐标超出场景范围');for(let j=0;j<3;j++){geometry.positions[k+j]=point[j];min[j]=Math.min(min[j],point[j]);max[j]=Math.max(max[j],point[j]);}geometry.normals.splice(k,3,...transformNormal(geometry.normals.slice(k,k+3) as V,instance));}
   meshes.push({name:instance.id+'__'+original.name,geometry,entityId:instance.id,requirementIds:instance.requirementIds});
  }

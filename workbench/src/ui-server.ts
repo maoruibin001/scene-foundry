@@ -1,0 +1,40 @@
+// Serve an independent UI release without changing an active worker's frozen inputs.
+// This process owns no jobs, scheduler, model calls, or persisted task state.
+import {resolve, sep} from 'node:path';
+import {existsSync, realpathSync} from 'node:fs';
+
+export function uiHandler(publicDir:string, upstream:string, productionTiming?:(id:string)=>any) {
+  const root=realpathSync(publicDir), target=new URL(upstream);
+  if(target.protocol!=='http:' || target.hostname!=='127.0.0.1' || target.username || target.password) throw Error('界面后端必须是本机 HTTP 服务');
+  const headers={'Cache-Control':'no-cache','Cross-Origin-Opener-Policy':'same-origin','Cross-Origin-Embedder-Policy':'require-corp'};
+  return async(req:Request)=>{
+    const url=new URL(req.url);
+    if(req.headers.get('origin')&&req.headers.get('origin')!==url.origin)return Response.json({error:'跨站请求被拒绝'},{status:403});
+    if(req.method==='GET' && !url.pathname.startsWith('/api/') && !url.pathname.startsWith('/files/')) {
+      const file=resolve(root,url.pathname==='/'?'index.html':'.'+decodeURIComponent(url.pathname));
+      if(file.startsWith(root+sep) && existsSync(file) && realpathSync(file).startsWith(root+sep)) return new Response(Bun.file(file),{headers});
+    }
+    try {
+      const proxy=new URL(url.pathname+url.search,target);
+      const requestHeaders=new Headers(req.headers);requestHeaders.delete('host');if(requestHeaders.has('origin'))requestHeaders.set('origin',target.origin);
+      const response=await fetch(proxy,{method:req.method,headers:requestHeaders,body:['GET','HEAD'].includes(req.method)?undefined:req.body,redirect:'manual',signal:req.signal});
+      const timing=req.method==='GET'&&url.pathname.match(/^\/api\/jobs\/([a-f0-9-]{36})\/timing$/);
+      if(timing&&productionTiming&&response.ok){
+        const body=await response.json();
+        try{if(!body.production)body.production=productionTiming(timing[1]);}catch{body.productionError=true;}
+        const timingHeaders=new Headers(response.headers);timingHeaders.delete('Content-Length');timingHeaders.delete('Content-Encoding');timingHeaders.set('Cache-Control','no-store');
+        return Response.json(body,{status:response.status,headers:timingHeaders});
+      }
+      return new Response(response.body,{status:response.status,statusText:response.statusText,headers:response.headers});
+    } catch {
+      return Response.json({error:'生成服务暂不可用；界面没有重启或重建任何任务。'},{status:502});
+    }
+  };
+}
+
+if(import.meta.main){
+  const {productionTimingSnapshot}=await import('./production-timing');
+  const port=Number(process.env.UI_PORT??19772),upstream=process.env.UI_UPSTREAM??'http://127.0.0.1:19771';
+  const server=Bun.serve({hostname:'127.0.0.1',port,idleTimeout:60,maxRequestBodySize:21*1024*1024,fetch:uiHandler(resolve(import.meta.dirname,'../public'),upstream,productionTimingSnapshot)});
+  console.log('SCENE_WORKBENCH_UI '+server.url+' -> '+upstream);
+}

@@ -11,7 +11,7 @@ export function sameAssessmentSettings(source:any,target:any){
 }
 export function comparableAssessment(source:any,target:any){
  const a=source.assessmentProfile??source.profile,b=target.profile;
- return sameAssessmentSettings(source,target)&&(a?.assessmentProtocolSha256??null)===(b?.assessmentProtocolSha256??null);
+ return JSON.stringify(source.plan?.acceptanceCriteria??null)===JSON.stringify(target.plan?.acceptanceCriteria??null)&&sameAssessmentSettings(source,target)&&(a?.assessmentProtocolSha256??null)===(b?.assessmentProtocolSha256??null);
 }
 export async function refinementBaseline(job:any,sourceJob:any,sourceDir:string,folder:string,signal:AbortSignal){
  if(comparableAssessment(sourceJob,job))return {review:sourceJob.review,quality:sourceJob.quality,reassessed:false};

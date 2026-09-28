@@ -28,3 +28,8 @@ test('缺失、非图片与伪造MIME在启动CLI前拒绝，保存真实内容�
   writeFileSync(path,Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a0XsAAAAASUVORK5CYII=','base64'));const proof=validateCodexImages([{path,mime:'image/png'}]);expect(proof[0].sha256).toHaveLength(64);expect(proof[0].bytes).toBeGreaterThan(10);expect(()=>validateCodexImages([{path,mime:'image/jpeg'}])).toThrow('格式');
  }finally{rmSync(root,{recursive:true,force:true})}
 });
+test('持续输出跨过初始时限会延长，完成结果正常返回，绝对上限仍生效',async()=>{const root=mkdtempSync(join(tmpdir(),'codex-extend-'));try{
+ const args=[process.execPath,'-e',`const t=setInterval(()=>process.stderr.write('进展'),30);setTimeout(()=>{clearInterval(t);process.stdout.write('完成');},400)`];
+ const result=await captureCodexProcess({args,cwd:root,env:{PATH:process.env.PATH!},input:'',prefix:join(root,'extend-'),timeoutMs:200,maxTimeoutMs:1500,activityWindowMs:150,extensionMs:200});expect(result.timedOut).toBe(false);expect(result.trace.extensions.length).toBeGreaterThan(0);expect(result.stdout).toBe('完成');
+ const endless=[process.execPath,'-e',`setInterval(()=>process.stderr.write('进展'),30)`];const stopped=await captureCodexProcess({args:endless,cwd:root,env:{PATH:process.env.PATH!},input:'',prefix:join(root,'hard-'),timeoutMs:200,maxTimeoutMs:500,activityWindowMs:150,extensionMs:200});expect(stopped.timedOut).toBe(true);expect(stopped.trace.timeoutReason).toBe('absolute-limit');
+ }finally{rmSync(root,{recursive:true,force:true})}});

@@ -1,7 +1,7 @@
 import {readFileSync,mkdirSync} from 'node:fs';
 import {join} from 'node:path';
 import {callValidated} from '../contracts';
-import {save,read,digest,runDir,ROOT} from '../store';
+import {save,read,digest,runDir,ROOT,DATA} from '../store';
 import {compileGeometryProgram} from './program';
 import {validateScene} from './scene-contract';
 import {fitCamera,project,ray,rayScene,type Match} from './camera-fit';
@@ -20,7 +20,7 @@ export function validateObservations(v:any,count:number){
   const ids=new Set();for(const p of w.points){if(typeof p.label!=='string'||!p.label.trim()||ids.has(p.label)||!vec(p.referenceUV,2)||!vec(p.renderUV,2)||!finite(p.confidence))throw Error('对应点身份或坐标无效');ids.add(p.label);for(let k=0;k<2;k++)if(p.referenceUV[k]<w.contentRect[k]||p.referenceUV[k]>w.contentRect[k+2])throw Error('对应点在内容区外');}
  }return v;
 }
-function dimensions(path:string){const p=Bun.spawnSync([join(ROOT,'data/reconstruction-env/bin/python'),'-c','from PIL import Image;import sys,json;print(json.dumps(Image.open(sys.argv[1]).size))',path]);if(p.exitCode!==0)throw Error('无法读取参考图片尺寸');return JSON.parse(new TextDecoder().decode(p.stdout));}
+function dimensions(path:string){const p=Bun.spawnSync([join(DATA,'reconstruction-env/bin/python'),'-c','from PIL import Image;import sys,json;print(json.dumps(Image.open(sys.argv[1]).size))',path]);if(p.exitCode!==0)throw Error('无法读取参考图片尺寸');return JSON.parse(new TextDecoder().decode(p.stdout));}
 export async function alignCameras(job:any,plan:any,images:{path:string;mime:string}[],dir:string,signal:AbortSignal){
  const sourceDir=runDir(job.reuseSceneFrom),source=read(join(sourceDir,'generated-scene.json')),runtime=read(join(sourceDir,'runtime/runtime.json')),folder=join(dir,'refinement');mkdirSync(folder,{recursive:true});
  const sha=digest(JSON.stringify(source)),refs=images.map(i=>digest(readFileSync(i.path)));if(JSON.stringify(refs)!==JSON.stringify(job.images.map((i:any)=>i.id)))throw Error('校准输入图片来源不符');

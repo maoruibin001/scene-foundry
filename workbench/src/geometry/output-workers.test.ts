@@ -1,0 +1,20 @@
+import {test,expect} from 'bun:test';
+import {collectAssetWorkers} from './asset-workers';
+import {failureDisposition} from '../output-delivery';
+import {provisionalScene} from './provisional-scene';
+import {checkpointFixture} from './checkpoint-fixture';
+import {read} from '../store';
+import {join} from 'node:path';
+import {rmSync} from 'node:fs';
+import {compileGeometryProgram} from './program';
+const hard=(e:unknown)=>['budget','external','configuration'].includes(failureDisposition(e).kind);
+test('一个资产契约失败不取消其他资产，后续独立资产仍生成',async()=>{const started:number[]=[];const r=await collectAssetWorkers([0,1,2,3],2,new AbortController().signal,async n=>{started.push(n);if(n===1)throw Error('资产几何超出共享布局边界');await Bun.sleep(1);return n;},hard);expect(r.values.sort()).toEqual([0,2,3]);expect(started).toEqual([0,1,2,3]);expect(r.failures).toHaveLength(1);expect(r.fatal).toBeNull()});
+test('外部硬阻塞停止新的请求并等待在途清理',async()=>{let cleaned=false;const started:number[]=[];const r=await collectAssetWorkers([0,1,2,3],2,new AbortController().signal,async(n,_i,s)=>{started.push(n);if(n===1)throw Error('PROVIDER_HTTP_402 insufficient_quota');await new Promise(r=>s.addEventListener('abort',r,{once:true}));cleaned=true;s.throwIfAborted();return n;},hard);expect(started).toEqual([0,1]);expect(cleaned).toBe(true);expect(r.fatal).toContain('402')});
+test('用户取消不会被降格为部分生成并继续运行',async()=>{const c=new AbortController();const r=collectAssetWorkers([0,1],2,c.signal,async(_n,_i,s)=>{await new Promise(r=>s.addEventListener('abort',r,{once:true}));s.throwIfAborted();return 0;},hard);c.abort();await expect(r).rejects.toThrow()});
+test('草稿只能使用当前冻结空间已有灰模，几何可编译，未缺失则使用原资产',()=>{const f=checkpointFixture();try{const l=read(join(f.registration.generationDir,'layout.json')),p=read(f.registration.planFile),gray={program:{...l.program,templates:[f.geometry.template]},cameras:l.cameras};const draft=provisionalScene(l,[],gray,p,2);expect(draft.missing).toEqual(['shape']);expect(draft.scene.program.templates[0].parts[0].material).toBe('delivery_gray');expect(compileGeometryProgram(draft.scene.program,{}).triangles).toBeGreaterThan(0);const full=provisionalScene(l,[f.geometry] as any,gray,p,2);expect(full.missing).toEqual([]);expect(full.scene.program.materials).toEqual(l.program.materials);gray.cameras=structuredClone(gray.cameras);gray.cameras[0].position[0]++;expect(()=>provisionalScene(l,[],gray,p,2)).toThrow('冻结空间');expect(()=>provisionalScene(l,[],null,p,2)).toThrow('冻结空间');}finally{rmSync(f.root,{recursive:true,force:true})}});
+test('标准时间窗到达保留成功资产并结束派发；旧超时和用户取消仍抛出',async()=>{
+ const work=async(n:number,_i:number,s:AbortSignal)=>{if(n===0)return 'saved';await new Promise<void>(r=>s.addEventListener('abort',()=>r(),{once:true}));s.throwIfAborted();return 'never';};
+ const result=await collectAssetWorkers([0,1,2],1,AbortSignal.timeout(10),work,hard,{partialOnTimeout:true});expect(result.values).toEqual(['saved']);expect(result.timedOut).toBe(true);
+ await expect(collectAssetWorkers([1],1,AbortSignal.timeout(10),work,hard)).rejects.toThrow();
+ const user=new AbortController();const pending=collectAssetWorkers([1],1,user.signal,work,hard,{partialOnTimeout:true});user.abort();await expect(pending).rejects.toThrow();
+});

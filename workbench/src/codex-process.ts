@@ -1,15 +1,20 @@
 import {writeFileSync,appendFileSync} from 'node:fs';
 /** 持久化实时日志与终态；超时不丢掉已返回的错误或部分输出。 */
-export async function captureCodexProcess(options:{args:string[];cwd:string;env:Record<string,string>;input:string;prefix:string;timeoutMs:number;signal?:AbortSignal}){
+export async function captureCodexProcess(options:{args:string[];cwd:string;env:Record<string,string>;input:string;prefix:string;timeoutMs:number;maxTimeoutMs?:number;activityWindowMs?:number;extensionMs?:number;signal?:AbortSignal}){
  options.signal?.throwIfAborted();
  const {args,cwd,env,input,prefix,timeoutMs,signal}=options,started=Date.now();
  const p=Bun.spawn(args,{cwd,env,stdin:'pipe',stdout:'pipe',stderr:'pipe'});
- const trace:any={pid:p.pid,startedAt:new Date(started).toISOString(),timeoutMs,status:'running',stdoutBytes:0,stderrBytes:0,firstStdoutAt:null,lastActivityAt:null,exitCode:null};
+ const maxTimeoutMs=Math.max(timeoutMs,options.maxTimeoutMs??timeoutMs);
+ const trace:any={pid:p.pid,startedAt:new Date(started).toISOString(),timeoutMs,maxTimeoutMs,extensions:[],deadlineAt:new Date(started+timeoutMs).toISOString(),status:'running',stdoutBytes:0,stderrBytes:0,firstStdoutAt:null,lastActivityAt:null,exitCode:null};
  const update=()=>writeFileSync(prefix+'execution.json',JSON.stringify(trace,null,2)+'\n');
  writeFileSync(prefix+'stdout.log','');writeFileSync(prefix+'cli.log','');update();
  let timedOut=false,stdout='',stderr='';
  const kill=()=>{if(p.exitCode===null)p.kill('SIGKILL')};
- const timer=setTimeout(()=>{timedOut=true;kill()},timeoutMs);signal?.addEventListener('abort',kill,{once:true});
+ let timer:ReturnType<typeof setTimeout>;
+ const deadline=()=>{const now=Date.now(),last=Date.parse(trace.lastActivityAt??'');if(p.exitCode===null&&now<started+maxTimeoutMs&&Number.isFinite(last)&&now-last<=(options.activityWindowMs??0)){
+  const next=Math.min(started+maxTimeoutMs,now+(options.extensionMs??timeoutMs));trace.extensions.push({at:now,nextDeadlineAt:next,reason:'仍有模型输出，自动延长当前调用'});trace.deadlineAt=new Date(next).toISOString();update();timer=setTimeout(deadline,next-now);return;
+ }timedOut=true;trace.timeoutReason=now>=started+maxTimeoutMs?'absolute-limit':'inactive-at-deadline';kill();};
+ timer=setTimeout(deadline,timeoutMs);signal?.addEventListener('abort',kill,{once:true});
  if(signal?.aborted)kill();
  const pump=async(stream:ReadableStream<Uint8Array>,kind:'stdout'|'stderr')=>{
   const decoder=new TextDecoder();

@@ -5,6 +5,7 @@ import {join,dirname} from 'node:path';
 import {repairHistory} from './repair-history';
 import {digest} from '../store';
 import {comparableAssessment} from './refinement-baseline';
+import {deriveRepairOutcome} from './repair-outcome';
 
 function fixture(){
  const root=mkdtempSync(join(tmpdir(),'repair-history-')),locate=(id:string)=>join(root,id),save=(id:string,f:string,v:any)=>{const p=join(locate(id),f);mkdirSync(dirname(p),{recursive:true});writeFileSync(p,JSON.stringify(v));};
@@ -15,7 +16,7 @@ function fixture(){
  const beforeQuality={status:'failed',score:61,dimensions:[{id:'spatial',score:3.2}]},quality={status:'failed',score:60,dimensions:[{id:'spatial',score:3}]};
  save('parent','generated-scene.json',source);save('parent','quality.json',beforeQuality);
  const folder='generation/refinement/';
- save('candidate',folder+'source.json',{sourceJobId:'parent',sourceIteration:null,sourceDigest:digest(JSON.stringify(source)),referenceSha256:refs,qualityBefore:beforeQuality});
+ save('candidate',folder+'source.json',{sourceJobId:'parent',sourceIteration:null,sourceDigest:digest(JSON.stringify(source)),referenceSha256:refs,baselineProfile:profile,qualityBefore:beforeQuality});
  save('candidate',folder+'receipt.json',{sourceDigest:digest(JSON.stringify(source)),sceneDigest:digest(JSON.stringify(after))});
  save('candidate',folder+'patch.json',{reason:'此前只调整局部',instances:[{id:'furniture'}],parts:[],cameras:[]});
  save('candidate',folder+'repair-goals.json',{goals:[{kind:'layout',dimension:'spatial',problem:'层次偏差',expectedChange:'层次更明确',instanceIds:['furniture'],templateIds:[],materialIds:[],cameraNames:[]}],deferred:[{problem:'主要建筑比例',reason:'额度留给局部'}]});
@@ -29,6 +30,8 @@ test('同源修正的真实下降和暂缓问题进入上下文，不修改历�
   expect(h.totalVerified).toBe(1);expect(h.excluded).toEqual([]);expect(h.attempts[0]).toMatchObject({scoreBefore:61,scoreAfter:60,scoreGain:-1,relation:'same-source'});expect(h.attempts[0].deferred[0].problem).toBe('主要建筑比例');expect(h.attempts[0].conclusion).toContain('不得仅重复');expect(readFileSync(join(f.locate('candidate'),'quality.json'),'utf8')).toBe(before);
  }finally{f.cleanup();}
 });
+test('复评复制的修复产物不能伪装为一次新修复或生成收益',()=>{const f=fixture();try{for(const label of [{reuseAssessmentFrom:'parent'},{validationKind:'scoring-migration'},{validationKind:'assessment-continuation'}]){const j={...f.candidate,...label};expect(repairHistory(f.target,f.after,f.refs,{jobs:[j],locate:f.locate}).attempts).toHaveLength(0);expect(deriveRepairOutcome(j,f.locate('candidate'),f.locate)).toBeNull();}}finally{f.cleanup();}});
+test('缺失修正前契约或原子标准不一致时保留观测但不计算提分',()=>{const f=fixture();try{const file=join(f.locate('candidate'),'generation/refinement/source.json'),meta=JSON.parse(readFileSync(file,'utf8'));delete meta.baselineProfile;f.save('candidate','generation/refinement/source.json',meta);expect(repairHistory(f.target,f.source,f.refs,{jobs:[f.candidate],locate:f.locate}).attempts[0].scoreGain).toBeNull();meta.baselineProfile=f.candidate.profile;meta.sourceCriteria=[{id:'old'}];f.save('candidate','generation/refinement/source.json',meta);const j={...f.candidate,plan:{acceptanceCriteria:[{id:'new'}]}};expect(repairHistory({...f.target,plan:j.plan},f.source,f.refs,{jobs:[j],locate:f.locate}).attempts[0].scoreGain).toBeNull();}finally{f.cleanup();}});
 test('不同输入、不同评审配置、不同引擎、无关场景和运行中的根记录不能混入',()=>{
  const f=fixture();try{
   for(const mutate of [(j:any)=>j.prompt='其他输入',(j:any)=>j.images=[{id:'other'}],(j:any)=>j.policy.score=90,(j:any)=>j.profile.judgeModel='other',(j:any)=>j.profile.engineSha='other',(j:any)=>j.status='running']){
@@ -66,7 +69,7 @@ test('当前自动迭代中的已完成快照可读取，不需要等整个任�
 function addRepair(f:ReturnType<typeof fixture>,id:string,parentId:string,source:any,after:any,endedAt:number,sourceIteration:number|null=null){
  cpSync(f.locate('candidate'),f.locate(id),{recursive:true});
  f.save(id,'generated-scene.json',after);
- f.save(id,'generation/refinement/source.json',{sourceJobId:parentId,sourceIteration,sourceDigest:digest(JSON.stringify(source)),referenceSha256:f.refs,qualityBefore:f.quality});
+ f.save(id,'generation/refinement/source.json',{sourceJobId:parentId,sourceIteration,sourceDigest:digest(JSON.stringify(source)),referenceSha256:f.refs,baselineProfile:f.candidate.profile,qualityBefore:f.quality});
  f.save(id,'generation/refinement/receipt.json',{sourceDigest:digest(JSON.stringify(source)),sceneDigest:digest(JSON.stringify(after))});
  return {...structuredClone(f.candidate),id,endedAt};
 }
@@ -143,4 +146,14 @@ test('跨已保存轮次追溯来源，并保持历史上下文最多四轮',()=
   expect(h.ancestorSceneCount).toBe(3);expect(h.totalVerified).toBe(6);expect(h.attempts).toHaveLength(4);expect(h.omittedVerified).toBe(2);
   expect(h.attempts[0].jobId).toBe('child');
  }finally{f.cleanup();}
+});
+
+test('根目录修复及显式辅助证据目录同样核对来源与真实画面，不因路径形态丢掉反馈',()=>{
+ for(const folder of ['refinement','bounded-surface']){
+ const f=fixture();try{
+  cpSync(join(f.locate('candidate'),'generation/refinement'),join(f.locate('candidate'),folder),{recursive:true});rmSync(join(f.locate('candidate'),'generation'),{recursive:true});
+  const candidate={...f.candidate,validationKind:'native-assisted',repairGoals:{artifactPath:folder+'/repair-goals.json'}};
+  const h=repairHistory(f.target,f.after,f.refs,{jobs:[candidate],locate:f.locate});expect(h.totalVerified).toBe(1);expect(h.attempts[0].validationKind).toBe('native-assisted');
+  writeFileSync(join(f.locate('candidate'),'runtime/reference-1.png'),'tampered');expect(repairHistory(f.target,f.after,f.refs,{jobs:[candidate],locate:f.locate}).attempts).toHaveLength(0);
+ }finally{f.cleanup();}}
 });

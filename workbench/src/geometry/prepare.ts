@@ -1,3 +1,4 @@
+import {spotEntities,bindDirectionalShadow,directionalShadowFields} from './lighting';
 import {lstatSync,mkdirSync,readFileSync,writeFileSync,copyFileSync,existsSync,symlinkSync} from 'node:fs';
 import {join,resolve} from 'node:path';
 import {randomUUID,createHash} from 'node:crypto';
@@ -23,7 +24,7 @@ export function prepareGeometryProject(root:string,program:GeometryProgram,textu
  const brief={...pin,id:options?.id??existing?.id??'geometry-'+randomUUID(),name:program.name,semanticBrief:options?.summary??'由统一几何操作组合的 ForgeaX 场景；本产物只验证编译和运行，不代表视觉还原通过。',entry:'generated.scene.ts',exportName:'generated',args:[{program,textures}],packageId:existing?.packageId??randomUUID(),sourceKey:'scene/generated',budget:{maxTriangles:250000,maxMaterials:128,consumerBuildMs:90000}};
  save(join(root,'brief.json'),brief);save(join(root,'geometry-program.json'),program);
  copyFileSync(join(W,'src/geometry/program.scene.txt'),join(source,'generated.scene.ts'));
- for(const f of ['mesh.ts','program.ts','constraints.ts','distribution.ts'])copyFileSync(join(W,'src/geometry',f),join(source,'geometry',f));
+ for(const f of ['mesh.ts','program.ts','curved-surfaces.ts','constraints.ts','distribution.ts','surface-mapping.ts','texture-bundle.ts'])copyFileSync(join(W,'src/geometry',f),join(source,'geometry',f));
  copyFileSync(join(W,'src/geometry/export.ts'),join(source,'export-adapter.txt'));
  const cfg=read(join(P,'game/forge.json'));cfg.id=brief.id;cfg.name=program.name;save(join(game,'forge.json'),cfg);save(join(game,'package.json'),{name:'geometry-program-scene',private:true,type:'module',packageManager:'pnpm@11.7.0'});
  if(!lstatSync(join(game,'node_modules/@forgeax/engine'),{throwIfNoEntry:false}))symlinkSync(join(ENGINE,'packages/engine'),join(game,'node_modules/@forgeax/engine'),'dir');
@@ -33,10 +34,20 @@ export function prepareGeometryProject(root:string,program:GeometryProgram,textu
  if(views)save(join(root,'camera-tours.json'),{version:'camera-tour-v1',views});
  if(options&&views){
   const v=views[0],light=options.scene.lighting;
+  if(light.backgroundColor)world=world.replace('clearColor:[0.06,0.10,0.13,1]','clearColor:'+JSON.stringify([...light.backgroundColor,1]));
   // 保留模板0.1米近裁面：24位深度下0.03米会使远处相邻薄层产生可见闪烁。
   world=world.replace(JSON.stringify([c[0]+r/Math.sqrt(2),c[1]+h,c[2]+r/Math.sqrt(2)]),JSON.stringify(v.position)).replace(JSON.stringify(c),JSON.stringify(v.target)).replace('fov:Math.PI/3','fov:'+v.fov).replace('far:160','far:1000');
   world=world.replace('direction:[-0.35,-0.85,-0.40],color:[1,0.94,0.82],intensity:3.2','direction:'+JSON.stringify(toEngine(light.direction))+',color:'+JSON.stringify(light.color)+',intensity:'+light.intensity).replace('color:[0.65,0.83,1],intensity:0.85','color:'+JSON.stringify(light.ambientColor)+',intensity:'+light.ambientIntensity);
   world=world.replace('Camera, DirectionalLight, Skylight, perspective','Camera, DirectionalLight, Skylight, PointLight, perspective').replace('sceneComponents:[Camera,DirectionalLight,Skylight,Name,Transform]','sceneComponents:[Camera,DirectionalLight,Skylight,PointLight,Name,Transform]').replace('ambient:{components:',light.points.map((p,i)=>'localLight'+i+':{components:{Transform:{pos:'+JSON.stringify(toEngine(p.position))+'},PointLight:'+JSON.stringify({color:p.color,intensity:p.intensity,range:p.range})+'}},').join('')+'ambient:{components:');
+ }
+ if(options){
+  world=bindDirectionalShadow(world,options.scene.lighting);
+  const spots=spotEntities(options.scene.lighting);
+  if(Object.keys(spots).length){
+   world=world.replace('Skylight, PointLight, perspective','Skylight, PointLight, SpotLight, perspective').replace('Skylight,PointLight,Name','Skylight,PointLight,SpotLight,Name');
+   world=world.replace('ambient:{components:',Object.entries(spots).map(([id,value])=>id+':'+JSON.stringify(value)+',').join('')+'ambient:{components:');
+  }
+  save(join(root,'lighting-export.json'),{version:'engine-lighting-v2',exportedDirectionalShadow:directionalShadowFields(options.scene.lighting),units:{localIntensity:'candela',range:'meters',cone:'half-angle-degrees'},authored:options.scene.lighting,exportedSpots:spots});
  }
  writeFileSync(join(assets,'world.pack.ts'),world);
  copyFileSync(join(W,'src/camera-v3.txt'),join(assets,'camera.plugin.ts'));copyFileSync(join(W,'src/ui-v3.txt'),join(assets,'ui.plugin.ts'));

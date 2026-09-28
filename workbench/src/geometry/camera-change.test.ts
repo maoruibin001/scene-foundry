@@ -52,3 +52,26 @@ test('历史来自冻结修正收据及对应轮次，摘要被改动即拒绝',
   save(join(now,'job.json'),{id:'new'});expect(cameraChangeHistory(now,current,{},locate)).toBeNull();
  }finally{rmSync(dir,{recursive:true,force:true});}
 });
+test('顶层辅助修复回执进入机位反馈，不因目录不同丢失反事实证据',()=>{
+ const dir=mkdtempSync(join(tmpdir(),'camera-feedback-assisted-'));try{
+  const locate=(id:string)=>join(dir,id),{previous,current}=pair(),old=locate('old'),now=locate('new');
+  mkdirSync(old,{recursive:true});mkdirSync(join(now,'refinement'),{recursive:true});
+  save(join(old,'generated-scene.json'),previous);
+  save(join(now,'job.json'),{id:'new',iteration:6,validationKind:'native-assisted',visualRefinement:{sourceJobId:'old',sourceIteration:null}});
+  const receipt={sourceJobId:'old',sourceDigest:digest(JSON.stringify(previous)),sceneDigest:digest(JSON.stringify(current))};
+  save(join(now,'refinement/receipt.json'),receipt);
+  expect(cameraChangeHistory(now,current,{},locate)?.views).toHaveLength(1);
+  save(join(now,'refinement/receipt.json'),{...receipt,sourceJobId:'unrelated'});
+  expect(()=>cameraChangeHistory(now,current,{},locate)).toThrow('摘要');
+ }finally{rmSync(dir,{recursive:true,force:true});}
+});
+test('超过第二轮的已保存候选仍按自身回执验证，不受旧轮次常量限制',()=>{
+ const dir=mkdtempSync(join(tmpdir(),'camera-feedback-round-'));try{
+  const locate=(id:string)=>join(dir,id),{previous,current}=pair(),old=locate('old'),now=locate('new'),iteration=join(now,'iterations/3');
+  mkdirSync(join(old,'iterations/3'),{recursive:true});mkdirSync(iteration,{recursive:true});mkdirSync(join(now,'generation/iteration-3/refinement'),{recursive:true});
+  save(join(old,'iterations/3/generated-scene.json'),previous);
+  save(join(iteration,'candidate.json'),{jobId:'new',cycle:{index:3},fields:{visualRefinement:{sourceJobId:'old',sourceIteration:3}}});
+  save(join(now,'generation/iteration-3/refinement/receipt.json'),{sourceJobId:'old',sourceIteration:3,sourceDigest:digest(JSON.stringify(previous)),sceneDigest:digest(JSON.stringify(current))});
+  expect(cameraChangeHistory(iteration,current,{},locate)?.previousIteration).toBe(3);
+ }finally{rmSync(dir,{recursive:true,force:true});}
+});

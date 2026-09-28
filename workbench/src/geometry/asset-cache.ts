@@ -3,9 +3,10 @@ import {existsSync,readFileSync,mkdirSync} from 'node:fs';
 import {DATA,read,save,digest} from '../store';
 import {ASSET_PROMPT,assetSchema,validateAsset,type AssetBrief,type SceneLayout} from './layout';
 import {assetInput} from './asset-input';
+import {assetSettings} from '../generation-policy';
 import type {Texture} from './program';
-const contract=digest([ASSET_PROMPT,JSON.stringify(assetSchema()),...['program.ts','mesh.ts','constraints.ts','distribution.ts','layout.ts','openings.ts','camera-fit.ts'].map(f=>readFileSync(join(import.meta.dirname,f),'utf8'))].join('\n'));
-export function assetKey(job:any,plan:any,layout:SceneLayout,brief:AssetBrief,textures:Record<string,Texture>){return digest(JSON.stringify({input:assetInput(job.prompt,plan,layout,brief,textures),references:(job.images??(job.image?[job.image]:[])).map((i:any)=>i.id),model:job.modelSettings,provider:job.profile?.provider,engine:job.profile?.engineSha,generator:job.profile?.generatorSha,contract}));}
+const contract=digest([ASSET_PROMPT,JSON.stringify(assetSchema()),...['program.ts','asset-review.ts','repair-engine-preview.ts','mesh.ts','asset-input.ts','asset-evidence.ts','asset-evidence.py','constraints.ts','curved-surfaces.ts','surface-mapping.ts','texture-bundle.ts','distribution.ts','layout.ts','openings.ts','camera-fit.ts'].map(f=>readFileSync(join(import.meta.dirname,f),'utf8'))].join('\n'));
+export function assetKey(job:any,plan:any,layout:SceneLayout,brief:AssetBrief,textures:Record<string,Texture>){return digest(JSON.stringify({input:assetInput(job.prompt,plan,layout,brief,textures),references:(job.images??(job.image?[job.image]:[])).map((i:any)=>i.id),model:assetSettings(job,brief,layout),provider:job.profile?.provider,engine:job.profile?.engineSha,generator:job.profile?.generatorSha,contract}));}
 export class AssetCache{
  constructor(readonly root:string){}
  file(key:string){if(!/^[a-f0-9]{64}$/.test(key))throw Error('资产缓存键无效');return join(this.root,key+'.json');}
