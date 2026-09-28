@@ -18,6 +18,20 @@ test('time filtering uses inclusive UTC boundaries and rejects inverted or ambig
  const params=new URLSearchParams({from:'2026-09-22T16:05:00+08:00',to:'2026-09-22T16:10:00+08:00'});expect(query(params.toString()).total).toBe(6);
  expect(()=>query('from=2026-09-22')).toThrow('时区');expect(()=>query(new URLSearchParams({from:'2026-09-23T00:00:00Z',to:'2026-09-22T00:00:00Z'}).toString())).toThrow('开始时间');
 });
+test('score status filters all records before pagination and combines with other filters',()=>{
+ const rows=jobs.map((j,i)=>({...j,quality:i%2===0?j.quality:null}));
+ const result=query('scoreStatus=scored&page=2&pageSize=10',rows);
+ expect(result).toMatchObject({total:23,page:2,pages:3,from:11,to:20,summary:{scored:23},filters:{scoreStatus:'scored'}});
+ expect(result.items).toHaveLength(10);expect(result.items.every(j=>Number.isFinite(j.score))).toBe(true);
+ const unscored=query('scoreStatus=unscored',rows);expect(unscored.total).toBe(22);expect(unscored.summary.scored).toBe(0);expect(unscored.items.every(j=>j.score===null)).toBe(true);
+ expect(query('scoreStatus=scored&q=LIGHTHOUSE&version=version-a&status=passed&model=luna&complexity=simple',rows).total).toBe(23);
+ expect(query('',rows).total).toBe(45);expect(()=>query('scoreStatus=invalid',rows)).toThrow('scoreStatus');
+});
+test('a zero or failed score is scored; missing, nonnumeric and nonfinite scores are unscored',()=>{
+ const rows=[job('zero',{status:'failed',quality:{score:0}}),job('review',{status:'needs_review',quality:{score:60}}),job('missing',{quality:undefined}),job('null',{quality:{score:null}}),job('text',{quality:{score:'90'}}),job('nan',{quality:{score:NaN}}),job('infinite',{quality:{score:Infinity}})];
+ const result=query('scoreStatus=scored&status=not_passed',rows);expect(result.total).toBe(2);expect(result.items.map(j=>j.score).sort((a,b)=>a-b)).toEqual([0,60]);
+ expect(query('scoreStatus=unscored',rows).total).toBe(5);
+});
 test('compact output keeps exact inputs and evidence links, without exposing full execution payloads',()=>{
  const row=query('',[job('a',{prompt:'<script>alert(1)</script>\n完整描述',image:{id:'image-a',file:'a.png',name:'原图.png'},mode:'image_prompt',events:[{private:'large'}],sceneIR:{entities:[1]},error:'failure detail'})]).items[0];
  expect(row.prompt).toBe('<script>alert(1)</script>\n完整描述');expect(row.image?.name).toBe('原图.png');expect(row.durationMs).toBe(3000);expect(row.thumbnail).toContain('view-1.png');expect(row.downloadable).toBe(true);expect('events' in row).toBe(false);expect('sceneIR' in row).toBe(false);
