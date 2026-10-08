@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync, writeFileSync, renameSync, rmSync, cpSync, existsSync, readdirSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync, renameSync, rmSync, cpSync, existsSync, readdirSync, realpathSync } from 'node:fs';
 import { resolve, join, dirname } from 'node:path';
 import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
@@ -106,7 +106,7 @@ async function main(){
     await stage('asset-verify',()=>{const r=engineCommand('asset-verify',['asset','verify']);const s=r.value.summary;if(s.unproducedAssetCount||s.unknownAssetCount||s.unmaterializedScriptablePackCount)throw new Error('Asset verification contains unavailable outputs');return r;});
     const receipt=read(join(evidence,'generation-receipt.json'));
     await stage('asset-ready',()=>engineCommand('asset-ready',['asset','resolve',receipt.sceneGuid,'--require','ready']));
-    await stage('engine-status',()=>{const r=engineCommand('engine-status',['project','engine','status']);if(!r.value.healthy||r.value.resolved.root!==engine)throw new Error('Engine binding is not healthy or resolved to another source');return r;});
+    await stage('engine-status',()=>{const r=engineCommand('engine-status',['project','engine','status']);if(!r.value.healthy||realpathSync(r.value.resolved.root)!==realpathSync(engine))throw new Error('Engine binding is not healthy or resolved to another source');return r;});
   } else if(operation==='accept'){
     await stage('browser-acceptance',()=>{
       const b=read(join(evidence,'browser/observations.json'));

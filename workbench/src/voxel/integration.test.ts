@@ -33,7 +33,7 @@ test('native export authors real orthographic camera bounds and switches project
  const root=mkdtempSync(join(tmpdir(),'voxel-export-'));
  try{const {scene}=compileVoxelScene(p,{requirements:[{id:'R1',critical:true,count:1}]},1);scene.cameras[0].frame={width:1200,height:1200};prepareGeometryProject(root,scene.program,{}, {id:'voxel',summary:'体素原图出口',scene,provenance:{test:true}});
   const world=readFileSync(join(root,'game/assets/world.pack.ts'),'utf8'),controller=readFileSync(join(root,'game/assets/camera.plugin.ts'),'utf8'),audit=JSON.parse(readFileSync(join(root,'game/assets/scene-audit.json'),'utf8'));
-  expect(world).toContain('orthographic({"left":-1.5,"right":1.5,"bottom":-1.5,"top":1.5');expect(controller).toContain('projection:1,fov:0');expect(controller).toContain('projection:0,fov:v.fov');expect(audit.views[0].projection).toBe('orthographic');expect(audit.views[0].cruise.status).toBe('ready');
+  expect(world).toContain('orthographic({"left":-1.5,"right":1.5,"bottom":-1.5,"top":1.5');expect(world.split('\n').find(line=>line.includes("from '@forgeax/engine/render'"))).toContain('orthographic');expect(controller).toContain('projection:1,fov:0');expect(controller).toContain('projection:0,fov:v.fov');expect(audit.views[0].projection).toBe('orthographic');expect(audit.views[0].cruise.status).toBe('ready');
   expect(sceneComplexity(scene,'complex',1).passed).toBe(false);expect(sceneComplexity(scene,'complex',1,'voxel').passed).toBe(true);
   expect(voxelProjection('unchanged','unchanged',[{projection:'perspective'}])).toEqual({world:'unchanged',controller:'unchanged'});
   expect(modelSchema('voxel-scene',{requirementIds:['R1']}).properties.version.enum).toEqual(['voxel-scene-v1']);

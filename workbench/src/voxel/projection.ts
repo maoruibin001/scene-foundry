@@ -6,9 +6,9 @@ export function orthographicBounds(view: any) {
 /** Extend the fixed Engine's camera route only when an authored view requests orthographic projection. */
 export function voxelProjection(world: string, controller: string, views: any[]) {
   if (!views.some(view => view.projection === "orthographic")) return { world, controller };
-  world = world.replace("Skylight, perspective", "Skylight, perspective, orthographic")
-    .replace("SpotLight, perspective", "SpotLight, perspective, orthographic")
-    .replace("PointLight, perspective", "PointLight, perspective, orthographic");
+  const renderImport=/import\s*\{([^}]+)\}\s*from\s*(['"])@forgeax\/engine\/render\2/;
+  if(!renderImport.test(world))throw Error('固定 Engine render 导入缺失');
+  world=world.replace(renderImport,(_match,symbols,quote)=>`import {${/\borthographic\b/.test(symbols)?symbols:symbols.trimEnd()+', orthographic '} } from ${quote}@forgeax/engine/render${quote}`);
   const first = views[0];
   if (first.projection === "orthographic") {
     const expression = /perspective\(\{fov:[^,}]+,aspect:16\/9,near:0\.1,far:1000\}\)/;
