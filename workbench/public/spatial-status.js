@@ -5,16 +5,19 @@ export function spatialProgress(job) {
   const nextRound = last ? last.round + 2 : 1;
   const prior = last && !last.passed ? `第 ${last.round + 1} 轮未通过（${last.review?.score ?? '未评分'}/5）` : '';
   const running = job.status === 'running';
-  const stage = job.stages?.[job.stage];
-  const fresh = !last || !Number.isFinite(last.endedAt) || stage?.startedAt >= last.endedAt;
-  if (running && stage?.status === 'running' && fresh) {
-    if (job.stage === 'graybox') return {
+  // Surface preparation may run beside graybox; job.stage is only the last event.
+  const active = ['graybox','space'].filter(id => {
+    const stage = job.stages?.[id];
+    return stage?.status === 'running' && (!last || !Number.isFinite(last.endedAt) || stage.startedAt >= last.endedAt);
+  }).sort((a,b) => job.stages[b].startedAt - job.stages[a].startedAt)[0];
+  if (running && active) {
+    if (active === 'graybox') return {
       status: 'running', round: nextRound, label: `第 ${nextRound} 轮验收中`,
       detail: `${prior ? prior + '；空间修正已完成，' : ''}正在生成、运行并检查灰模。通过后才进入详细资产生成。`,
     };
-    if (job.stage === 'space' && prior) return {
+    if (active === 'space' && (prior || job.spatialDiagnosis)) return {
       status: 'repairing', round: nextRound, label: '正在自动修正空间',
-      detail: `${prior}；正在修正空间与参考机位，完成后进行第 ${nextRound} 轮灰模验收。任务仍在执行。`,
+      detail: `${prior || '正在依据来源灰模与已验证机制准备局部补丁'}；正在修正空间与参考机位，完成后进行第 ${nextRound} 轮灰模验收。任务仍在执行。`,
     };
   }
   if (!job.blockout) return null;
@@ -38,4 +41,17 @@ export function spatialTimingStage(stage, job) {
   const progress = spatialProgress(job);
   if (!progress) return stage;
   return { ...stage, status: progress.status, statusLabel: progress.label, statusDetail: progress.detail };
+}
+
+export function spatialPolicyDescription(job) {
+  const policy=job.optimizationPolicy?.spatialPreflight;
+  if(policy==='composition-v3')return '构图灰模：空间 ≥3.5/5、关键关系 ≥3/5、置信度 ≥0.6，且无关键主体缺失后进入详细制作；局部偏差与灰模无法验证的材质关系保留警告。';
+  if(policy==='coarse-v2')return '快速灰模：空间 ≥3/5、置信度 ≥0.6，关键主体和主通路没有严重缺失即可进入详细制作；局部比例与细节后续修正。';
+  return '严格灰模：空间 ≥4/5 且关键关系满足后，才开始详细资产。';
+}
+
+export function canUseLegacySpatialUpgrade(job) {
+  return !!job.improvementId && !!job.baselineId && ['space','graybox'].includes(job.stage)
+    && ['failed','needs_review','cancelled'].includes(job.status)
+    && !['coarse-v2','composition-v3'].includes(job.optimizationPolicy?.spatialPreflight);
 }

@@ -2,6 +2,7 @@ import {existsSync,readFileSync,writeFileSync,unlinkSync} from 'node:fs';
 import {join} from 'node:path';
 import {randomUUID} from 'node:crypto';
 import {DATA,read,save,listJobs} from './store';
+import {ProviderPressure} from './provider-pressure';
 
 export const DEFAULT_LIMITS={scenes:3,models:8,renders:2};
 export const MAX_LIMITS={scenes:8,models:16,renders:4};
@@ -48,7 +49,12 @@ export function ownerAlive(job:any){return job.executionOwner?alive(job.executio
 export function authorizedHandover(prior:any,handover:any,successorRoot:string){return !!handover&&handover.pid===prior.pid&&handover.ownerId===prior.id&&handover.successorRoot===successorRoot&&handover.endpoint?.startsWith('http://127.0.0.1:');}
 export function claimCoordinator(){const path=join(DATA,'scheduler-owner.json');if(existsSync(path)){const prior=read(path),file=join(DATA,'scheduler-handover.json'),handover=existsSync(file)?read(file):null;if(alive(prior.pid)&&!authorizedHandover(prior,handover,owner.root))throw Error('已有并行调度器运行，不能重复领取任务：'+prior.pid);unlinkSync(path);}writeFileSync(path,JSON.stringify(owner),{flag:'wx'});process.once('exit',()=>{if(existsSync(path)&&read(path).id===owner.id)unlinkSync(path);});}
 const legacyActive=()=>legacyJobs().filter(j=>j.status==='running');
-export const modelPool=new PermitPool(limits.models,()=>legacyActive().reduce((n,j)=>n+j.modelReservation,0));
+export const providerPressure=new ProviderPressure(Date.now,state=>save(join(DATA,'provider-pressure.json'),state));
+export const modelPool=new PermitPool(limits.models,()=>legacyActive().reduce((n,j)=>n+j.modelReservation,0)+limits.models-providerPressure.capacity(limits.models));
+/** Record provider pressure before releasing the permit, so queued calls see it. */
+export async function useModelPermit<T>(id:string,signal:AbortSignal|undefined,work:()=>Promise<T>){
+ return modelPool.use(id,signal,async()=>{const epoch=providerPressure.epoch;try{const value=await work();providerPressure.succeeded(epoch,limits.models);return value;}catch(error){providerPressure.limited(error,limits.models);throw error;}});
+}
 export const renderPool=new PermitPool(limits.renders,()=>legacyActive().length?1:0);
 export const sceneQueue=new SceneQueue(limits.scenes,()=>legacyJobs().length,(id,e)=>console.error('SCENE_SCHEDULER_ERROR',id,String(e)),()=>legacyJobs().map(j=>j.key));
 const circuitPath=join(DATA,'scheduler-pause.json');
@@ -57,5 +63,5 @@ export function pauseProvider(error:unknown){const s=String(error);if(!/MODEL_BU
 export function assertProviderOpen(){if(sceneQueue.paused)throw Error('PROVIDER_PAUSED：'+sceneQueue.paused);}
 export function resumeScheduler(){sceneQueue.paused=null;if(existsSync(circuitPath))unlinkSync(circuitPath);sceneQueue.drain();}
 export function updateConcurrency(value:any){limits=validateLimits(value);save(settingsPath,limits);modelPool.setLimit(limits.models);renderPool.setLimit(limits.renders);sceneQueue.setLimit(limits.scenes);return schedulerSnapshot();}
-export function schedulerSnapshot(){return {limits,maxLimits:MAX_LIMITS,owner,paused:sceneQueue.paused,scenes:{limit:limits.scenes,active:[...sceneQueue.active],queued:sceneQueue.pending.map(x=>x.id),external:legacyJobs()},models:modelPool.snapshot(),renders:renderPool.snapshot()};}
+export function schedulerSnapshot(){return {limits,maxLimits:MAX_LIMITS,owner,paused:sceneQueue.paused,scenes:{limit:limits.scenes,active:[...sceneQueue.active],queued:sceneQueue.pending.map(x=>x.id),external:legacyJobs()},models:{...modelPool.snapshot(),pressure:providerPressure.snapshot(limits.models)},renders:renderPool.snapshot()};}
 export function startScheduling(){const timer=setInterval(()=>{sceneQueue.drain();modelPool.drain();renderPool.drain();},1000);timer.unref();}

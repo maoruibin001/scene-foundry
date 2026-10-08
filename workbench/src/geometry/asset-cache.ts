@@ -1,3 +1,4 @@
+import {assetGeometryBasisMatches} from './asset-geometry-basis';
 import {join} from 'node:path';
 import {existsSync,readFileSync,mkdirSync} from 'node:fs';
 import {DATA,read,save,digest} from '../store';
@@ -5,8 +6,8 @@ import {ASSET_PROMPT,assetSchema,validateAsset,type AssetBrief,type SceneLayout}
 import {assetInput} from './asset-input';
 import {assetSettings} from '../generation-policy';
 import type {Texture} from './program';
-const contract=digest([ASSET_PROMPT,JSON.stringify(assetSchema()),...['program.ts','asset-review.ts','repair-engine-preview.ts','mesh.ts','asset-input.ts','asset-evidence.ts','asset-evidence.py','constraints.ts','curved-surfaces.ts','surface-mapping.ts','texture-bundle.ts','distribution.ts','layout.ts','openings.ts','camera-fit.ts'].map(f=>readFileSync(join(import.meta.dirname,f),'utf8'))].join('\n'));
-export function assetKey(job:any,plan:any,layout:SceneLayout,brief:AssetBrief,textures:Record<string,Texture>){return digest(JSON.stringify({input:assetInput(job.prompt,plan,layout,brief,textures),references:(job.images??(job.image?[job.image]:[])).map((i:any)=>i.id),model:assetSettings(job,brief,layout),provider:job.profile?.provider,engine:job.profile?.engineSha,generator:job.profile?.generatorSha,contract}));}
+const contract=digest([ASSET_PROMPT,JSON.stringify(assetSchema()),...['program.ts','branch-crown.ts','procedural-handoff.ts','material-emission.ts','asset-review.ts','asset-validation.ts','repair-engine-preview.ts','mesh.ts','asset-input.ts','asset-geometry-basis.ts','asset-evidence.ts','asset-evidence.py','texture-source.ts','constraints.ts','curved-surfaces.ts','surface-mapping.ts','texture-bundle.ts','distribution.ts','layout.ts','surface-part-budget.ts','triangle-budget.ts','contacts.ts','openings.ts','camera-fit.ts'].map(f=>readFileSync(join(import.meta.dirname,f),'utf8'))].join('\n'));
+export function assetKey(job:any,plan:any,layout:SceneLayout,brief:AssetBrief,textures:Record<string,Texture>,acceptedScene?:any){return digest(JSON.stringify({input:assetInput(job.prompt,plan,layout,brief,textures,acceptedScene),references:(job.images??(job.image?[job.image]:[])).map((i:any)=>i.id),model:assetSettings(job,brief,layout),provider:job.profile?.provider,engine:job.profile?.engineSha,generator:job.profile?.generatorSha,contract}));}
 export class AssetCache{
  constructor(readonly root:string){}
  file(key:string){if(!/^[a-f0-9]{64}$/.test(key))throw Error('资产缓存键无效');return join(this.root,key+'.json');}
@@ -15,10 +16,10 @@ export class AssetCache{
 }
 export const assetCache=new AssetCache(join(DATA,'asset-cache'));
 /** Import existing completed assets when the frozen plan/layout match exactly. */
-export function cacheCheckpointAssets(job:any,plan:any,layout:SceneLayout,textures:Record<string,Texture>,snapshots:any[],cache:AssetCache=assetCache){
+export function cacheCheckpointAssets(job:any,plan:any,layout:SceneLayout,textures:Record<string,Texture>,snapshots:any[],cache:AssetCache=assetCache,acceptedScene?:any){
  let imported=0;
  for(const snapshot of snapshots){if(digest(JSON.stringify(snapshot.plan))!==digest(JSON.stringify(plan))||digest(JSON.stringify(snapshot.layout))!==digest(JSON.stringify(layout)))continue;
-  for(const asset of snapshot.assets){const brief=layout.program.templates.find(t=>t.id===asset.id);if(!brief)continue;const key=assetKey(job,plan,layout,brief,textures);if(cache.get(key,brief,layout,textures))continue;try{validateAsset(asset.value,brief,layout,textures);cache.put(key,asset.value,{jobId:snapshot.manifest.sourceJobId,checkpointId:snapshot.manifest.id,pipelineVersion:asset.source.pipelineVersion,kind:'validated-checkpoint-import'});imported++;}catch{/* A cache miss must never invalidate usable source artifacts. */}}
+  for(const asset of snapshot.assets){const brief=layout.program.templates.find(t=>t.id===asset.id);if(!brief||!assetGeometryBasisMatches(asset.source,acceptedScene,asset.id))continue;const key=assetKey(job,plan,layout,brief,textures,acceptedScene);if(cache.get(key,brief,layout,textures))continue;try{validateAsset(asset.value,brief,layout,textures);cache.put(key,asset.value,{jobId:snapshot.manifest.sourceJobId,checkpointId:snapshot.manifest.id,pipelineVersion:asset.source.pipelineVersion,kind:'validated-checkpoint-import',acceptedGeometrySha256:asset.source.acceptedGeometrySha256??null});imported++;}catch{/* A cache miss must never invalidate usable source artifacts. */}}
  }
  return imported;
 }

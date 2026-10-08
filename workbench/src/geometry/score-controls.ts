@@ -3,6 +3,7 @@ import {join} from 'node:path';
 import {DATA,read,digest,runDir} from '../store';
 import {comparableAssessment} from './refinement-baseline';
 import {assess} from '../assessment';
+import {roleSettings} from '../generation-policy';
 const hash=(path:string)=>digest(readFileSync(path));
 const assert=(ok:any,message:string)=>{if(!ok)throw Error('评分对照：'+message)};
 const refs=(j:any)=>JSON.stringify((j.images??[]).map((i:any)=>i.id));
@@ -15,7 +16,8 @@ export function verifyScoreControl(record:any,locate=runDir){
  const input=read(join(folder,'judge-input-receipt.json')),receipt=read(join(folder,'judge-receipt.json')),review=read(join(folder,'review.json'));
  const profile=job.assessmentProfile??job.profile;
  assert(receipt.role==='judge'&&receipt.stopReason==='completed','评审没有完成');
- assert(receipt.cliModel===profile.judgeModel&&receipt.cliReasoningEffort===profile.reasoningEffort,'模型或深度不匹配');
+ const expectedSettings=roleSettings({model:profile.judgeModel,reasoningEffort:profile.reasoningEffort},'judge',job.optimizationPolicy)!;
+ assert(receipt.cliModel===expectedSettings.model&&receipt.cliReasoningEffort===expectedSettings.reasoningEffort,'模型或深度不匹配');
  assert(receipt.executionRoute?.configurationSha256===profile.executionRoute?.configurationSha256,'路由不匹配');
  const expected=[...(job.images??[]).map((i:any)=>i.id),...(job.runtime?.hashes??[])];
  assert(JSON.stringify(input.images.map((i:any)=>i.sha256))===JSON.stringify(expected),'输入画面不一致');

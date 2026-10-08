@@ -1,4 +1,5 @@
 import {readFileSync} from 'node:fs';
+import {requiredSpecRule} from './spec-rule-kind';
 import {join} from 'node:path';
 import {ROOT,digest} from './store';
 const text=readFileSync(join(ROOT,'spec/production.md'),'utf8'),source=JSON.parse(readFileSync(join(ROOT,'spec/source.json'),'utf8'));
@@ -37,7 +38,7 @@ export function specGate(review:any,runtime:any,plan:any,structure:any){
   if(r.id==='S14'&&runtime.subjectMeasurement?.safeFraming===false)status='failed';
   return {...r,...v,status,method:['S03','S13','S14'].includes(r.id)?'脚本 + AI 视觉':'AI 视觉',evidence:'review.json'};
  });
- const required=rows.filter(r=>!['preference','information'].includes(r.kind));
+ const required=rows.filter(requiredSpecRule);
  const status=required.some(r=>r.status==='failed')?'failed':required.some(r=>r.status==='needs_review')?'needs_review':'passed';
  return {status,version:SPEC.version,sha256:SPEC.sha256,sourceUrl:SPEC.sourceUrl,rules:rows,scope:'固定版本静态场景、当前分辨率、有限连续录制路径；不是全设备或全部视角保证',evaluatorCalibration:SPEC.evaluatorCalibration};
 }

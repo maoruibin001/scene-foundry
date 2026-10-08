@@ -2,11 +2,22 @@ import {test,expect} from 'bun:test';
 import {mkdtempSync,rmSync,writeFileSync,readFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
-import {VersionStore,versionId,versionOf,versionStats,pairedResults,releaseReadiness} from './versions';
+import {VersionStore,versionId,versionOf,versionStats,pairedResults,releaseReadiness,currentVersionInput} from './versions';
 import {DEFAULT_POLICY} from './quality';
 const input={configuration:{model:'luna',policy:DEFAULT_POLICY},files:{'workbench/source.ts':'source-a'}};
 function temp(fn:(s:VersionStore)=>void){const root=mkdtempSync(join(tmpdir(),'pipeline-versions-test-'));try{fn(new VersionStore(root));}finally{rmSync(root,{recursive:true,force:true});}}
 const job=(id:string,version:string,status='passed',score:any=90)=>({id,prompt:'same input',image:null,mode:'prompt',complexity:'simple',createdAt:'2026-09-22T10:00:00Z',status,pipelineVersion:{id:version},profile:{id:'a'.repeat(64),model:'luna',judgeModel:'luna',provider:'codex-cli',reasoningEffort:'low',specSha256:'spec'},policy:DEFAULT_POLICY,quality:score===null?undefined:{score},stages:{generate:{durationMs:1000}}});
+test('frozen version records the actual creation policy and changing it changes identity',()=>{
+ const previous=process.env.PIPELINE_QUALITY_VERSION;
+ try{
+  process.env.PIPELINE_QUALITY_VERSION='scene-quality-v6';const old=currentVersionInput();
+  process.env.PIPELINE_QUALITY_VERSION='scene-quality-v7';const next=currentVersionInput();
+  expect(old.configuration.policy.version).toBe('scene-quality-v6');
+  expect(next.configuration.policy.version).toBe('scene-quality-v7');
+  expect(old.configuration.policy.dimensionWeights).toEqual(next.configuration.policy.dimensionWeights);
+  expect(versionId(old)).not.toBe(versionId(next));
+ }finally{if(previous===undefined)delete process.env.PIPELINE_QUALITY_VERSION;else process.env.PIPELINE_QUALITY_VERSION=previous;}
+});
 test('snapshots survive a new store and changes create an immutable next candidate',()=>temp(s=>{
  const a=s.freeze(input),b=s.freeze({...input,files:{'workbench/source.ts':'source-b'}});
  expect(a.label).toBe('v1-rc.1');expect(b.label).toBe('v1-rc.2');expect(b.parentId).toBe(a.id);

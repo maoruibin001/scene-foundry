@@ -95,3 +95,23 @@ test('预览直接引用本轮已检查摘要，拒绝未知摘要、双输入�
   expect((await f.kit.call('render_scene_patch',{patchSha256:hash})).isError).toBe(true);expect(renders).toBe(1);
  }finally{rmSync(f.folder,{recursive:true,force:true});}
 });
+
+test('新恢复会话取得原部件与失败补丁，不重新查询、不重置额度、不接受失败候选',async()=>{
+ const folder=mkdtempSync(join(tmpdir(),'unfinished-repair-')),source=scene(),p=patch();
+ const options={source,textures:{},folder,signal:new AbortController().signal,images:[],refs:[],apply:()=>source,validate:()=>{throw Error('几何超过预算，需要修正');}};
+ try{
+  const first=createRepairTools(options);
+  await first.kit.call('inspect_scene_parts',{templateId:'subject',partIds:['body']});
+  expect((await first.kit.call('check_scene_patch',{patchJson:JSON.stringify(p)})).isError).toBe(true);
+  const recovered=createRepairTools(options),context=JSON.parse(recovered.kit.continuation!().text),hash=digest(stable(p));
+  expect(context.counts.inspect_scene_parts).toBe(1);expect(context.counts.check_scene_patch).toBe(1);
+  expect(context.retainedWork.inspections[0].parts).toEqual(source.program.templates[0].parts);
+  expect(context.retainedWork.unfinishedCandidate.patch).toEqual(p);
+  expect(context.retainedWork.unfinishedCandidate.error).toContain('预算');
+  expect(context.candidates).toHaveLength(0);expect(context.retainedWork.unfinishedCandidate.requiresSuccessfulPreview).toBe(true);
+  expect(()=>recovered.kit.resolveOutput!({selectedPatchSha256:hash,reason:'不能跳过预览'})).toThrow();
+  expect(()=>recovered.assertReviewed(p)).toThrow();
+  writeFileSync(join(folder,'2/patch.json'),JSON.stringify({...p,reason:'篡改'}));
+  expect(()=>recovered.kit.continuation!()).toThrow('摘要不符');
+ }finally{rmSync(folder,{recursive:true,force:true});}
+});

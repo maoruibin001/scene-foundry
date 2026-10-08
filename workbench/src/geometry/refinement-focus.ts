@@ -9,7 +9,7 @@ const assert=(ok:unknown,message:string)=>{if(!ok)throw Error('空间缺陷修�
 export function refinementFocus(source:SceneInput,report=openingSummary(inspectOpenings(source)),selectedIds?:string[]){
  const targets=report.checks.filter(c=>severe(c.status)&&(!selectedIds||selectedIds.includes(c.id)));if(!targets.length)return null;
  const ownerIds=new Set(targets.map(c=>c.instanceId)),blockerIds=new Set<string>();
- const meshes=compileGeometryProgram({...source.program,materials:source.program.materials.map(m=>({...m,textureId:null}))}).meshes;
+ const meshes=compileGeometryProgram({...source.program,materials:source.program.materials.map(m=>({...m,textureId:null,surfaceDetail:null}))}).meshes;
  const meshOwner=new Map(meshes.map(m=>[m.name,m.entityId]));
  for(const target of targets)for(const id of Object.keys(target.blockers)){const instance=meshOwner.get(id);if(instance)blockerIds.add(instance);}
  const editableTemplates=source.program.instances.filter(i=>ownerIds.has(i.id)||blockerIds.has(i.id)).map(i=>i.template);

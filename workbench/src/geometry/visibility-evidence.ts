@@ -1,3 +1,4 @@
+import {cameraAspect} from './reference-frame.mjs';
 import {readFileSync,writeFileSync} from 'node:fs';
 import {join,relative} from 'node:path';
 import {DATA,ROOT,digest,save} from '../store';
@@ -10,7 +11,7 @@ function fileURL(path:string){const local=relative(DATA,path);if(local.startsWit
 
 export function assertVisibilityCamera(camera:SceneInput['cameras'][number],pose:any,index:number,width:number,height:number){
  const convert=(p:number[])=>[p[0],p[2],-p[1]],same=(a:any,b:number[])=>Array.isArray(a)&&a.length===3&&a.every((v,k)=>Number.isFinite(v)&&Math.abs(v-b[k])<1e-4);
- if(pose?.selectedView!==index||!same(pose.position,convert(camera.position))||!same(pose.target,convert(camera.target))||!Number.isFinite(pose.fov)||Math.abs(pose.fov-camera.fov)>1e-5||!height||Math.abs(width/height-16/9)>1e-4)throw Error('可见性诊断与实际采集机位、视场或画幅不一致');
+ if(pose?.selectedView!==index||!same(pose.position,convert(camera.position))||!same(pose.target,convert(camera.target))||!Number.isFinite(pose.fov)||Math.abs(pose.fov-camera.fov)>1e-5||!height||Math.abs(width/height-cameraAspect(camera))>1e-4)throw Error('可见性诊断与实际采集机位、视场或画幅不一致');
 }
 
 export function prepareVisibilityEvidence(source:SceneInput,textures:Record<string,Texture>,folder:string,sourceDir:string,runtime:any,frames:string[]){

@@ -59,6 +59,17 @@ test('表面与几何并行写入同一部件时拒绝合并，独立表面保�
  expect(repairSourceContext(source,anchors,{goals:[goal('a')]}).program.templates[0].parts[0].shape.points).toHaveLength(4);expect(JSON.stringify(anchors)).toBe(before);
  });
 
+test('混合材质与几何目标不附带表面对象的密集网格，几何目标仍保留必要数据',()=>{
+ const points=Array.from({length:5000},(_,i)=>[i*.01,1,2]),anchors=[{id:'a',parts:[{id:'books',material:'wood',position:[1,2,3],shape:{type:'grid',rows:50,columns:100,points}}]},{id:'b',parts:[{id:'ceiling',shape:{type:'box',size:[5,4,3]}}]}],before=JSON.stringify(anchors);
+ const out=repairSourceContext(source,anchors,{goals:[goal('a',{kind:'surface'}),goal('b')]});
+ expect(out.surfaceOnly).toBe(false);expect(out.program.templates[0].parts[0].shape).not.toHaveProperty('points');expect(out.program.templates[0].parts[0].shape.pointBounds).toEqual({min:[0,1,2],max:[49.99,1,2]});expect(out.program.templates[1].parts[0]).toEqual(anchors[1].parts[0]);
+ expect(JSON.stringify(out).length).toBeLessThan(before.length/10);expect(JSON.stringify(anchors)).toBe(before);expect(out.program.instances).toEqual(source.program.instances);expect(out.program.materials).toEqual(source.program.materials);expect(out.cameras).toEqual(source.cameras);
+});
+test('大几何与解析别名可按需读取，摘要不改源几何与精确变换',()=>{
+ const shape={type:'grid',rows:100,columns:100,points:Array.from({length:10000},()=>[.123456789,0,1])},p={id:'grid',shape,geometry:shape,op:'grid',position:[.123456789,0,1]},anchors=[{id:'a',parts:[p]}],before=JSON.stringify(p);
+ const out=repairSourceContext(source,anchors,{goals:[goal('a')]});const v=out.program.templates[0].parts[0];expect(v.geometryReadRequired).toBe(true);expect(v.sourcePartSha256).toHaveLength(64);expect(v.position).toEqual(p.position);expect(v).not.toHaveProperty('geometry');expect(JSON.stringify(p)).toBe(before);
+});
+
 test('规划合并重复的逐部件实例绑定，保留每个部件身份和覆盖范围',()=>{const bindings=[{id:'m',textureId:null,parts:[{templateId:'t',partId:'p1',shape:'box',uvScale:[1,1],instances:[{id:'i',override:null}]},{templateId:'t',partId:'p2',shape:'grid',uvScale:[2,1],instances:[{id:'i',override:null}]}]}];const input={surfaceBindings:bindings},before=JSON.stringify(input),out=repairPlanningContext(input);expect(out.surfaceBindings[0].templates[0]).toMatchObject({templateId:'t',partIds:['p1','p2'],shapes:['box','grid'],instances:[{id:'i',override:null}]});expect(JSON.stringify(input)).toBe(before);});
 
 test('有限调用合并独立组而非丢目标，耦合组不能拆开',()=>{

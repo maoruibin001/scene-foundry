@@ -35,6 +35,6 @@ test('数量、种子、尺度、递归嵌套及全场景预算在展开前拒�
  expect(()=>validateGeometryProgram(p)).toThrow('三角形预算');
  const union=geometryProgramSchema().properties.templates.items.properties.parts.items.properties.shape.anyOf;
  const scatter=union.find(s=>s.properties.type.enum[0]==='scatter')!;
- expect(scatter.properties.element.anyOf.map(s=>s.properties.type.enum[0]).sort()).toEqual(['box','cloth','cushion','extrusion','grid','lathe','shell','tube']);
+ expect(scatter.properties.element.anyOf.map(s=>s.properties.type.enum[0]).sort()).toEqual(['bezierPatch','box','cloth','cushion','extrusion','grid','lathe','shell','tube']);
  expect(scatter.additionalProperties).toBe(false);expect(scatter.properties.count.maximum).toBe(2048);
 });

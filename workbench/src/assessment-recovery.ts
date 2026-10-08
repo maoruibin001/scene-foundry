@@ -8,7 +8,11 @@ export function copyAssessmentEvidence(source:any,target:any,from:string,to:stri
  verifiedRuntimeEvidence(report,source.runtime,target.profile,digest(readFileSync(join(from,'project/game/dist/forgeax-dist.json'))),target.policy?.minSubmittedFps??10);
  mkdirSync(to,{recursive:true});
  for(const name of ['project','runtime','materials','generation','criteria','criteria-migration.json','plan.json','plan-response.txt','generation-brief.json','spec-snapshot.json','generated-scene.json','structure.json','complexity.json','scene-ir.json','recipe.json'])if(existsSync(join(from,name)))cpSync(join(from,name),join(to,name),{recursive:true,dereference:false});
- for(const key of ['plan','runtime','structure','sceneProgram','sceneIR','bounds','generationBrief','complexityReport','blockout','specSource','objectCount','entityCount','partialOutput','assessmentScope'])if(source[key]!==undefined)target[key]=structuredClone(source[key]);
+ // Scoring is a continuation of the same partial scene. Keep missing-asset
+ // causes so the scheduler can resume them after the score has been delivered.
+ // Do not inherit the failed judge's executionFault: a successful new score
+ // resolves that fault, while assetFailures still retain hard/retryable causes.
+ for(const key of ['plan','runtime','structure','sceneProgram','sceneIR','bounds','generationBrief','complexityReport','blockout','specSource','objectCount','entityCount','partialOutput','assessmentScope','assetFailures'])if(source[key]!==undefined)target[key]=structuredClone(source[key]);
  target.generatedVersion=source.generatedVersion??source.pipelineVersion;
  target.evidenceSource={jobId:source.id,pipelineVersion:source.pipelineVersion,distManifestDigest:source.runtime.distManifestDigest};
  for(const key of ['plan','generate','export','build','verify','runtime'])if(source.stages?.[key]?.status==='passed')target.stages[key]={status:'passed',reused:true,sourceJobId:source.id,durationMs:0};

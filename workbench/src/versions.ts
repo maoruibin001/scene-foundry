@@ -3,7 +3,7 @@ import {COMPLEXITY_MODEL_DEFAULTS} from './model-selection';
 import {existsSync,mkdirSync,readdirSync,readFileSync,writeFileSync,renameSync,rmSync} from 'node:fs';
 import {join,dirname,resolve} from 'node:path';
 import {ROOT,DATA,read,digest} from './store';
-import {DEFAULT_POLICY,batchGate,automaticGeneration} from './quality';
+import {DEFAULT_POLICY,creationPolicy,batchGate,automaticGeneration} from './quality';
 import {MODEL,JUDGE_MODEL,PROVIDER,budget} from './provider';
 
 const TERMINAL=['passed','failed','blocked','cancelled','needs_review'];
@@ -67,7 +67,7 @@ export function currentVersionInput():VersionInput{
  for(const p of ['workbench/src','workbench/public','workbench/spec','prototype/bin'])tree(p);
  for(const p of ['workbench/package.json','prototype/package.json','prototype/brief.json','prototype/game/forge.json','prototype/game/assets/world.pack.ts','prototype/game/assets/camera.plugin.ts','prototype/game/assets/ui.plugin.ts'])add(p);
  const pin=read(join(base,'prototype/brief.json'));
- return {configuration:{providerRecovery:ACTIVE_RECOVERY_POLICY,engine:"ForgeaX Engine",promptLanguage:"zh-CN",complexityModelDefaults:COMPLEXITY_MODEL_DEFAULTS,engineSha:pin.engineSha,generatorSha:pin.generatorSha,provider:PROVIDER,defaultModel:MODEL,defaultJudgeModel:JUDGE_MODEL,defaultReasoningEffort:budget().reasoningEffort??null,executionRoute:budget().executionRoute,policy:DEFAULT_POLICY},files};
+ return {configuration:{providerRecovery:ACTIVE_RECOVERY_POLICY,engine:"ForgeaX Engine",promptLanguage:"zh-CN",complexityModelDefaults:COMPLEXITY_MODEL_DEFAULTS,engineSha:pin.engineSha,generatorSha:pin.generatorSha,provider:PROVIDER,defaultModel:MODEL,defaultJudgeModel:JUDGE_MODEL,defaultReasoningEffort:budget().reasoningEffort??null,executionRoute:budget().executionRoute,policy:creationPolicy()},files};
 }
 export function currentVersionId(){return versionId(currentVersionInput());}
 export function ensureCurrentVersion(){return versions.freeze(currentVersionInput());}

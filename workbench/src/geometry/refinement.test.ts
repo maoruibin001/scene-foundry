@@ -7,6 +7,13 @@ import {modelSchema} from '../model-schema';
 const pose={position:[0,0,0],rotation:[0,0,0],scale:[1,1,1]},plan={requirements:[{id:'R1',critical:true,count:null}]};
 const scene=():any=>({version:'scene-v1',program:{version:'geometry-v1',name:'未知形状',materials:[{id:'base',color:[1,1,1,1],roughness:.7,metallic:0,textureId:null}],templates:[{id:'subject',parts:[{...pose,id:'body',material:'base',shape:{type:'box',size:[1,1,1],radius:0}}]}],instances:[{...pose,id:'one',label:'主体',template:'subject',requirementIds:['R1']}]},entities:[{instanceId:'one',category:'任意类别',role:'subject'}],cameras:[{name:'参考',referenceIndex:1,position:[3,-4,2],target:[0,0,0],fov:1},{name:'检查',referenceIndex:null,position:[-3,4,2],target:[0,0,0],fov:1}],textures:[],textureReuse:[],lighting:{direction:[.5,.5,-.7],color:[1,1,1],intensity:1,ambientColor:[1,1,1],ambientIntensity:.2,points:[]},assumptions:[]});
 const patch=():any=>({version:'scene-refinement-v1',reason:'依据真实画面纠正朝向',instances:[{...pose,id:'one',label:'主体',template:'subject',rotation:[0,0,.4],requirementIds:['R1']}],cameras:[],materials:[],parts:[],removeParts:[],addTemplates:[],addEntities:[],textures:[],textureReuse:[],lighting:null,assumptions:[]});
+test('图片已确认一个主体时复杂档修表面无需凑17对象，文字复杂档和资源上限不变',()=>{
+ const s=scene();s.observedBindings=[{instanceId:'one',landmarkIds:['L1']}];const before=JSON.stringify(s),p=patch();p.instances=[];p.materials=[{...s.program.materials[0],roughness:.45}];
+ const n=applyRefinement(s,p,plan,1,'complex');expect(n.entities).toHaveLength(1);expect(n.program.materials[0].roughness).toBe(.45);expect(n.observedBindings).toEqual(s.observedBindings);expect(JSON.stringify(s)).toBe(before);
+ expect(()=>applyRefinement(scene(),p,plan,1,'complex')).toThrow('复杂度');
+ expect(()=>applyRefinement(s,p,plan,0,'complex')).toThrow();
+ for(let i=0;i<5;i++){s.program.instances.push({...s.program.instances[0],id:'extra'+i});s.entities.push({...s.entities[0],instanceId:'extra'+i});}s.program.templates[0].parts=Array.from({length:100},(_,i)=>({...s.program.templates[0].parts[0],id:'part'+i}));expect(()=>applyRefinement(s,p,plan,1,'complex')).toThrow('预算');
+});
 function complexRepairFixture(){
  const s=scene(),part=structuredClone(s.program.templates[0].parts[0]);
  s.program.templates[0].parts=Array.from({length:40},(_,i)=>({...structuredClone(part),id:'body'+i,position:[i*.1,0,0]}));
@@ -31,6 +38,15 @@ test('扩大编辑范围仍拒绝超出当前额度或总场景预算',()=>{
 test('增量修正保留原对象、未改资产和输入，原场景不被覆盖',()=>{
  const s=scene(),before=JSON.stringify(s),p=patch();p.cameras=[{...s.cameras[0],position:[3,-5,2]}];p.parts=[{templateId:'subject',part:{...s.program.templates[0].parts[0],uvScale:[2,2]}}];
  const n=applyRefinement(s,p,plan,1,'simple');expect(JSON.stringify(s)).toBe(before);expect(n.program.instances[0].rotation[2]).toBe(.4);expect(n.program.templates[0].parts[0].uvScale).toEqual([2,2]);expect(n.cameras[1]).toEqual(s.cameras[1]);expect(n.program.materials).toEqual(s.program.materials);
+});
+test('补充缺失观察证据时可以追加检查机位，原参考与检查机位不被替换',()=>{
+ const s=scene(),p=patch(),before=JSON.stringify(s);p.instances=[];p.cameras=[{name:'背侧检查',referenceIndex:null,position:[1,4,2],target:[0,0,0],fov:1}];
+ const n=applyRefinement(s,p,plan,1,'simple');expect(n.cameras).toHaveLength(3);expect(n.cameras.slice(0,2)).toEqual(s.cameras);expect(JSON.stringify(s)).toBe(before);expect(n.program).toEqual(s.program);
+ const selected={goals:[{id:'evidence',kind:'camera',cameraNames:['检查'],templateIds:[],instanceIds:[],materialIds:[],addGeometry:false}]};
+ expect(assertPlannedRepair(s,n,selected).newInspectionCameras).toEqual(['背侧检查']);
+ expect(()=>assertPlannedRepair(s,n,{goals:[{...selected.goals[0],kind:'surface'}]})).toThrow('机位取证目标');
+ p.cameras=[{...p.cameras[0],name:'参考'}];expect(()=>applyRefinement(s,p,plan,1,'simple')).toThrow('重复');
+ p.cameras=Array.from({length:5},(_,i)=>({name:'检查'+i,referenceIndex:null,position:[3+i,4,2],target:[0,0,0],fov:1}));expect(()=>applyRefinement(s,p,plan,1,'simple')).toThrow('最多六个');
 });
 test('未观测的引用、重复补丁、冲突删除和空改进不能导出',()=>{
  let p=patch();p.parts=[{templateId:'missing',part:scene().program.templates[0].parts[0]}];expect(()=>applyRefinement(scene(),p,plan,1,'simple')).toThrow('不存在');
@@ -124,4 +140,12 @@ test('同轮形状和机位修改后仍可应用多视图位置约束，不强�
  const s=scene();s.cameras[1].referenceIndex=2;
  const p={...patch(),version:'scene-refinement-v5',instances:[],removeInstances:[],surfaceUpdates:[],screenTargets:[{instanceId:'one',reason:'两张图轮廓完整',views:[{referenceIndex:1,rect:[.4,.4,.6,.6]},{referenceIndex:2,rect:[.4,.4,.6,.6]}]}],parts:[{templateId:'subject',part:{...s.program.templates[0].parts[0],shape:{type:'box',size:[.9,1,1],radius:0}}}],cameras:[{...s.cameras[0],position:[3.1,-4,2]}]};
  const before=JSON.stringify(s),out=applyRefinement(s,p,plan,2,'simple');expect(out.program.templates[0].parts[0].shape.size[0]).toBe(.9);expect(out.cameras[0].position[0]).toBe(3.1);expect(JSON.stringify(s)).toBe(before);
+});
+
+test('物理 UV 可通过表面补丁应用和显式恢复，材料范围检查不能绕过',()=>{
+ const s=scene(),p={...patch(),version:'scene-refinement-v5',removeInstances:[],screenTargets:[],instances:[],surfaceUpdates:[{templateId:'subject',partId:'body',material:null,uvScale:null,uvTransform:null,smoothAngle:null,uvProjection:{mode:'world-box',metersPerRepeat:[.3,.3,.3],origin:[0,0,0]}}]};
+ const n=applyRefinement(s,p,plan,1,'simple');expect(n.program.templates[0].parts[0].shape).toEqual(s.program.templates[0].parts[0].shape);expect(n.program.instances).toEqual(s.program.instances);expect(s.program.templates[0].parts[0].uvProjection).toBeUndefined();
+ const goals={goals:[{id:'surface',kind:'surface',templateIds:['subject'],instanceIds:[],materialIds:['base'],cameraNames:[],addGeometry:false}]};
+ expect(()=>assertPlannedRepair(s,n,goals)).not.toThrow();goals.goals[0].materialIds=[];expect(()=>assertPlannedRepair(s,n,goals)).toThrow();
+ p.surfaceUpdates[0].uvProjection={mode:'native'} as any;expect(applyRefinement(n,p,plan,1,'simple').program.templates[0].parts[0].uvProjection).toEqual({mode:'native'});
 });

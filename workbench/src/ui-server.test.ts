@@ -19,6 +19,16 @@ test('独立界面保留隔离响应头，API 原样转发，不启动生成器�
   expect(()=>uiHandler(root,'https://example.com')).toThrow('本机');
  }finally{upstream.stop(true);rmSync(root,{recursive:true,force:true});}
 });
+test('新版独立界面更新旧 worker 的只读统计，失败时保留原统计',async()=>{
+ const root=mkdtempSync(join(tmpdir(),'scene-ui-timing-current-')),id='11111111-1111-1111-1111-111111111111';
+ const upstream=Bun.serve({hostname:'127.0.0.1',port:0,fetch(){return Response.json({production:{totalMs:1200,reassessments:0},totalMs:700});}});
+ try{
+  const url='http://127.0.0.1/api/jobs/'+id+'/timing',handle=uiHandler(root,upstream.url.toString(),()=>({totalMs:1200,reassessments:1}));
+  expect(await(await handle(new Request(url))).json()).toEqual({production:{totalMs:1200,reassessments:1},totalMs:700});
+  const broken=uiHandler(root,upstream.url.toString(),()=>{throw Error('missing');});
+  expect(await(await broken(new Request(url))).json()).toEqual({production:{totalMs:1200,reassessments:0},totalMs:700,productionError:true});
+ }finally{upstream.stop(true);rmSync(root,{recursive:true,force:true});}
+});
 
 test('制作耗时仅补充成功的只读 timing 请求，写操作原样转发，统计失败保留原耗时',async()=>{
  const root=mkdtempSync(join(tmpdir(),'scene-ui-timing-')),id='11111111-1111-1111-1111-111111111111';let calls=0;

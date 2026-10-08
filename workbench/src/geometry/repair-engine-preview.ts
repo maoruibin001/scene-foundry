@@ -1,3 +1,4 @@
+import {bindReferenceFrames} from './reference-framing';
 import {mkdirSync,writeFileSync,readFileSync} from 'node:fs';
 import {join,resolve} from 'node:path';
 import {createServer} from 'node:net';
@@ -7,7 +8,7 @@ import {prepareGeometryProject} from './prepare';
 import {resolveTextureReuse} from './texture-library';
 import {assertVisibilityCamera} from './visibility-evidence';
 export async function renderRepairPreview(scene:any,images:{path:string;mime:string}[],refs:string[],folder:string,signal:AbortSignal){
- return renderPool.use(folder,signal,async()=>{
+ scene=bindReferenceFrames(scene,images);return renderPool.use(folder,signal,async()=>{
   const limit=AbortSignal.any([signal,AbortSignal.timeout(220000)]),base=resolve(ROOT,'..'),project=join(folder,'project'),materials=join(folder,'materials'),capture=join(folder,'capture');
   for(const p of [project,materials,capture])mkdirSync(p,{recursive:true});
   let step=0;const command=async(args:string[],cwd=project)=>{limit.throwIfAborted();const p=Bun.spawn(args,{cwd,env:{...process.env,ASSET_PIPELINE_ROOT:project,FORGEAX_SHARED_APP_INPUTS_MANIFEST:join(base,'engine/shared-build-inputs/manifest.json')},stdout:'pipe',stderr:'pipe',signal:limit});const [out,err,code]=await Promise.all([new Response(p.stdout).text(),new Response(p.stderr).text(),p.exited]);writeFileSync(join(folder,`command-${++step}.log`),out+err);if(code)throw Error('候选预览步骤失败 '+args[1]+'：'+err.slice(-1200));};

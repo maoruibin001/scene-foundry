@@ -4,7 +4,7 @@ import {stable} from '../validated-cache';
 import {digest} from '../store';
 
 export function cameraPreflight(scene:any,compiled?:ReturnType<typeof compileGeometryProgram>){
- const geometry=compiled??compileGeometryProgram({...scene.program,materials:scene.program.materials.map((m:any)=>({...m,textureId:null}))});
+ const geometry=compiled??compileGeometryProgram({...scene.program,materials:scene.program.materials.map((m:any)=>({...m,textureId:null,surfaceDetail:null}))});
  const clear=cameraClearance(geometry.meshes);
  return {version:'camera-preflight-v1',views:scene.cameras.map((c:any)=>({name:c.name,referenceIndex:c.referenceIndex,...planCameraTour(c,clear)}))};
 }

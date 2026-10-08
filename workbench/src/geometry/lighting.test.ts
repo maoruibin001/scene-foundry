@@ -19,3 +19,13 @@ test('拒绝退化方向、错误锥角、非有限强度以及超出真实阴�
 
 test('PCSS映射真实Engine字段，保留原场景默认值与有界质量参数',()=>{const s:SceneLighting={...base(),directionalShadow:{filter:'pcssHigh',angularRadius:.008,maxPenumbraTexels:32,mapSize:2048}};expect(directionalShadowFields(s)).toEqual({shadowFilter:5,shadowAngularRadius:.008,maxPenumbraTexels:32,mapSize:2048});expect(directionalShadowFields(base())).toEqual({shadowFilter:2,mapSize:1024});const world='DirectionalLight:{shadowDistance:65,mapSize:1024,cascadeCount:3,shadowFilter:2}';expect(bindDirectionalShadow(world,base())).toBe(world);expect(bindDirectionalShadow(world,s)).toContain('shadowAngularRadius:0.008');expect(()=>bindDirectionalShadow('bad-template',s)).toThrow('契约变化');});
 test('非法PCSS参数不能进入生成，局部光不能冒充支持方向光软阴影',()=>{const good={filter:'pcssMedium',angularRadius:.00465,maxPenumbraTexels:32,mapSize:1024};for(const changes of [{filter:'area-light'},{angularRadius:0},{angularRadius:.1},{maxPenumbraTexels:65},{maxPenumbraTexels:1.5},{mapSize:8192}])expect(()=>validateLighting({...base(),directionalShadow:{...good,...changes} as any})).toThrow('阴影参数');expect(spotEntities({...base(),spots:[spot()],directionalShadow:good as any}).spotLight0.components.SpotLight.pcfKernelSize).toBe(3);});
+
+test('小结构阴影覆盖与世界空间偏移显式导出，旧数据及null保留既有默认',()=>{
+ const shadow={filter:'pcssMedium' as const,angularRadius:.009,maxPenumbraTexels:24,mapSize:2048 as const};
+ const world='DirectionalLight:{shadowDistance:65,mapSize:1024,cascadeCount:3,shadowFilter:2}';
+ const authored={...base(),directionalShadow:{...shadow,shadowDistance:20,normalBias:.003,depthBias:.00001}};
+ const result=bindDirectionalShadow(world,authored);expect(result).toContain('shadowDistance:20');expect(result).toContain('normalBias:0.003');expect(result).toContain('depthBias:0.00001');expect(result.match(/shadowDistance:/g)).toHaveLength(1);
+ const legacy=bindDirectionalShadow(world,{...base(),directionalShadow:shadow});expect(legacy).toContain('shadowDistance:65');expect(legacy).not.toContain('normalBias');
+ expect(bindDirectionalShadow(world,{...base(),directionalShadow:{...shadow,shadowDistance:null,normalBias:null,depthBias:null}})).toBe(legacy);
+ for(const changes of [{shadowDistance:0},{shadowDistance:129},{normalBias:-1},{normalBias:.2},{depthBias:-1},{depthBias:.1},{normalBias:NaN}])expect(()=>validateLighting({...base(),directionalShadow:{...shadow,...changes}})).toThrow('阴影参数');
+});

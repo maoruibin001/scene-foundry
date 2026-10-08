@@ -30,11 +30,11 @@ test('CLI must confirm both requested model and effort, including nondefault sel
  expect(modelTimeoutMs('medium')).toBeGreaterThan(modelTimeoutMs('low'));expect(modelTimeoutMs('ultra')).toBeLessThanOrEqual(900000);
 });
 
-test('complexity recommendations honor the configured model and cannot mutate later jobs',()=>{
- const configuredModel=process.env.PIPELINE_MODEL??'gpt-6-astra';
- const catalog=modelOptions([{model:configuredModel,inputModalities:['text','image'],defaultReasoningEffort:'medium',supportedReasoningEfforts:[{reasoningEffort:'high'},{reasoningEffort:'xhigh'}]}]);
+test('complexity recommendations are validated Astra profiles and cannot mutate later jobs',()=>{
+ const model=process.env.PIPELINE_MODEL??'gpt-6-astra';
+ const catalog=modelOptions([{model,inputModalities:['text','image'],defaultReasoningEffort:'medium',supportedReasoningEfforts:[{reasoningEffort:'high'},{reasoningEffort:'xhigh'}]}]);
  for(const [level,effort] of [['simple','high'],['medium','high'],['complex','xhigh']] as const){
-  const setting=validateModelSettings(recommendedModelSettings(level),catalog);expect(setting).toEqual({model:configuredModel,reasoningEffort:effort});
+  const setting=validateModelSettings(recommendedModelSettings(level),catalog);expect(setting).toEqual({model,reasoningEffort:effort});
   setting.reasoningEffort='low';expect(recommendedModelSettings(level).reasoningEffort).toBe(effort);
  }
  expect(()=>validateModelSettings(recommendedModelSettings('complex'),entries)).toThrow();

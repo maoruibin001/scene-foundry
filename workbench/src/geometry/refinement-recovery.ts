@@ -1,3 +1,4 @@
+import {pendingIteration,freezeIteration,restoreIterationOutput,type SavedIteration} from './iteration-recovery';
 import {repairBudget,LEGACY_REPAIR_BUDGET} from './repair-budget';
 import {existsSync,readFileSync,mkdirSync,copyFileSync} from 'node:fs';
 import {join,dirname,relative} from 'node:path';
@@ -16,16 +17,19 @@ const required=['job.json','plan.json',...['source.json','repair-goals.json','sc
 const optional=['focus.json','openings/observations.json','openings/receipt.json','baseline/baseline.json','baseline/review.json','baseline/quality.json','camera-change.json','visibility.json','visibility-context.json','visibility-receipt.json',...Array.from({length:6},(_,i)=>`visibility-${i+1}.png`)].map(f=>folder+'/'+f);
 const assert=(ok:unknown,message:string)=>{if(!ok)throw Error('已保存修改恢复：'+message)};
 const same=(a:any,b:any)=>JSON.stringify(a)===JSON.stringify(b);
-export type SavedRefinement={sourceJobId:string;hashes:Record<string,string>};
+export type SavedRefinement={kind?:undefined;sourceJobId:string;hashes:Record<string,string>}|SavedIteration;
 /** 这里只说明完整输出可重验，不把存在文件当作契约通过或画面通过。 */
 export function hasSavedRefinement(job:any,dir=runDir(job.id)){
  return job.refineScene===true&&job.refinementMode!=='camera-alignment'&&!!job.reuseSceneFrom&&required.every(f=>existsSync(join(dir,f)));
 }
 export function freezeSavedRefinement(job:any,dir=runDir(job.id)):SavedRefinement{
+ if(job.reuseRefinementOutput?.kind==='iteration')return structuredClone(job.reuseRefinementOutput);
+ if(pendingIteration(job,dir))return freezeIteration(job,dir);
  assert(hasSavedRefinement(job,dir),'缺少完整修改输出或来源证据');
  return {sourceJobId:job.id,hashes:Object.fromEntries([...required,...optional.filter(f=>existsSync(join(dir,f)))].map(f=>[f,digest(readFileSync(join(dir,f)))]))};
 }
 export function validateSavedRefinement(snapshot:SavedRefinement,target:any,plan:any,images:{path:string;mime:string}[],locate=runDir){
+ if(snapshot.kind==='iteration')throw Error('自动修正快照需要独立验证器');
  const dir=locate(snapshot.sourceJobId),paths=Object.keys(snapshot.hashes);
  assert(required.every(f=>paths.includes(f))&&paths.every(f=>[...required,...optional].includes(f)),'快照文件清单无效');
  for(const f of paths)assert(digest(readFileSync(join(dir,f)))===snapshot.hashes[f],'保存后来源文件发生变化：'+f);
@@ -74,11 +78,12 @@ export function validateSavedRefinement(snapshot:SavedRefinement,target:any,plan
  const next=applyRefinement(source,patch,plan,refs.length,target.complexity);resolveTextureReuse(next,refs);
  const changes=assertPlannedRepair(source,next,goals);
  if(paths.includes(folder+'/focus.json'))assertRefinementFocus(source,next,read(join(dir,folder,'focus.json')));
- compileGeometryProgram({...next.program,materials:next.program.materials.map((m:any)=>({...m,textureId:null}))});
+ compileGeometryProgram({...next.program,materials:next.program.materials.map((m:any)=>({...m,textureId:null,surfaceDetail:null}))});
  return {dir,prior,meta,source,next,patch,goals,changes,receipt};
 }
 export function restoreSavedRefinement(job:any,plan:any,images:{path:string;mime:string}[],generationDir:string,signal:AbortSignal){
  signal.throwIfAborted();const snapshot=job.reuseRefinementOutput as SavedRefinement;
+ if(snapshot.kind==='iteration')return restoreIterationOutput(snapshot,job,plan,images,generationDir,signal);
  const result=validateSavedRefinement(snapshot,job,plan,images),out=join(generationDir,'refinement');mkdirSync(out,{recursive:true});
  for(const f of Object.keys(snapshot.hashes)){const dest=join(out,'recovered-source',f);mkdirSync(dirname(dest),{recursive:true});copyFileSync(join(result.dir,f),dest);}
  const unchanged=result.source.program.templates.filter((t:any)=>same(t,result.next.program.templates.find((n:any)=>n.id===t.id))).length;

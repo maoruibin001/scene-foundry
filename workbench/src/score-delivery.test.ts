@@ -27,8 +27,8 @@ test('未评分的真实草稿优先继续评分，已评分草稿才补齐资�
  expect(recoveryInfo(partial,[],undefined,'/missing')).toMatchObject({available:true,mode:'assessment'});
 });
 test('独立资产瞬态错误保留到任务恢复；硬阻塞和已到制作窗不恢复，历史记录不批量唤醒',async()=>{
- const fresh:any={id:'new',status:'needs_review',error:'资产未齐',partialOutput:{missing:[{id:'window'}]},quality:{score:60},assetFailures:[{error:'PROVIDER_RECOVERY_EXHAUSTED: rate limit exceeded'}],executionRecoveryPolicy:{version:'execution-recovery-v2',enabled:true}};
- expect(executionFaultOf(fresh).recoverable).toBe(true);expect(executionFaultOf({...fresh,executionRecoveryPolicy:{version:'execution-recovery-v1',enabled:true}}).recoverable).toBe(false);
+ const fresh:any={id:'new',status:'needs_review',error:'资产未齐',partialOutput:{missing:[{id:'window'}]},quality:{score:60},assetFailures:[{error:'PROVIDER_HTTP_429 rate limit exceeded'}],executionRecoveryPolicy:{version:'execution-recovery-v2',enabled:true}};
+ expect(executionFaultOf(fresh).recoverable).toBe(true);expect(executionFaultOf({...fresh,assetFailures:[{error:'PROVIDER_RECOVERY_EXHAUSTED: rate limit exceeded'}]}).recoverable).toBe(false);expect(executionFaultOf({...fresh,executionRecoveryPolicy:{version:'execution-recovery-v1',enabled:true}}).recoverable).toBe(false);
  expect(executionFaultOf({...fresh,executionFault:'MODEL_BUDGET_EXHAUSTED'}).recoverable).toBe(false);
  expect(executionFaultOf({...fresh,assetFailures:[...fresh.assetFailures,{error:'PROVIDER_HTTP_401'}]}).recoverable).toBe(false);
  expect(executionFaultOf({...fresh,productionWindow:{workDeadlineAt:1}}).recoverable).toBe(false);

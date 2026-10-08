@@ -2,6 +2,7 @@ import {mkdirSync,existsSync,readFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {ROOT,DATA,runDir,save,read,digest} from '../store';
 import {assetInput} from './asset-input';
+import {referencePixelSizes,textureSourceEvidence,TEXTURE_SOURCE_GUIDANCE} from './texture-source';
 
 export function assetEvidencePlan(layout:any,brief:any,observation:any){
  const instances=layout.program.instances.filter(i=>i.template===brief.id),ids=new Set(instances.map(i=>i.id));
@@ -28,5 +29,6 @@ export async function prepareAssetEvidence(ctx:any,layout:any,brief:any,textures
  const receipt=read(join(output,'receipt.json'));
  const images=receipt.images.map(i=>({path:join(output,i.file),mime:'image/png'}));
  save(join(folder,'reference-evidence.json'),{...receipt,referenceSha256:ctx.images.map(i=>digest(readFileSync(i.path)))});
- return {images,context:{referenceEvidence:plan.evidence,referenceCameras:plan.referenceCameras,imageOrder:[...ctx.images.map((_,n)=>'原始参考图 '+(n+1)),...receipt.images.map(i=>i.label)]}};
+ const sourceEvidence=ctx.textureSourceEvidence??textureSourceEvidence(layout,ctx.referencePixelSizes??referencePixelSizes(ctx.images));
+ return {images,context:{referenceEvidence:plan.evidence,referenceCameras:plan.referenceCameras,textureSourceEvidence:sourceEvidence.filter(t=>input.textureRegistry.some(r=>r.id===t.id)),textureSourceGuidance:TEXTURE_SOURCE_GUIDANCE,imageOrder:[...ctx.images.map((_,n)=>'原始参考图 '+(n+1)),...receipt.images.map(i=>i.label)]}};
 }

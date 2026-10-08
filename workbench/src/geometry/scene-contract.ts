@@ -2,6 +2,7 @@ import {lightingSchema,validateLighting,LIGHTING_RULES,type SceneLighting} from 
 import {geometryProgramSchema,GEOMETRY_RULES} from './program-schema';
 import {validateGeometryProgram,type GeometryProgram} from './program';
 import {openingsSchema,validateOpenings,OPENINGS_PROMPT,type SpatialOpening} from './openings';
+import {contactsSchema,validateContacts,CONTACTS_PROMPT,type SpatialContact} from './contacts';
 const num={type:'number'},str={type:'string'},vector={type:'array',items:num,minItems:3,maxItems:3};
 const arr=(items:any)=>({type:'array',items}),obj=(properties:any)=>({type:'object',properties,required:Object.keys(properties),additionalProperties:false});
 // 语义类别是显示和计数用的文本，不是资产 ID、文件名或路径。
@@ -12,8 +13,8 @@ export function semanticCounts(entities:{category:string}[]):Record<string,numbe
  for(const e of entities)counts[e.category]=(counts[e.category]??0)+1;
  return counts;
 }
-export type SceneInput={spatialOpenings?:SpatialOpening[];textureReuse?:{textureId:string;assetId:string;reason:string}[];version:'scene-v1';program:GeometryProgram;entities:{instanceId:string;role:'subject'|'context'|'ground';category:string}[];cameras:{name:string;referenceIndex:number|null;position:number[];target:number[];fov:number}[];textures:{id:string;referenceIndex:number;quad:number[][];size:number;description:string}[];lighting:SceneLighting;assumptions:string[]};
-export function sceneSchema(ids?:string[]){return obj({spatialOpenings:openingsSchema(),textureReuse:arr(obj({textureId:str,assetId:str,reason:str})),version:{type:'string',enum:['scene-v1']},program:geometryProgramSchema(ids),entities:arr(obj({instanceId:str,role:{type:'string',enum:['subject','context','ground']},category:categorySchema})),cameras:arr(obj({name:str,referenceIndex:{type:['integer','null']},position:vector,target:vector,fov:num})),textures:arr(obj({id:str,referenceIndex:{type:'integer'},quad:{type:'array',minItems:4,maxItems:4,items:{type:'array',minItems:2,maxItems:2,items:num}},size:{type:'integer',enum:[256,512]},description:str})),lighting:lightingSchema(),assumptions:arr(str)});}
+export type SceneInput={spatialContacts?:SpatialContact[];spatialOpenings?:SpatialOpening[];textureReuse?:{textureId:string;assetId:string;reason:string}[];version:'scene-v1';program:GeometryProgram;entities:{instanceId:string;role:'subject'|'context'|'ground';category:string}[];cameras:{frame?:{width:number;height:number};name:string;referenceIndex:number|null;position:number[];target:number[];fov:number}[];textures:{id:string;referenceIndex:number;quad:number[][];size:number;description:string}[];lighting:SceneLighting;assumptions:string[]};
+export function sceneSchema(ids?:string[]){return obj({spatialContacts:contactsSchema(),spatialOpenings:openingsSchema(),textureReuse:arr(obj({textureId:str,assetId:str,reason:str})),version:{type:'string',enum:['scene-v1']},program:geometryProgramSchema(ids),entities:arr(obj({instanceId:str,role:{type:'string',enum:['subject','context','ground']},category:categorySchema})),cameras:arr(obj({name:str,referenceIndex:{type:['integer','null']},position:vector,target:vector,fov:num})),textures:arr(obj({id:str,referenceIndex:{type:'integer'},quad:{type:'array',minItems:4,maxItems:4,items:{type:'array',minItems:2,maxItems:2,items:num}},size:{type:'integer',enum:[256,512]},description:str})),lighting:lightingSchema(),assumptions:arr(str)});}
 const assert=(ok:any,message:string)=>{if(!ok)throw Error(message)};
 const finite=(n:any,min:number,max:number)=>typeof n==='number'&&Number.isFinite(n)&&n>=min&&n<=max;
 const vec=(v:any,min=-100,max=100)=>Array.isArray(v)&&v.length===3&&v.every(n=>finite(n,min,max));
@@ -42,6 +43,7 @@ export function validateSceneContext(s:Omit<SceneInput,'version'|'program'>&{pro
 }
 export function validateSceneTopology(s:Pick<SceneInput,'entities'|'cameras'|'assumptions'>&{program:Pick<GeometryProgram,'instances'>},plan:any,referenceCount:number){
  validateOpenings((s as any).spatialOpenings,s.program.instances,referenceCount);
+ validateContacts((s as any).spatialContacts,s.program.instances,referenceCount);
  const instances=new Map(s.program.instances.map(i=>[i.id,i]));
  assert(Array.isArray(s.entities)&&s.entities.length===instances.size&&new Set(s.entities.map(e=>e.instanceId)).size===instances.size,'语义实体与几何实例须一一对应');
  for(const e of s.entities)assert(instances.has(e.instanceId)&&['subject','context','ground'].includes(e.role)&&typeof e.category==='string'&&new RegExp(categoryPattern).exec(e.category)?.[0]===e.category,'实体分类无效');
@@ -61,4 +63,4 @@ textures 可从本次参考图提取最多 24 个局部材质片段：id、refer
 lighting.backgroundColor 为真实场景外部可见背景的线性 RGB 色（不新增物体），仅当图片有对应天空或窗外亮区证据时设置，否则 null 沿用原值。lighting 提供一个方向光 direction/color/intensity、ambientColor/ambientIntensity 和最多 16 个实际有依据的局部 points(position/color/intensity/range)。光照应还原输入的方向与层次，同时关键对象可辨。${LIGHTING_RULES}
 所有向量继续使用 Z 向上。assumptions 用中文列出不可见区域、相机和尺度估计；不把推断说成已观察事实。
 `;
-export const SCENE_PROMPT=`根据全部参考图和冻结需求，生成一个可自由观察的完整三维场景，返回 scene-v1 JSON。program 使用通用几何契约。\n${SCENE_RULES}\n${OPENINGS_PROMPT}\n${GEOMETRY_RULES}`;
+export const SCENE_PROMPT=`根据全部参考图和冻结需求，生成一个可自由观察的完整三维场景，返回 scene-v1 JSON。program 使用通用几何契约。\n${SCENE_RULES}\n${OPENINGS_PROMPT}\n${CONTACTS_PROMPT}\n${GEOMETRY_RULES}`;

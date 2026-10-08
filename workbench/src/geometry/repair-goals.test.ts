@@ -100,3 +100,11 @@ test('各表面目标必须改变本目标的材质或贴图，不能借其他�
  const p=selection();p.goals[0]={...p.goals[0],kind:'surface',instanceIds:[],materialIds:['base']};p.goals.push({...structuredClone(p.goals[0]),id:'surface2',materialIds:['plain']});
  const n=structuredClone(s);n.textureReuse=[];expect(()=>assertPlannedRepair(s,n,p)).toThrow('surface2');n.program.materials[1].roughness=.7;expect(assertPlannedRepair(s,n,p).changedTextureIds).toEqual(['paint']);
 });
+
+test('规划区分70交付目标与原评分契约，不能用综合分或严格维度线继续提分',()=>{
+ expect(REPAIR_GOALS_PROMPT).toContain('deliveryStandard表示当前交付目标');
+ expect(REPAIR_GOALS_PROMPT).toContain('basic70下以已核验复盘的selection.meaningful和requiresDiagnosis为准');
+ expect(REPAIR_GOALS_PROMPT).toContain('comparison.rawDelta');
+ expect(REPAIR_GOALS_PROMPT).toContain('strict下gainOverBest');
+ expect(REPAIR_GOALS_PROMPT).toContain('达到基础交付即停止提分');
+});

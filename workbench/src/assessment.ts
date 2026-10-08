@@ -1,3 +1,4 @@
+import {basicDelivery,deliveryStandard} from './delivery-standard';
 import {qualityGate} from './quality';
 import {specGate} from './spec';
 export function assess(job:any,review:any,runtime:any){
@@ -13,6 +14,7 @@ export function assess(job:any,review:any,runtime:any){
  let status=[quality.status,spec.status].includes('failed')?'failed':[quality.status,spec.status].includes('needs_review')||countContradictions.length||objections.length||geometryReview?'needs_review':'passed';
  if(job.partialOutput){status='needs_review';if(spec.status==='passed')spec.status='needs_review';}
  if(countContradictions.length&&spec.status==='passed')spec.status='needs_review';
+ if(deliveryStandard(job.policy)==='basic70'){const delivery=basicDelivery(job,review,runtime,quality,spec,status,countContradictions,objections);return {quality,spec,countContradictions,objections,strictStatus:status,deliveryAssessment:delivery,status:delivery.status,realizationStatus:delivery.status};}
  return {quality,spec,countContradictions,objections,status,realizationStatus:job.partialOutput?'needs_review':quality.status};
 }
 

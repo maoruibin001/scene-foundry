@@ -1,3 +1,4 @@
+import {referenceComposition} from './reference-composition';
 import {surfaceAudit} from './surface-audit';
 import {inspectVisualRegion,validateRegion} from './visual-region';
 import {mkdirSync,readFileSync,existsSync} from 'node:fs';
@@ -16,7 +17,7 @@ export const REPAIR_TOOL_PROMPT='本次提供 scene_feedback 专用工具。可�
 const patchInput={type:'object',properties:{patchJson:{type:'string',description:'完整 scene-refinement-v5 补丁的 JSON 字符串；相对原始场景应用。'}},required:['patchJson'],additionalProperties:false};
 const renderInput={type:'object',properties:{patchJson:{type:'string',description:'新候选完整JSON；与patchSha256二选一。'},patchSha256:{type:'string',pattern:'^[a-f0-9]{64}$',description:'本轮已通过检查或预览的候选摘要；避免重写相同补丁。'}},additionalProperties:false,anyOf:[{required:['patchJson']},{required:['patchSha256']}]};
 const text=(value:any):ToolContent=>({type:'text',text:JSON.stringify(value)});
-export function createRepairTools(options:{source:any;textures:any;folder:string;signal:AbortSignal;images:{path:string;mime:string}[];refs:string[];validate:(patch:any)=>any;apply:(patch:any)=>any;render?:typeof renderRepairPreview;sourceFrames?:{referenceIndex:number;path:string}[];inspectRegion?:typeof inspectVisualRegion;onEvent?:(message:string)=>void}){
+export function createRepairTools(options:{source:any;textures:any;observation?:any;folder:string;signal:AbortSignal;images:{path:string;mime:string}[];refs:string[];validate:(patch:any)=>any;apply:(patch:any)=>any;render?:typeof renderRepairPreview;sourceFrames?:{referenceIndex:number;path:string}[];inspectRegion?:typeof inspectVisualRegion;onEvent?:(message:string)=>void}){
  const {source,textures,folder,signal}=options;mkdirSync(folder,{recursive:true});
  const counts={inspect_visual_region:0,inspect_scene_parts:0,check_scene_patch:0,render_scene_patch:0,enginePreviews:0},limits={inspect_visual_region:6,inspect_scene_parts:8,check_scene_patch:6,render_scene_patch:8};
  const audited:any[]=[],reviewed=reviewedCandidates({folder,validate:options.validate,apply:options.apply});let busy=false;let latestFrames:{referenceIndex:number;path:string}[]=[];
@@ -33,6 +34,25 @@ export function createRepairTools(options:{source:any;textures:any;folder:string
   }
  }
  const persist=()=>save(auditFile,{version:REPAIR_TOOL_VERSION,sourceSha256:digest(stable(source)),counts,limits,attempts:audited,renderedPatchHashes:reviewed.hashes(),quality:'not-assessed'});
+ // A new CLI process has no earlier conversation. Restore paid-for inspection
+ // evidence and the last unfinished patch without resetting any tool allowance.
+ const retainedWork=()=>{
+  const inspections=audited.filter(r=>r.name==='inspect_scene_parts'&&r.status==='passed').map(r=>{
+   const template=source.program.templates.find((t:any)=>t.id===r.query.templateId);
+   if(!template)throw Error('已保存查询的来源模板不存在');
+   const ids=r.query.partIds,offset=r.query.offset??0;
+   return {index:r.index,query:r.query,parts:ids.length?template.parts.filter((p:any)=>ids.includes(p.id)):template.parts.slice(offset,offset+16)};
+  });
+  const latest=audited.filter(r=>r.patchSha256).at(-1),last=latest&&!reviewed.hashes().includes(latest.patchSha256)?latest:null;
+  let unfinishedCandidate:any=null;
+  if(last){const file=join(folder,String(last.index),'patch.json');
+   if(existsSync(file)){const raw=readFileSync(file,'utf8');if(raw.length>1500000)throw Error('已保存补丁超过恢复大小上限');
+    const patch=JSON.parse(raw);if(digest(stable(patch))!==last.patchSha256)throw Error('未完成补丁摘要不符');
+    unfinishedCandidate={index:last.index,patchSha256:last.patchSha256,patch,status:last.status,error:last.error??null,quality:'not-assessed',requiresSuccessfulPreview:true};
+   }
+  }
+  return {inspections,unfinishedCandidate,recentFeedback:audited.slice(-6).map(r=>({index:r.index,name:r.name,status:r.status,error:r.error??null,query:r.query??null,patchSha256:r.patchSha256??null}))};
+ };
  const regionSchema={type:'array',items:{type:'number',minimum:0,maximum:1},minItems:4,maxItems:4};
  const definitions=[
   {name:'inspect_visual_region',description:'放大比较原始参考图、来源场景和最近成功候选的对应区域；只读真实像素，明暗统计不参与评分。',inputSchema:{type:'object',properties:{referenceIndex:{type:'integer',minimum:1},referenceRect:regionSchema,frameRect:regionSchema},required:['referenceIndex','referenceRect','frameRect'],additionalProperties:false}},
@@ -42,7 +62,7 @@ export function createRepairTools(options:{source:any;textures:any;folder:string
  ];
  for(const tool of definitions)(tool as any).annotations={readOnlyHint:false,destructiveHint:false,openWorldHint:false,idempotentHint:false};
  const kit:CodexToolKit={version:REPAIR_TOOL_VERSION,instructions:REPAIR_TOOL_PROMPT,definitions,outputSchema:REVIEWED_SELECTION_SCHEMA,resolveOutput:reviewed.resolve,continuation:()=>{
-  const saved=reviewed.context();return {text:JSON.stringify({counts,limits,enginePreviewsRemaining:Math.max(0,2-counts.enginePreviews),candidates:saved.candidates,instructions:'以下附图依候选顺序排列。恢复不会重置额度。已有候选必须比较其实际画面；若额度用完，选择现有候选，不重新生成或重复提交大补丁。最终只输出selectedPatchSha256与中文reason，管线取回原始补丁并重新校验。尚未独立评分，不宣称提分。'}),images:saved.images};
+  const saved=reviewed.context();return {text:JSON.stringify({counts,limits,enginePreviewsRemaining:Math.max(0,2-counts.enginePreviews),candidates:saved.candidates,retainedWork:retainedWork(),instructions:'以下附图依候选顺序排列。恢复不会重置额度。retainedWork保存已经查到的真实部件与最新未完成补丁，优先接着明确错误修复，不从头分析或重复查询。未完成或失败补丁不算已通过，必须重新检查并成功预览才能提交。已有成功候选必须比较其实际画面；若额度用完，选择现有成功候选。最终只输出selectedPatchSha256与中文reason，管线取回原始补丁并重新校验。尚未独立评分，不宣称提分。'}),images:saved.images};
  },async call(name,args){
   signal.throwIfAborted();if(!(name in limits))throw Error('未知修复工具');if(busy)throw Error('前一次工具尚未结束，请等候结果');
   const key=name as keyof typeof limits;if(counts[key]>=limits[key])throw Error('本轮该工具已达上限；停止该尝试，保留已通过预览的候选');counts[key]++;busy=true;
@@ -85,7 +105,7 @@ export function createRepairTools(options:{source:any;textures:any;folder:string
     const report=sceneVisibility(next,textures);save(join(dir,'visibility.json'),report);
     const p=Bun.spawnSync([join(DATA,'reconstruction-env/bin/python'),join(ROOT,'src/geometry/visibility-map.py'),join(dir,'visibility.json')],{stdout:'pipe',stderr:'pipe',timeout:30000});
     if(p.exitCode)throw Error('投影图绘制失败：'+new TextDecoder().decode(p.stderr).slice(-1000));
-    content=[text({kind:'geometry-diagnostic',surfaceAudit:surfaceAudit(next,textures),patchSha256:row.patchSha256,cameras:cameraPreflight(next),...visibilityContext(report)}),...report.views.map((_,i)=>({type:'image' as const,mimeType:'image/png',data:readFileSync(join(dir,`visibility-${i+1}.png`)).toString('base64')}))];
+    content=[text({kind:'geometry-diagnostic',...(options.observation?{referenceComposition:referenceComposition(next,options.observation,report)}:{}),surfaceAudit:surfaceAudit(next,textures),patchSha256:row.patchSha256,cameras:cameraPreflight(next),...visibilityContext(report)}),...report.views.map((_,i)=>({type:'image' as const,mimeType:'image/png',data:readFileSync(join(dir,`visibility-${i+1}.png`)).toString('base64')}))];
    }else{
     if(counts.enginePreviews>=2)throw Error('本轮真实Engine预览已达2次上限，请返回已预览候选');counts.enginePreviews++;row.enginePreview=counts.enginePreviews;persist();
     content=[text({kind:'ForgeaX Engine实际候选预览',patchSha256:row.patchSha256,views:next.cameras.map((c:any)=>({name:c.name,referenceIndex:c.referenceIndex})),quality:'未评分，最终只提交此候选摘要与选择理由，不要重复输出完整补丁'}),...await(options.render??renderRepairPreview)(next,options.images,options.refs,dir,signal)];reviewed.add(row);

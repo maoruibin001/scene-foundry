@@ -1,5 +1,5 @@
 import {test, expect} from 'bun:test';
-import {spatialProgress, spatialTimingStage} from '../public/spatial-status.js';
+import {spatialProgress, spatialTimingStage, canUseLegacySpatialUpgrade} from '../public/spatial-status.js';
 import {timingSnapshot} from './timing-snapshot';
 import {mkdtempSync, rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
@@ -59,4 +59,32 @@ test('首轮与第三轮使用实际轮次，不把首次验收冒充修正后�
   job.blockout.rounds=[failedRound,{...failedRound,round:1,endedAt:7000}];
   expect(spatialProgress(job).label).toBe('第 3 轮验收中');
   expect(spatialProgress(job).detail).toContain('第 2 轮未通过');
+});
+
+
+test('构图检查按记录保存的策略显示，不把新旧门槛混为一谈',async()=>{
+ const {spatialPolicyDescription}=await import('../public/spatial-status.js');
+ expect(spatialPolicyDescription({optimizationPolicy:{spatialPreflight:'composition-v3'}})).toContain('≥3.5/5');
+ expect(spatialPolicyDescription({optimizationPolicy:{spatialPreflight:'composition-v3'}})).toContain('关键关系 ≥3/5');
+ expect(spatialPolicyDescription({optimizationPolicy:{spatialPreflight:'coarse-v2'}})).toContain('快速灰模：空间 ≥3/5');
+ expect(spatialPolicyDescription({})).toContain('严格灰模：空间 ≥4/5');
+});
+
+test('并行材质阶段完成不掩盖正在执行的灰模或空间修正',()=>{
+ const job:any=fixture();job.stage='surface';job.stages.surface={status:'passed',startedAt:8000};
+ expect(spatialProgress(job).status).toBe('repairing');
+ job.stages.space.status='passed';job.stages.graybox={status:'running',startedAt:9000};
+ expect(spatialProgress(job).status).toBe('running');expect(spatialProgress(job).round).toBe(2);
+ job.blockout.rounds=[];expect(spatialProgress(job).label).toBe('第 1 轮验收中');
+ for(const status of ['failed','cancelled','blocked']){job.status=status;expect(spatialProgress(job).status).toBe(status);}
+});
+
+
+test('旧版快速灰模升级不向构图预检或活跃任务提供降级入口',()=>{
+ const job={status:'failed',stage:'graybox',improvementId:'experiment',baselineId:'reference'};
+ expect(canUseLegacySpatialUpgrade(job)).toBe(true);
+ for(const spatialPreflight of ['coarse-v2','composition-v3'])expect(canUseLegacySpatialUpgrade({...job,optimizationPolicy:{spatialPreflight}})).toBe(false);
+ for(const status of ['running','queued','passed'])expect(canUseLegacySpatialUpgrade({...job,status})).toBe(false);
+ expect(canUseLegacySpatialUpgrade({...job,stage:'assets'})).toBe(false);
+ expect(canUseLegacySpatialUpgrade({...job,baselineId:null})).toBe(false);
 });

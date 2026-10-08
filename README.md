@@ -22,6 +22,7 @@ Install Bun, Node.js, Python 3, Corepack/pnpm, and the locally authenticated `co
 ```sh
 python3 prototype/bin/bootstrap.py
 python3 scripts/setup-python.py
+bun scripts/setup-materials.ts
 cp workbench/.env.example workbench/.env
 cd workbench
 bun run start
@@ -30,6 +31,8 @@ bun run start
 `bootstrap.py` clones `ForgeaXGame/forgeax-engine` and `ForgeaXGame/forgeax-ex-scene-generator` beside `prototype/`, verifies their exact commits, and builds their local outputs. Existing checkouts are verified without being switched. The server listens on `127.0.0.1:19774` by default; set `PORT` to use another port. Open the URL printed at startup.
 
 `setup-python.py` requires Python 3.10–3.12 and prepares the pinned Pillow, NumPy, and OpenCV image dependencies in the ignored data directory. Use a compatible interpreter such as `python3.12` if the default `python3` is a different version. The environment follows `PIPELINE_DATA_DIR` when set.
+
+`setup-materials.ts` downloads the source-pinned Poly Haven material channels, verifies their checksums, and converts them into the fixed local material catalog. Downloaded images and decoded pixels stay in ignored data; the repository contains source URLs, attribution, and checksums. Run this before the test suite or scene generation. Missing catalog entries stop generation before model requests.
 
 Before running a model-backed job, set an explicit local call limit in `.env`, choose an available model, and verify your CLI login. For a Messages API provider, use `PIPELINE_PROVIDER=messages-api` and supply the provider URL, API key, model, and call limit through local environment variables. Never commit `.env` or provider credentials.
 

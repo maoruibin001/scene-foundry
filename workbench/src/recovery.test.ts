@@ -1,15 +1,26 @@
 import {test,expect} from 'bun:test';
 import {rmSync,mkdirSync,readFileSync} from 'node:fs';
 import {join} from 'node:path';
-import {recoveryInfo,registerRecovery,dispatchRecovery} from './recovery';
+import {recoveryInfo,registerRecovery,dispatchRecovery,continuationSceneSource} from './recovery';
 import {checkpointFixture} from './geometry/checkpoint-fixture';
 import {read,save} from './store';
 import {executionSettings} from './execution-settings';
 import {automaticGeneration} from './quality';
+import {improvement} from './improvement-governance';
 function setup(){const f=checkpointFixture();mkdirSync(join(f.root,'materials'));save(join(f.root,'materials/texture-registry.json'),{});Object.assign(f.job,{status:'cancelled',stage:'generate',policy:{score:90},attempt:2});return f;}
 test('取消后的磁盘产物不依赖已有索引，恢复前校验且不修改原记录',()=>{const f=setup();try{const before=JSON.stringify(f.job),info=recoveryInfo(f.job,[],f.store,f.root);expect(info).toMatchObject({available:true,mode:'generation',completed:1,total:1});const id=registerRecovery(f.job,info,f.store,f.root);const restored=f.store.restore(id,{...f.job,pipelineVersion:{id:'new'}},join(f.root,'restored'));expect(restored.assets).toHaveLength(1);expect(restored.assets[0].value).toEqual(f.geometry);expect(JSON.stringify(f.job)).toBe(before);}finally{rmSync(f.root,{recursive:true,force:true})}});
 test('损坏资产剔除，取消前没产物可手动重新开始；已有合法快照优先保留',()=>{const f=setup();try{const cp=f.store.register(f.registration);save(join(f.registration.generationDir,'assets/shape/geometry.json'),{});let info=recoveryInfo(f.job,[],f.store,f.root);expect(info.completed).toBe(1);expect(info.source).toBe('checkpoint');rmSync(f.store.path(cp.id),{recursive:true});info=recoveryInfo(f.job,[],f.store,f.root);expect(info.completed).toBe(0);expect(info.missing).toBe(1);expect(info.issues.length).toBe(1);rmSync(join(f.root,'generation/layout.json'));expect(recoveryInfo(f.job,[],f.store,f.root)).toMatchObject({available:true,mode:'restart'});}finally{rmSync(f.root,{recursive:true,force:true})}});
 test('完整运行证据直接继续评分；完整执行但质量未通过也能复评，运行中的源任务不能恢复',()=>{const f=setup();try{for(const stage of ['judge','spec','gate','complete'])expect(recoveryInfo({...f.job,status:'failed',stage,runtime:{},plan:{},structure:{}},[],f.store,f.root).mode).toBe('assessment');expect(recoveryInfo({...f.job,status:'running'},[],f.store,f.root).available).toBe(false);expect(recoveryInfo({...f.job,status:'passed',stage:'complete',runtime:{},plan:{},structure:{}},[],f.store,f.root).available).toBe(false);}finally{rmSync(f.root,{recursive:true,force:true})}});
+test('无改善停止后已有完整分数不会被继续验收入口绕过，尚无分数的中断仍可恢复',async()=>{
+ const f=setup(),id=improvement.enter({prompt:'停止入口回归 '+f.root,images:[]},'test-job');
+ try{
+  improvement.markStopped(id,'连续两轮无有效改善');
+  const j={...f.job,status:'failed',stage:'gate',improvementId:id,runtime:{},plan:{},structure:{},quality:{score:85}};
+  expect(recoveryInfo(j,[],f.store,f.root)).toMatchObject({available:false,mode:'diagnosis'});
+  let creates=0;await expect(dispatchRecovery(j.id,{getJob:()=>j,listJobs:()=>[j],isExecuting:()=>false,inspect:(job)=>recoveryInfo(job,[],f.store,f.root),resolveSettings:async()=>({}),create:()=>{creates++;}})).rejects.toThrow('不能原样续跑');expect(creates).toBe(0);
+  expect(recoveryInfo({...j,quality:undefined,stage:'judge'},[],f.store,f.root)).toMatchObject({available:true,mode:'assessment'});
+ }finally{rmSync(improvement.path(id),{force:true});rmSync(f.root,{recursive:true,force:true});}
+});
 test('并发点击与刷新后再点只派发一次，保留输入模型政策，仍在清理时拒绝',async()=>{const f=setup();try{let count=0;const jobs:any[]=[f.job],deps={getJob:(id:string)=>jobs.find(j=>j.id===id),listJobs:()=>jobs,isExecuting:()=>false,inspect:(j:any,all:any[])=>recoveryInfo(j,all,f.store,f.root),resolveSettings:async(j:any)=>{await Bun.sleep(5);return j.modelSettings;},register:(j:any,i:any)=>registerRecovery(j,i,f.store,f.root),create:(source:any,info:any,settings:any,cp:string|null)=>{count++;const next={...source,id:'continued',status:'queued',recoverySourceJobId:source.id,reuseCheckpoint:cp,modelSettings:settings,validationKind:'checkpoint-continuation'};jobs.push(next);return next;}};
  const [a,b]=await Promise.all([dispatchRecovery(f.job.id,deps),dispatchRecovery(f.job.id,deps)]);expect(a.id).toBe(b.id);expect(count).toBe(1);expect((await dispatchRecovery(f.job.id,deps)).id).toBe(a.id);expect(count).toBe(1);expect(f.job.status).toBe('cancelled');expect(a.prompt).toBe(f.job.prompt);expect(a.images).toEqual(f.job.images);expect(a.policy).toEqual(f.job.policy);expect(automaticGeneration(a)).toBe(false);
  jobs.pop();await expect(dispatchRecovery(f.job.id,{...deps,isExecuting:()=>true})).rejects.toThrow();expect(count).toBe(1);
@@ -25,3 +36,27 @@ test('再次恢复已完成的场景时不退回旧资产检查点',()=>{const f
  }finally{rmSync(f.root,{recursive:true,force:true})}});
 
  test('已评分草稿继续缺失资产，未评分草稿先交付评分',()=>{const f=setup();try{const j={...f.job,status:'needs_review',stage:'assets',sceneProgram:{file:'generated-scene.json'},partialOutput:{missing:[{id:'shape'}]},quality:{score:60},runtime:{},structure:{},plan:read(f.registration.planFile)};const info=recoveryInfo(j,[],f.store,f.root);expect(info.mode).toBe('generation');expect(info.available).toBe(true);}finally{rmSync(f.root,{recursive:true,force:true})}});
+
+test('再次中断的续接保留祖先完整场景与原始链路，不退回从头生成',()=>{const f=setup();try{
+ const source={...f.job,id:'saved',status:'failed',stage:'runtime',executionRecoveryRoot:'root',sceneProgram:{file:'generated-scene.json'},plan:read(f.registration.planFile)};
+ const current={...source,id:'interrupted',stage:'graybox',sceneProgram:null,recoverySourceJobId:source.id,reuseSceneFrom:source.id,refineScene:false};
+ save(join(f.root,'generated-scene.json'),{program:{templates:[{id:'shape'}],instances:[{id:'one'}]},cameras:[{id:'view'}]});
+ const info=recoveryInfo(current,[source,current],f.store,f.root,()=>f.root);
+ expect(info).toMatchObject({available:true,mode:'scene',sceneSourceJobId:'saved'});
+ const twice={...current,id:'twice',recoverySourceJobId:current.id};
+ expect(continuationSceneSource(twice,[source,current,twice],()=>f.root)).toBe('saved');
+ expect(recoveryInfo(current,[source,current,{id:'active',status:'queued',recoverySourceJobId:current.id}],f.store,f.root,()=>f.root).mode).toBe('active');
+ for(const changed of [{executionRecoveryRoot:'other'},{prompt:'changed'},{policy:{score:50}},{recoverySourceJobId:'unrelated'},{profile:{...source.profile,engineSha:'different'}}]){
+  expect(recoveryInfo({...current,...changed},[source],f.store,f.root,()=>f.root)).toMatchObject({available:false,mode:'invalid-continuation'});
+ }
+ rmSync(join(f.root,'generated-scene.json'));
+ expect(recoveryInfo(current,[source],f.store,f.root,()=>f.root)).toMatchObject({available:false,mode:'invalid-continuation'});
+ }finally{rmSync(f.root,{recursive:true,force:true})}});
+
+test('待修正和部分场景不借祖先完整场景跳过尚未完成的工作',()=>{const f=setup();try{
+ const j={...f.job,reuseSceneFrom:'saved',executionRecoveryRoot:'root',recoverySourceJobId:'saved'};
+ expect(continuationSceneSource({...j,refineScene:true},[],()=>f.root)).toBe(null);
+ expect(continuationSceneSource({...j,partialOutput:{missing:['asset']}},[],()=>f.root)).toBe(null);
+ expect(recoveryInfo({...j,refineScene:true},[],f.store,f.root,()=>f.root).mode).toBe('refinement');
+ expect(recoveryInfo({...j,partialOutput:{missing:['asset']}},[],f.store,f.root,()=>f.root).mode).toBe('generation');
+ }finally{rmSync(f.root,{recursive:true,force:true})}});

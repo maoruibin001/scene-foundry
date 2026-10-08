@@ -1,4 +1,4 @@
-import {ATOMIC_QUALITY_VERSION,ATOMIC_PLAN_PROMPT,validateCriteria} from './atomic-criteria';
+import {ATOMIC_QUALITY_VERSION,ATOMIC_PLAN_PROMPT,validateCriteria,isAtomicQuality} from './atomic-criteria';
 import {callValidated} from './contracts';
 import {stable} from './validated-cache';
 import {validateGroundedPlan} from './grounding';
@@ -12,9 +12,9 @@ export function validateCriteriaMigration(value:any,frozen:any,prompt:string){
 }
 /** 旧需求只补原子标准，保存到新任务；真实调用仍受总预算与用户确认开关保护。 */
 export async function ensurePlanCriteria(plan:any,job:any,images:any[],dir:string,signal:AbortSignal){
- if(job.policy.version!==ATOMIC_QUALITY_VERSION)return plan;
+ if(!isAtomicQuality(job.policy.version))return plan;
  if(plan.acceptanceCriteria)return validateCriteria(plan);
  const frozen=structuredClone(plan),modelPlan={...frozen,requirements:frozen.requirements.map(({evidenceSpans,...r}:any)=>r)};
  const folder=join(dir,'criteria');mkdirSync(folder,{recursive:true});
- const result=await callValidated({role:'plan',schemaContext:{qualityVersion:ATOMIC_QUALITY_VERSION},modelSettings:job.modelSettings,images,signal,maxTokens:10000,system:ATOMIC_PLAN_PROMPT,text:JSON.stringify({originalPrompt:job.prompt,frozenPlan:modelPlan})},folder,v=>validateCriteriaMigration(v,frozen,job.prompt));save(join(dir,'criteria-migration.json'),{version:ATOMIC_QUALITY_VERSION,sourceRequirements:frozen.requirements,scope:'仅新增标准；历史计划与评分不修改'});return result.value;
+ const result=await callValidated({role:'plan',schemaContext:{qualityVersion:job.policy.version},modelSettings:job.modelSettings,images,signal,maxTokens:10000,system:ATOMIC_PLAN_PROMPT,text:JSON.stringify({originalPrompt:job.prompt,frozenPlan:modelPlan})},folder,v=>validateCriteriaMigration(v,frozen,job.prompt));save(join(dir,'criteria-migration.json'),{version:job.policy.version,sourceRequirements:frozen.requirements,scope:'仅新增标准；历史计划与评分不修改'});return result.value;
 }

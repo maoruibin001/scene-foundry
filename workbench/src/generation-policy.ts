@@ -2,7 +2,7 @@ import {existsSync} from 'node:fs';
 import {join,relative,sep} from 'node:path';
 import {RUNS,read} from './store';
 import type {ModelSettings} from './model-selection';
-export const OPTIMIZATION_POLICY={version:'reuse-parallel-v2',reuse:true,reasoning:'phase-capped',grayboxConcurrency:6,spatialPreflight:'coarse-v2',assetVisualChecks:3} as const;
+export const OPTIMIZATION_POLICY={version:'reuse-parallel-v2',reuse:true,reasoning:'phase-capped',grayboxConcurrency:6,spatialPreflight:'composition-v3',assetVisualChecks:3,assetContextViews:1} as const;
 const legacyRoles=new Set(['plan','scene-blockout','scene-surface','scene-repair-plan','scene-alignment']);
 const caps:Record<string,string>={plan:'medium','scene-observation':'high','scene-space':'high','scene-space-judge':'medium','scene-blockout':'medium','scene-surface':'high','scene-repair-plan':'high','scene-alignment':'high','geometry-asset':'xhigh','scene-refine':'xhigh'};
 /** 按阶段降低推理强度，绝不提升用户选择；精细档保留最终评分配置。 */
@@ -10,7 +10,7 @@ export function roleSettings(base:ModelSettings|undefined,role:string,policy:any
  if(!base)return undefined;
  if(policy?.version==='reuse-parallel-v1'&&policy.reasoning==='bounded-high'&&/^gpt-6-astra(?:-aihub-(?:openai|azure))?$/.test(base.model)&&base.reasoningEffort==='xhigh'&&(legacyRoles.has(role)||(policy.spatialPreflight==='coarse-v2'&&['scene-space','scene-space-judge'].includes(role))))return {...base,reasoningEffort:'high'};
  if(policy?.version!==OPTIMIZATION_POLICY.version||policy.reasoning!=='phase-capped')return {...base};
- const standardCaps:Record<string,string>={plan:'medium','scene-observation':'medium','scene-space':'medium','scene-space-judge':'medium','scene-blockout':'medium','scene-surface':'medium','geometry-asset':'high','scene-refine':'high',judge:'high'};
+ const standardCaps:Record<string,string>={plan:'medium','scene-observation':'medium','scene-space':'high','scene-space-judge':'medium','scene-blockout':'medium','scene-surface':'high','geometry-asset':'high','scene-refine':'high',judge:'high'};
  const selectedCaps=policy?.matchingLevel==='standard'?standardCaps:caps;
  const levels=['none','minimal','low','medium','high','xhigh','max','ultra'],current=levels.indexOf(base.reasoningEffort),cap=levels.indexOf(selectedCaps[role]);
  // 模型未知时不猜测其支持档位；保留已选配置。

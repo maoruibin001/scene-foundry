@@ -71,3 +71,12 @@ test('恢复3.2分但仅比历史最佳增加1.3分必须复盘，输入和分�
 test('v6相同原子契约的复评必须成为真实基线，条目变化不可混比',()=>{const f=fixture(true);try{const same=f.add('same',3.4),changed=f.add('changed',4);changed.plan.acceptanceCriteria[0].description='不同的通过要求';const r=verifiedBestScore(f.job,{jobs:[same,changed],locate:f.locate});expect(r.verifiedCount).toBe(1);expect(r.best?.jobId).toBe('same');expect(r.best?.score).toBe(same.quality.score);}finally{f.dispose();}});
 
 test('纯复评遗留的修复选择结果不排除真实基线，生成退步仍排除',()=>{const f=fixture(true);try{const a=f.add('reeval',3.4),b=f.add('repair',4);a.validationKind='assessment-continuation';for(const c of [a,b])f.write(join(f.root,c.id,'repair-outcome.json'),{selection:{eligible:false}});const r=verifiedBestScore(f.job,{jobs:[a,b],locate:f.locate});expect(r.best?.jobId).toBe(a.id);expect(r.verifiedCount).toBe(1);expect(r.excluded[0].jobId).toBe(b.id);}finally{f.dispose();}});
+
+test('历史评分按保存的阶段策略核对真实深度，标准档high不是xhigh路由错误',()=>{const f=fixture(true);try{
+ f.job.profile.judgeModel='gpt-6-astra-aihub-openai';f.job.profile.reasoningEffort='xhigh';
+ const capped=f.add('capped',3.4),wrong=f.add('wrong-depth',4),uncapped=f.add('uncapped',4);
+ for(const c of [capped,wrong])c.optimizationPolicy={version:'reuse-parallel-v2',reasoning:'phase-capped',matchingLevel:'standard'};
+ for(const c of [capped,wrong,uncapped])f.write(join(f.root,c.id,'judge-receipt.json'),{stopReason:'completed',cliModel:'gpt-6-astra-aihub-openai',cliReasoningEffort:c===wrong?'medium':'high',executionRoute:{configurationSha256:'route'}});
+ const r=verifiedBestScore(f.job,{jobs:[capped,wrong,uncapped],locate:f.locate});
+ expect(r.best?.jobId).toBe(capped.id);expect(r.verifiedCount).toBe(1);expect(r.excluded.map(e=>e.jobId).sort()).toEqual(['uncapped','wrong-depth']);
+}finally{f.dispose();}});

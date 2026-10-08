@@ -1,3 +1,6 @@
+import {bindPointShadows} from './point-shadows';
+import {bindReflectionProbes,reflectionProbeEntities,REFLECTION_COMPONENT_BOOTSTRAP} from './reflection-probes';
+import {bindCameraOutput} from './camera-output';
 import {spotEntities,bindDirectionalShadow,directionalShadowFields} from './lighting';
 import {lstatSync,mkdirSync,readFileSync,writeFileSync,copyFileSync,existsSync,symlinkSync} from 'node:fs';
 import {join,resolve} from 'node:path';
@@ -23,10 +26,18 @@ export function prepareGeometryProject(root:string,program:GeometryProgram,textu
  const existing=existsSync(join(root,'brief.json'))?read(join(root,'brief.json')):null;
  const brief={...pin,id:options?.id??existing?.id??'geometry-'+randomUUID(),name:program.name,semanticBrief:options?.summary??'由统一几何操作组合的 ForgeaX 场景；本产物只验证编译和运行，不代表视觉还原通过。',entry:'generated.scene.ts',exportName:'generated',args:[{program,textures}],packageId:existing?.packageId??randomUUID(),sourceKey:'scene/generated',budget:{maxTriangles:250000,maxMaterials:128,consumerBuildMs:90000}};
  save(join(root,'brief.json'),brief);save(join(root,'geometry-program.json'),program);
+ save(join(root,'surface-detail-provenance.json'),{version:'procedural-surface-v1',source:'explicit-material-declaration',measuredFromPhoto:false,materials:program.materials.filter(m=>m.surfaceDetail).map(m=>({materialId:m.id,baseTextureId:m.textureId,parameters:m.surfaceDetail,generatedChannels:['baseColorTexture','normalTexture','metallicRoughnessTexture']})),scope:'确定性程序化变化，不代表已恢复参考照片的逐点磨损或实测PBR；质量仍由真实画面验收'});
+ save(join(root,'material-emission-export.json'),{version:'material-emission-v1',source:'explicit-material-declaration',materials:program.materials.filter(m=>m.emission!=null).map(m=>({materialId:m.id,emission:m.emission,compiled:result.meshes.filter(mesh=>mesh.geometry.material.id===m.id).map(mesh=>({meshId:mesh.name,emissive:mesh.geometry.material.surface.emissive,emissiveIntensity:mesh.geometry.material.surface.emissiveIntensity}))})),scope:'表面可见自发光，不照亮邻近物体，不代表间接光、泛光或真实灯罩散射；实际画面独立验收'});
  copyFileSync(join(W,'src/geometry/program.scene.txt'),join(source,'generated.scene.ts'));
- for(const f of ['mesh.ts','program.ts','curved-surfaces.ts','constraints.ts','distribution.ts','surface-mapping.ts','texture-bundle.ts'])copyFileSync(join(W,'src/geometry',f),join(source,'geometry',f));
+ for(const f of ['mesh.ts','program.ts','branch-crown.ts','curved-surfaces.ts','bezier-patch.ts','constraints.ts','distribution.ts','surface-mapping.ts','texture-bundle.ts','surface-detail.ts','material-emission.ts'])copyFileSync(join(W,'src/geometry',f),join(source,'geometry',f));
  copyFileSync(join(W,'src/geometry/export.ts'),join(source,'export-adapter.txt'));
- const cfg=read(join(P,'game/forge.json'));cfg.id=brief.id;cfg.name=program.name;save(join(game,'forge.json'),cfg);save(join(game,'package.json'),{name:'geometry-program-scene',private:true,type:'module',packageManager:'pnpm@11.7.0'});
+ const cfg=read(join(P,'game/forge.json'));cfg.id=brief.id;cfg.name=program.name;
+ if(options?.scene.lighting.reflectionProbes?.length){
+  // Empty manifest injection admits this vocabulary plugin before defaultScene instantiation.
+  cfg.plugins.unshift({id:'reflection-components',name:'./assets/reflection-components.plugin.ts',realm:'engine',inject:[]});
+  writeFileSync(join(assets,'reflection-components.plugin.ts'),REFLECTION_COMPONENT_BOOTSTRAP);
+ }
+ save(join(game,'forge.json'),cfg);save(join(game,'package.json'),{name:'geometry-program-scene',private:true,type:'module',packageManager:'pnpm@11.7.0'});
  if(!lstatSync(join(game,'node_modules/@forgeax/engine'),{throwIfNoEntry:false}))symlinkSync(join(ENGINE,'packages/engine'),join(game,'node_modules/@forgeax/engine'),'dir');
  let world=readFileSync(join(P,'game/assets/world.pack.ts'),'utf8').replace('const pos=[20,10,20] as const;',`const pos=${JSON.stringify([c[0]+r/Math.sqrt(2),c[1]+h,c[2]+r/Math.sqrt(2)])} as const;`).replace('[0,5,0]',JSON.stringify(c)).replace('Micro garden recording scene','通用几何场景').replace('Micro garden authored content','组合几何');
  const toEngine=(v:number[])=>[v[0],v[2],-v[1]],clear=options?cameraClearance(result.meshes):null;
@@ -49,6 +60,9 @@ export function prepareGeometryProject(root:string,program:GeometryProgram,textu
   }
   save(join(root,'lighting-export.json'),{version:'engine-lighting-v2',exportedDirectionalShadow:directionalShadowFields(options.scene.lighting),units:{localIntensity:'candela',range:'meters',cone:'half-angle-degrees'},authored:options.scene.lighting,exportedSpots:spots});
  }
+ if(options){world=bindPointShadows(world,options.scene.lighting.points);save(join(root,'point-shadow-export.json'),{version:'point-shadow-v1',authored:options.scene.lighting.points.map(p=>p.shadow??null),scope:'Fixed Engine geometric point-light occlusion; no quality assertion'});}
+ if(options){world=bindCameraOutput(world,options.scene.lighting.cameraOutput);save(join(root,'camera-output-export.json'),{version:'camera-output-v1',authored:options.scene.lighting.cameraOutput??null,legacyDefault:options.scene.lighting.cameraOutput==null,scope:'真实相机显示参数；不表示质量通过'});}
+ if(options){world=bindReflectionProbes(world,options.scene.lighting.reflectionProbes);save(join(root,'reflection-probe-export.json'),{version:'local-reflection-probe-v1',authored:options.scene.lighting.reflectionProbes??null,entities:reflectionProbeEntities(options.scene.lighting.reflectionProbes),scope:'Fixed Engine static specular capture; no diffuse GI or new illumination; actual runtime publication required'});}
  writeFileSync(join(assets,'world.pack.ts'),world);
  copyFileSync(join(W,'src/camera-v3.txt'),join(assets,'camera.plugin.ts'));copyFileSync(join(W,'src/ui-v3.txt'),join(assets,'ui.plugin.ts'));
  if(views){
@@ -62,6 +76,6 @@ export function prepareGeometryProject(root:string,program:GeometryProgram,textu
   ui=ui.replace('return()=>{channel.close();',"const focus=(e:PointerEvent)=>{if(e.target instanceof HTMLCanvasElement){e.target.tabIndex=0;e.target.focus();}};document.addEventListener('pointerdown',focus);return()=>{document.removeEventListener('pointerdown',focus);channel.close();");writeFileSync(join(assets,'ui.plugin.ts'),ui);
  }
  const provenance=options?{kind:'general-scene-generation',validationKind:'generation',...options.provenance}:{kind:'generic-geometry-compiler',validationKind:'compiler-smoke',referenceImages:[]};
- save(join(assets,'scene-audit.json'),{name:program.name,channelId:brief.packageId,specSha256:createHash('sha256').update(readFileSync(join(W,'spec/production.md'))).digest('hex'),camera,...(views?{views}:{}),parts:objects.map(o=>({id:o.id,entityId:o.entityId})),entities:program.instances,landmarks:objects.map(o=>({...o,position:[o.position[0],o.position[2]+o.size[2]/2,-o.position[1]]})),geometry:{nonFlat:max.every((v,i)=>v-min[i]>.1)},provenance:{...provenance,engineSha:pin.engineSha,generatorSha:pin.generatorSha,qualityAssessment:'not-run'}});
+ save(join(assets,'scene-audit.json'),{name:program.name,channelId:brief.packageId,specSha256:createHash('sha256').update(readFileSync(join(W,'spec/production.md'))).digest('hex'),camera,...(options?.scene.lighting.reflectionProbes?.length?{reflectionProbeCount:options.scene.lighting.reflectionProbes.length}:{}),...(views?{views}:{}),parts:objects.map(o=>({id:o.id,entityId:o.entityId})),entities:program.instances,landmarks:objects.map(o=>({...o,position:[o.position[0],o.position[2]+o.size[2]/2,-o.position[1]]})),geometry:{nonFlat:max.every((v,i)=>v-min[i]>.1)},provenance:{...provenance,engineSha:pin.engineSha,generatorSha:pin.generatorSha,qualityAssessment:'not-run'}});
  return {brief,objects,meshes:result.meshes.length,triangles:result.triangles,materials:result.materialCount,bounds:{min,max}};
 }

@@ -6,6 +6,18 @@ import {CheckpointStore} from './checkpoints';
 import {digest,save} from '../store';
 import {validateGroundedPlan} from '../grounding';
 import {checkpointFixture as fixture} from './checkpoint-fixture';
+test('连续检查点恢复保留原图观察和裁切坐标；摘要保护防止静默变更',()=>{const f=fixture();try{
+ const observation={landmarks:[{id:'pool',views:[{referenceIndex:1,box:[.2,.1,.8,.9]}]}]};
+ save(join(f.registration.generationDir,'reference-observations.json'),observation);
+ const first=f.store.register(f.registration),nextDir=join(f.root,'next');
+ f.store.restore(first.id,f.job,nextDir);
+ expect(JSON.parse(readFileSync(join(nextDir,'reference-observations.json'),'utf8'))).toEqual(observation);
+ const second=f.store.register({...f.registration,generationDir:nextDir}),thirdDir=join(f.root,'third');
+ f.store.restore(second.id,f.job,thirdDir);
+ expect(JSON.parse(readFileSync(join(thirdDir,'reference-observations.json'),'utf8'))).toEqual(observation);
+ writeFileSync(join(f.store.path(first.id),'payload/reference-observations.json'),'{}');
+ expect(()=>f.store.restore(first.id,f.job,join(f.root,'tampered'))).toThrow('已改变');
+}finally{rmSync(f.root,{recursive:true,force:true});}});
 test('检查点复用真实几何、保留原版本，并在新候选下重新校验',()=>{const f=fixture();try{
  const m=f.store.register(f.registration);expect(m.assets).toHaveLength(1);expect(f.store.register(f.registration).id).toBe(m.id);
  const next={...f.job,pipelineVersion:{id:'candidate-b'}},out=f.store.restore(m.id,next,join(f.root,'restored'));

@@ -4,6 +4,7 @@ import {digest,listJobs,read,runDir} from '../store';
 import {qualityGate} from '../quality';
 import {comparableAssessment} from './refinement-baseline';
 import {assessmentOnly} from '../assessment-kind';
+import {roleSettings} from '../generation-policy';
 
 const same=(a:any,b:any)=>JSON.stringify(a)===JSON.stringify(b);
 const terminal=new Set(['passed','failed','needs_review','cancelled','blocked']);
@@ -37,7 +38,8 @@ export function verifiedBestScore(job:any,options:{jobs?:any[];locate?:(id:strin
     if([...review.requirements,...review.dimensions,...(review.criteria??[])].some((r:any)=>r.frames.some((f:string)=>!frames.has(f))))throw Error('原评审引用了不存在的画面');
     // 轮次快照允许复用同一任务保存的调用回执，但必须与冻结评审配置一致。
     const receipt=read(join(existsSync(join(dir,'judge-receipt.json'))?dir:root,'judge-receipt.json'));
-    if(receipt.stopReason!=='completed'||receipt.cliModel!==cp.judgeModel||receipt.cliReasoningEffort!==cp.reasoningEffort||receipt.executionRoute?.configurationSha256!==cp.executionRoute?.configurationSha256)throw Error('评审调用与模型路由不一致');
+    const expected=roleSettings({model:cp.judgeModel,reasoningEffort:cp.reasoningEffort},'judge',candidate.optimizationPolicy)!;
+    if(receipt.stopReason!=='completed'||receipt.cliModel!==expected.model||receipt.cliReasoningEffort!==expected.reasoningEffort||receipt.executionRoute?.configurationSha256!==cp.executionRoute?.configurationSha256)throw Error('评审调用与模型路由不一致');
     results.push({jobId:candidate.id,iteration:round,score:quality.score,endedAt,pipelineVersion:candidate.pipelineVersion,qualitySha256:digest(readFileSync(join(dir,'quality.json'))),frameHashes:runtime.hashes,sceneDigest:digest(JSON.stringify(read(join(dir,'generated-scene.json')))),validationKind:candidate.validationKind??'generation'});
    }catch(error){excluded.push({jobId:candidate.id,iteration:round,reason:String(error)});}
   }

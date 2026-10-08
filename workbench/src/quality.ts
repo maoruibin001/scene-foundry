@@ -1,16 +1,17 @@
 import {executionInterrupted} from './provider-recovery';
-import {ATOMIC_QUALITY_VERSION,aggregateCriteria} from './atomic-criteria';
+import {ATOMIC_QUALITY_VERSION,EVIDENCE_QUALITY_VERSION,isAtomicQuality,aggregateCriteria} from './atomic-criteria';
 import {calibrationGate} from './calibration';
 export const MODES = ['prompt','image','image_prompt'] as const;
 export type Mode = typeof MODES[number];
 const LEGACY_WEIGHTS = {coverage:40,spatial:25,shape:15,material:10,readability:10};
 const V4_WEIGHTS = {coverage:32,spatial:40,shape:12,material:8,readability:8};
 const CURRENT_WEIGHTS = {coverage:28,spatial:32,shape:12,material:20,readability:8};
-const VERSION_WEIGHTS:Record<string,typeof CURRENT_WEIGHTS> = {'scene-quality-v2':LEGACY_WEIGHTS,'scene-quality-v3':LEGACY_WEIGHTS,'scene-quality-v4':V4_WEIGHTS,'scene-quality-v4.1':CURRENT_WEIGHTS,'scene-quality-v6':CURRENT_WEIGHTS};
-export type QualityPolicy = {version:string;score:number;dimensionFloor:number;confidenceFloor:number;successRate:number;minPerMode:number;minWilsonLower:number;maxAttempts:number;minSubmittedFps:number;dimensionWeights?:Record<string,number>};
+const VERSION_WEIGHTS:Record<string,typeof CURRENT_WEIGHTS> = {'scene-quality-v2':LEGACY_WEIGHTS,'scene-quality-v3':LEGACY_WEIGHTS,'scene-quality-v4':V4_WEIGHTS,'scene-quality-v4.1':CURRENT_WEIGHTS,'scene-quality-v6':CURRENT_WEIGHTS,'scene-quality-v7':CURRENT_WEIGHTS};
+export type QualityPolicy = {deliveryStandard?:'basic70'|'strict';version:string;score:number;dimensionFloor:number;confidenceFloor:number;successRate:number;minPerMode:number;minWilsonLower:number;maxAttempts:number;minSubmittedFps:number;dimensionWeights?:Record<string,number>};
 export const DEFAULT_POLICY:QualityPolicy = {version:'scene-quality-v4.1', dimensionWeights:{...CURRENT_WEIGHTS}, score:80, dimensionFloor:3, confidenceFloor:0.65, successRate:0.90, minPerMode:30, minWilsonLower:0.80, maxAttempts:2, minSubmittedFps:10};
 export const ATOMIC_POLICY:QualityPolicy={...DEFAULT_POLICY,version:ATOMIC_QUALITY_VERSION,dimensionWeights:{...CURRENT_WEIGHTS}};
-export function creationPolicy(){return process.env.PIPELINE_QUALITY_VERSION===ATOMIC_QUALITY_VERSION?{...ATOMIC_POLICY}: {...DEFAULT_POLICY};}
+export const EVIDENCE_POLICY:QualityPolicy={...DEFAULT_POLICY,version:EVIDENCE_QUALITY_VERSION,dimensionWeights:{...CURRENT_WEIGHTS}};
+export function creationPolicy(){const policy=process.env.PIPELINE_QUALITY_VERSION===EVIDENCE_QUALITY_VERSION?{...EVIDENCE_POLICY}:process.env.PIPELINE_QUALITY_VERSION===ATOMIC_QUALITY_VERSION?{...ATOMIC_POLICY}: {...DEFAULT_POLICY};if(process.env.PIPELINE_DELIVERY_STANDARD==='basic70'){if(policy.version!==EVIDENCE_QUALITY_VERSION)throw Error('基础70分交付需要完整原始维度评分');return {...policy,deliveryStandard:'basic70' as const};}return policy;}
 export const DIMENSIONS = [
  {id:'coverage',label:'需求实现',weight:CURRENT_WEIGHTS.coverage}, {id:'spatial',label:'空间与构图',weight:CURRENT_WEIGHTS.spatial},
  {id:'shape',label:'主体形态',weight:CURRENT_WEIGHTS.shape}, {id:'material',label:'材质与色彩',weight:CURRENT_WEIGHTS.material},
@@ -36,18 +37,20 @@ export function qualityGate(plan:any,review:any,hard:Record<string,boolean>,poli
  const verdicts=new Map<string,any>();
  for(const v of review.requirements){if(verdicts.has(v.id)||!['met','partial','missing'].includes(v.verdict)||typeof v.reason!=='string'||!Array.isArray(v.frames)||!v.frames.length)throw Error('需求评估条目无效');verdicts.set(v.id,v);}
  if(verdicts.size!==plan.requirements.length)throw Error('评估必须逐项覆盖冻结需求');
- const atomic=policy.version===ATOMIC_QUALITY_VERSION?aggregateCriteria(plan,review):null;
+ const atomic=isAtomicQuality(policy.version)?aggregateCriteria(plan,review,policy.version):null;
  let totalWeight=0,coverage=0;const criticalMissing:string[]=[];
  for(const req of plan.requirements){const v=verdicts.get(req.id);if(!v)throw Error('评估缺少需求 '+req.id);const w=req.weight??1;totalWeight+=w;coverage+=w*(v.verdict==='met'?1:v.verdict==='partial'?0.5:0);if(req.critical&&v.verdict!=='met')criticalMissing.push(req.id);}
  const dimensions=dimensionsFor(policy).map(d=>{const v=review.dimensions.find((v:any)=>v.id===d.id);if(!v||!Number.isFinite(v.score)||v.score<0||v.score>5||!Array.isArray(v.frames)||!v.frames.length||!v.reason)throw Error('维度评估无效 '+d.id);const a=atomic?.dimensions.find(x=>x.id===d.id),score=a?a.score:d.id==='coverage'?5*coverage/totalWeight:v.score;return {...d,score,reason:a?.reason??v.reason,frames:a?.frames??v.frames,points:score/5*d.weight};});
  if(atomic)criticalMissing.splice(0,criticalMissing.length,...atomic.criticalMissing as string[]);
  const score=Math.round(dimensions.reduce((n,d)=>n+d.points,0)*10)/10;
  const hardFailures=HARD_CHECKS.filter(k=>hard[k]!==true),lowDimensions=dimensions.filter(d=>d.score<policy.dimensionFloor).map(d=>d.id);
- const reasons=[...hardFailures.map(k=>'运行硬检查失败：'+k),...criticalMissing.map(k=>'关键需求未完整实现：'+k),...lowDimensions.map(k=>'维度低于底线：'+k),...(score<policy.score?['实现度未达标']:[])];
+ // v7 要求整体真实视觉判断同时达标，防止大量存在性条目掩盖主要画面差距。
+ const diagnostic=policy.version===EVIDENCE_QUALITY_VERSION?{score:Math.round(dimensionsFor(policy).reduce((n,d)=>n+review.dimensions.find((v:any)=>v.id===d.id).score*d.weight/5,0)*100)/100,lowDimensions:review.dimensions.filter((d:any)=>d.score<policy.dimensionFloor).map((d:any)=>d.id)}:null;
+ const reasons=[...hardFailures.map(k=>'运行硬检查失败：'+k),...criticalMissing.map(k=>'关键需求未完整实现：'+k),...lowDimensions.map(k=>'维度低于底线：'+k),...(score<policy.score?['实现度未达标']:[]),...(diagnostic?[...diagnostic.lowDimensions.map(k=>'整体视觉维度低于底线：'+k),...(diagnostic.score<policy.score?['整体视觉实现度未达标']:[])]:[])];
  const confidenceValid=Number.isFinite(review.confidence)&&review.confidence>=0&&review.confidence<=1;
  const status=reasons.length?'failed':!confidenceValid||review.confidence<policy.confidenceFloor?'needs_review':'passed';
  if(!confidenceValid)reasons.push('评估置信度不符合 0..1 契约，需要人工复核');else if(review.confidence<policy.confidenceFloor)reasons.push('评估置信度低于底线');
- return {...(atomic?{requirements:atomic.requirements}:{}),status,score,grade:score>=90?'A':score>=80?'B':score>=70?'C':'D',dimensions,hardFailures,criticalMissing,reasons,confidence:confidenceValid?review.confidence:null,rawConfidence:review.confidence,confidenceValid,policy:{...policy,dimensionWeights:Object.fromEntries(dimensions.map(d=>[d.id,d.weight]))}};
+ return {...(atomic?{requirements:atomic.requirements}:{}),...(diagnostic?{diagnostic}:{}),status,score,grade:score>=90?'A':score>=80?'B':score>=70?'C':'D',dimensions,hardFailures,criticalMissing,reasons,confidence:confidenceValid?review.confidence:null,rawConfidence:review.confidence,confidenceValid,policy:{...policy,dimensionWeights:Object.fromEntries(dimensions.map(d=>[d.id,d.weight]))}};
 }
 export function wilson(passed:number,n:number){
  if(!n)return {lower:0,upper:1};

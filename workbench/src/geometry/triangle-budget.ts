@@ -1,9 +1,10 @@
 import {GEOMETRY_LIMITS,shapeTriangles,type GeometryProgram} from './program';
+import {assetPartCapacity} from './surface-part-budget';
 /** Allocate the expanded budget across all repeated templates, before parallel generation. */
 export function assetTriangleBudget(layout:any,brief:any){
  const count=layout.program.instances.filter((i:any)=>i.template===brief.id).length;
- const weight=layout.program.instances.reduce((n:number,i:any)=>n+layout.program.templates.find((t:any)=>t.id===i.template).maxParts,0);
- const maximum=Math.floor(GEOMETRY_LIMITS.triangles*.95*brief.maxParts/weight);
+ const weight=layout.program.instances.reduce((n:number,i:any)=>n+assetPartCapacity(layout,layout.program.templates.find((t:any)=>t.id===i.template)).maxParts,0);
+ const maximum=Math.floor(GEOMETRY_LIMITS.triangles*.95*assetPartCapacity(layout,brief).maxParts/weight);
  return {maximum,instances:count,expandedMaximum:maximum*count,sceneMaximum:GEOMETRY_LIMITS.triangles};
 }
 export function estimateTriangles(p:GeometryProgram){return p.instances.reduce((n,i)=>n+p.templates.find(t=>t.id===i.template)!.parts.reduce((v,x)=>v+shapeTriangles(x.shape),0),0);}

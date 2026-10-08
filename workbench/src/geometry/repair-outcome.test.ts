@@ -66,3 +66,5 @@ test('逐轮保存选择本轮修复来源，校验实际场景回执，旧评�
 
  test('真实对照仅辅助复盘，不覆盖原分或冒充生成提升',()=>{const i:any=input();i.before.score=58.4;i.after.score=60.9;i.historicalBest={best:{score:58.6}};i.scoreControls={controls:[{matchesSource:true,repeatScore:60,originalScore:58.4}]};const r=repairOutcome(i);expect(r.scoreSignal).toBe('uncertain_gain');expect(r.comparison.gainOverBest).toBe(2.3);expect(r.comparison.gainOverControl).toBe(.9);expect(r.comparison.scoreBefore).toBe(58.4);expect(r.requiresDiagnosis).toBe(true);expect(r.signals.map(s=>s.kind)).toContain('score_repeatability');});
  test('其他场景对照只能说明波动，不能据其分数计算本轮收益',()=>{const i:any=input();i.scoreControls={controls:[{matchesSource:false,repeatScore:95}]};expect(repairOutcome(i).comparison.gainOverControl).toBe(null);});
+
+test('真实关闭关键未完成项不被高总分波动误标为无进展',()=>{const i:any=input();i.before={...i.before,score:95,criticalMissing:['R1']};i.after={...i.after,score:94.5,criticalMissing:[]};i.reviewAfter.requirements[0].verdict='met';const r=repairOutcome(i);expect(r.scoreSignal).toBe('regression');expect(r.selection.closed).toContain('criticalMissing:R1');expect(r.requiresDiagnosis).toBe(false);expect(r.comparison.scoreBefore).toBe(95);});

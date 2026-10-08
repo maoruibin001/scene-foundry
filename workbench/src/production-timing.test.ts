@@ -28,6 +28,30 @@ test('缺失来源不伪造总耗时；未知执行时间不填零；待恢复�
  const b=row('b',1000,3000);delete b.startedAt;expect(productionTimeline(b,[b],[],9000).executionMs).toBeNull();
  const c=row('c',1000,3000);const d=productionTimeline(c,[c],[],9000,['c']);expect(d.totalMs).toBe(8000);expect(d.unexecutedMs).toBe(6000);
 });
+const queuedCancellation=(id:string,submitted:number,cancelled:number,extra:any={})=>({id,prompt:'同一场景',images:[{id:'a'}],createdAt:iso(submitted),status:'cancelled',stage:'input',cancelRequestedAt:cancelled,endedAt:cancelled,stages:{input:{status:'passed',startedAt:submitted,endedAt:submitted,durationMs:0}},events:[{at:iso(cancelled),type:'cancel',message:'用户取消'}],...extra});
+test('明确排队期间取消计执行零，整条恢复链保留原始等待与执行并集',()=>{
+ const a=row('a',1000,4000),cancelled=queuedCancellation('cancelled',5000,6000,{retryRoot:'a'}),b=row('b',9000,null,{recoverySourceJobId:'a'});
+ const d=productionTimeline(b,[a,cancelled,b],[],12000);
+ expect(d.startedAt).toBe(1000);expect(d.totalMs).toBe(11000);expect(d.executionMs).toBe(5800);expect(d.queueMs).toBe(1200);expect(d.unexecutedMs).toBe(4000);expect(d.successAt).toBeNull();
+ expect(d.runs.find(r=>r.id==='cancelled')?.executionMs).toBe(0);expect(d.executionRecoveries).toBe(1);
+});
+test('缺少取消证据、已有阶段执行或非法时间，仍保留未知执行而不填零',()=>{
+ const good=queuedCancellation('a',1000,3000);
+ for(const invalid of [
+  {...good,cancelRequestedAt:undefined}, {...good,events:[]}, {...good,cancelRequestedAt:500},
+  {...good,stages:{...good.stages,plan:{status:'failed',startedAt:1500,endedAt:2000}}},
+  {...good,generationTimeline:[{label:'生成',startedAt:1500}]},
+  {...good,stageAttempts:{input:[good.stages.input]}},
+  {...good,events:[{type:'stage',at:iso(2000)},{type:'cancel',at:iso(3000)}]},
+  {...good,startedAt:'invalid'}
+ ])expect(productionTimeline(invalid,[invalid],[],9000).executionMs).toBeNull();
+ const executed={...good,startedAt:2000};expect(productionTimeline(executed,[executed],[],9000).executionMs).toBe(1000);
+});
+test('排队取消与并行执行重叠不重复累计，也不延长已经成功的制作时间',()=>{
+ const a=row('a',1000,9000),cancelled=queuedCancellation('cancelled',3000,5000,{retryRoot:'a'}),marks:any=[{jobId:'a',kind:'evaluation',at:7000,iteration:0,formalPassed:true}];
+ const d=productionTimeline(a,[a,cancelled],marks,12000);
+ expect(d.totalMs).toBe(6000);expect(d.successAt).toBe(7000);expect(d.executionMs).toBe(5900);expect(d.queueMs).toBe(2100);expect(d.unexecutedMs).toBe(0);
+});
 test('重评延续制作根时间但不增加质量轮次，跨天显示日时分秒',()=>{
  const a=row('a',1000,3000),b=row('b',5000,7000,{reuseAssessmentFrom:'a'}),d=productionTimeline(b,[a,b],[{jobId:'b',kind:'evaluation',at:7000,iteration:null,stage70Passed:true}],10000);
  expect(d.totalMs).toBe(6000);expect(d.assessedRounds).toBe(0);expect(d.reassessments).toBe(1);expect(productionDuration(90061000)).toBe('1 天 1 小时 1 分 1 秒');expect(productionTimingHTML(d)).toContain('当前已停止，尚未正式通过');
@@ -47,4 +71,32 @@ test('重评延续制作根时间但不增加质量轮次，跨天显示日时�
 test('草稿高分只记录草稿里程碑，不算成品轮次或阶段通过',()=>{
  const a=row('a',1000,9000),d=productionTimeline(a,[a],[{jobId:'a',kind:'partial',at:5000},{jobId:'a',kind:'evaluation',scope:'partial',at:8000,iteration:0,formalScore:90,formalPassed:true,stage70Passed:true}],12000);
  expect(d.firstOutputAt).toBe(5000);expect(d.firstSceneAt).toBeNull();expect(d.firstPartialAssessmentAt).toBe(8000);expect(d.firstAssessmentAt).toBeNull();expect(d.assessedRounds).toBe(0);expect(d.partialAssessments).toBe(1);expect(d.stage70At).toBeNull();expect(d.successAt).toBeNull();expect(productionTimingHTML(d)).toContain('1 次草稿评分');
+});
+test('修正前旧画面高分只计复评，不能新增成品或伪造首次成功',()=>{
+ const a=row('a',1000,3000),b=row('b',4000,8000,{refineScene:true,reuseSceneFrom:'a'});
+ const m:any={jobId:'b',kind:'baseline-reassessment',at:5000,formalScore:99,formalPassed:true,stage70Passed:true};
+ const d=productionTimeline(b,[a,b],[m,m],10000);
+ expect(d.totalMs).toBe(7000);expect(d.assessedRounds).toBe(0);expect(d.reassessments).toBe(1);expect(d.baselineReassessments).toBe(1);expect(d.firstAssessmentAt).toBeNull();expect(d.successAt).toBeNull();expect(d.stage70At).toBeNull();
+ expect(productionTimingHTML(d)).toContain('1 次修正前旧画面基线复评');
+});
+test('仅开始或失败的独立复评不计完成复评，真实评估后只计一次',()=>{
+ const a=row('a',1000,3000),b=row('b',4000,8000,{reuseAssessmentFrom:'a'});
+ expect(productionTimeline(b,[a,b],[],10000).reassessments).toBe(0);
+ const m:any={jobId:'b',kind:'evaluation',at:7000,iteration:null};
+ expect(productionTimeline(b,[a,b],[m,m],10000).standaloneReassessments).toBe(1);
+});
+test('仅实际完成且属于本次执行的基线文件计数，复制旧证据或未完成不计',()=>{
+ const parent=crypto.randomUUID(),id=crypto.randomUUID(),dir=join(RUNS,id),baseline=join(dir,'generation/refinement/baseline');
+ const save=(p:string,v:any)=>writeFileSync(p,JSON.stringify(v));
+ try{
+  mkdirSync(join(RUNS,parent),{recursive:true});mkdirSync(baseline,{recursive:true});
+  save(join(RUNS,parent,'job.json'),row(parent,1000,3000));save(join(dir,'job.json'),row(id,4000,8000,{refineScene:true,reuseSceneFrom:parent}));
+  const proof={sourceJobId:parent,score:81.2,modelReceipt:{stopReason:'completed'}};
+  save(join(baseline,'baseline.json'),proof);save(join(baseline,'quality.json'),{score:81.2,status:'failed'});
+  for(const [endedAt,status,expected] of [[5000,'passed',1],[3000,'passed',0],[5000,'failed',0]] as const){
+   save(join(baseline,'judge-attempts.json'),[{role:'judge',status,endedAt}]);const d=productionTimingSnapshot(id,10000);
+   expect(d.baselineReassessments).toBe(expected);expect(d.assessedRounds).toBe(0);expect(d.totalMs).toBe(7000);expect(d.successAt).toBeNull();
+  }
+  save(join(baseline,'judge-attempts.json'),[{role:'judge',status:'passed',endedAt:5000}]);save(join(baseline,'quality.json'),{score:99});expect(productionTimingSnapshot(id,10000).reassessments).toBe(0);
+ }finally{rmSync(join(RUNS,parent),{recursive:true,force:true});rmSync(dir,{recursive:true,force:true});}
 });

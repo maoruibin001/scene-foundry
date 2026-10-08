@@ -47,7 +47,7 @@ export function inspectOpenings(scene:{program:GeometryProgram;spatialOpenings?:
  const openings=(scene.spatialOpenings??[]).filter(o=>!options.assetTemplateId||scene.program.instances.find(i=>i.id===o.instanceId)?.template===options.assetTemplateId);
  const report={version:'opening-rays-v1',scope:options.assetTemplateId?'asset-self':'assembled-scene',status:scene.spatialOpenings===undefined?'not-declared':openings.length?'checked':'not-applicable',method:'沿每个净空内区的法线方向采样25条双面射线；只测alpha>=0.95的不透明几何。只检测声明的开口，不证明轮廓、透视、光照或图像相似度；后景命中不证明内容正确。',checks:[] as any[]};
  if(!openings.length)return report;
- const p=scene.program,program={...p,materials:p.materials.map(m=>({...m,textureId:null})),...(options.assetTemplateId?{templates:p.templates.filter(t=>t.id===options.assetTemplateId),instances:p.instances.filter(i=>i.template===options.assetTemplateId)}:{})};
+ const p=scene.program,program={...p,materials:p.materials.map(m=>({...m,textureId:null,surfaceDetail:null})),...(options.assetTemplateId?{templates:p.templates.filter(t=>t.id===options.assetTemplateId),instances:p.instances.filter(i=>i.template===options.assetTemplateId)}:{})};
  const meshes=compileGeometryProgram(program).meshes.filter(m=>(m.geometry.material?.surface?.baseColor?.[3]??1)>=.95);
  const sharedCast=options.assetTemplateId?null:rayScene(meshes,{near:1e-5,doubleSided:true});
  for(const o of openings){

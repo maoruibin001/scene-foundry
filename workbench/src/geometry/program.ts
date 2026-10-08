@@ -1,12 +1,16 @@
+import {crownFaces,drawCrown,type BranchCrown} from './branch-crown';
 import {type CurvedShape,curvedTriangles,drawCurved} from './curved-surfaces';
-import {mapSurfaceUvs,smoothSurfaceNormals,validateSurfaceMapping,type UvTransform} from './surface-mapping';
-import {MeshBuilder,triangulatePolygon,norm,type V} from './mesh';
+import {type BezierPatch,patchFaces,drawPatch} from './bezier-patch';
+import {mapSurfaceUvs,projectSurfaceUvs,smoothSurfaceNormals,validateSurfaceMapping,type UvTransform,type UvProjection} from './surface-mapping';
+import {MeshBuilder,triangulatePolygon,norm,cross,sub,hasTriangleArea,type V} from './mesh';
 import {RANGE} from './constraints';
 import {distributedPoses,type Distribution} from './distribution';
 import {textureSurface,validTextureBundle,type TextureBundle} from './texture-bundle';
+import {validateSurfaceDetail,detailedSurface,type SurfaceDetail} from './surface-detail';
+import {validateMaterialEmission,emissionSurface,type MaterialEmission} from './material-emission';
 
 // 数据契约只描述构造操作，不枚举家具、建筑或其他物体类别。
-export type PrimitiveShape = CurvedShape
+export type PrimitiveShape = CurvedShape | BezierPatch | BranchCrown
  | {type:'box';size:V;radius:number}
  | {type:'lathe';profile:number[][];segments:number;arc?:number|null;start?:number|null}
  | {type:'extrusion';outline:number[][];depth:number}
@@ -14,9 +18,9 @@ export type PrimitiveShape = CurvedShape
  | {type:'grid';points:V[];rows:number;columns:number;doubleSided:boolean};
 export type Shape=PrimitiveShape|({type:'scatter';element:PrimitiveShape}&Distribution);
 export type Pose={position:V;rotation:V;scale:V};
-export type Material={id:string;color:[number,number,number,number];roughness:number;metallic:number;textureId:string|null};
+export type Material={id:string;color:[number,number,number,number];roughness:number;metallic:number;textureId:string|null;surfaceDetail?:SurfaceDetail|null;emission?:MaterialEmission|null};
 export type SurfaceOverride={sourceMaterialId:string;targetMaterialId:string;uvScale:[number,number]|null;uvTransform?:UvTransform|null};
-export type Part=Pose&{id:string;material:string;shape:Shape;uvScale?:[number,number];uvTransform?:UvTransform|null;smoothAngle?:number|null};
+export type Part=Pose&{id:string;material:string;shape:Shape;uvScale?:[number,number];uvTransform?:UvTransform|null;uvProjection?:UvProjection|null;smoothAngle?:number|null};
 export type GeometryProgram={
  version:'geometry-v1';name:string;materials:Material[];
  templates:{id:string;parts:Part[]}[];
@@ -46,13 +50,15 @@ function outline(points:number[][]){
 }
 export function shapeTriangles(s:Shape){
  switch(s?.type){
+  case 'branchCrown':return crownFaces(s).length;
+  case 'bezierPatch':return patchFaces(s).length;
   case 'cushion':case 'cloth':case 'shell':return curvedTriangles(s);
   case 'scatter':{
    assert(Number.isInteger(s.count)&&s.count>=1&&s.count<=RANGE.scatterMax,'散布数量无效');
    assert(Number.isInteger(s.seed)&&s.seed>=0&&s.seed<=0xffffffff,'散布种子须为32位无符号整数');
    assert(['box','ellipsoid'].includes(s.volume)&&vector(s.size,RANGE.positiveMin,RANGE.max)&&vector(s.rotationRange,0,Math.PI*2),'散布空间或旋转范围无效');
    assert(Array.isArray(s.scaleRange)&&s.scaleRange.length===2&&s.scaleRange.every(v=>finite(v,RANGE.positiveMin,RANGE.max))&&s.scaleRange[0]<=s.scaleRange[1],'散布缩放范围无效');
-   assert(s.element&&['box','lathe','extrusion','tube','grid','cushion','cloth','shell'].includes(s.element.type),'散布元素须为单个基础构造，不允许嵌套散布');
+   assert(s.element&&['box','lathe','extrusion','tube','grid','cushion','cloth','shell','bezierPatch'].includes(s.element.type),'散布元素须为单个基础构造，不允许嵌套散布');
    return s.count*shapeTriangles(s.element);
   }
   case 'box':assert(vector(s.size,.001,100)&&finite(s.radius,0,Math.min(...s.size)/2),'箱体尺寸或圆角无效');return s.radius?432:12;
@@ -70,7 +76,16 @@ export function shapeTriangles(s:Shape){
    assert(s.points.length===s.rows*s.columns,'曲面网格点数不符：rows='+s.rows+'、columns='+s.columns+'，应有 '+s.rows*s.columns+' 个点，实际 '+s.points.length+' 个；请保留预期拓扑并修正点数');
    const invalid=s.points.findIndex(p=>!vector(p));assert(invalid<0,'曲面网格 points['+invalid+'] 无效：须为 -100..100 内的三个有限坐标');
    assert(typeof s.doubleSided==='boolean','曲面网格 doubleSided 须为布尔值');
-   return (s.rows-1)*(s.columns-1)*2*(s.doubleSided?2:1);
+   let triangles=0;
+   for(let row=0;row<s.rows-1;row++)for(let col=0;col<s.columns-1;col++){
+    const a=s.points[row*s.columns+col],b=s.points[row*s.columns+col+1],c=s.points[(row+1)*s.columns+col+1],d=s.points[(row+1)*s.columns+col];
+    for(const [v0,v1,v2,v3] of s.doubleSided?[[a,b,c,d],[d,c,b,a]]:[[a,b,c,d]]){
+     if(hasTriangleArea(cross(sub(v1,v0),sub(v2,v0))))triangles++;
+     if(hasTriangleArea(cross(sub(v2,v0),sub(v3,v0))))triangles++;
+    }
+   }
+   assert(triangles>0,'曲面网格没有可渲染三角形');
+   return triangles;
   }
   default:throw Error('不支持的几何构造操作');
  }
@@ -80,7 +95,7 @@ export function validateGeometryProgram(program:GeometryProgram,requirementIds?:
  assert(p?.version==='geometry-v1'&&typeof p.name==='string'&&p.name.trim().length>0,'通用几何版本或名称无效');
  for(const [key,max] of [['materials',GEOMETRY_LIMITS.materials],['templates',GEOMETRY_LIMITS.templates],['instances',GEOMETRY_LIMITS.instances]] as const)assert(Array.isArray(p[key])&&p[key].length>0&&p[key].length<=max,key+' 数量超出契约');
  const materials=unique(p.materials,'材质'),templates=unique(p.templates,'模板');unique(p.instances,'实例');
- for(const m of p.materials)assert(Array.isArray(m.color)&&m.color.length===4&&m.color.every(n=>finite(n,0,1))&&finite(m.roughness,0,1)&&finite(m.metallic,0,1)&&(m.textureId===null||id(m.textureId)),'PBR 材质无效');
+ for(const m of p.materials){assert(Array.isArray(m.color)&&m.color.length===4&&m.color.every(n=>finite(n,0,1))&&finite(m.roughness,0,1)&&finite(m.metallic,0,1)&&(m.textureId===null||id(m.textureId)),'PBR 材质无效');validateSurfaceDetail(m.surfaceDetail);validateMaterialEmission(m.emission);}
  const estimates=new Map<string,number>();
  for(const t of p.templates){
   assert(Array.isArray(t.parts)&&t.parts.length>0&&t.parts.length<=GEOMETRY_LIMITS.partsPerTemplate,'模板部件数量无效');unique(t.parts,'部件');let estimate=0;
@@ -113,6 +128,8 @@ function transformNormal(v:V,p:Pose):V{return norm(rotate(v.map((n,k)=>n/p.scale
 function draw(g:MeshBuilder,part:Part){
  const m=part.material,s=part.shape;
  switch(s.type){
+  case 'branchCrown':drawCrown(g,m,s);break;
+  case 'bezierPatch':drawPatch(g,m,s);break;
   case 'cushion':case 'cloth':case 'shell':drawCurved(g,m,s);break;
   case 'scatter':{
    const elementBuilder=new MeshBuilder(id=>({surface:g.material(id).surface}));
@@ -151,7 +168,7 @@ export function compileGeometryProgram(program:GeometryProgram,textures:Record<s
   assert(validTextureBundle(textures[m.textureId]),'贴图未绑定或像素数据无效：'+m.textureId);
   textureBindings.set(m.textureId,textureSurface(textures[m.textureId]));
  }
- const materials=new Map(program.materials.map(m=>[m.id,{surface:{baseColor:m.color,roughness:m.roughness,metallic:m.metallic,...(m.textureId?textureBindings.get(m.textureId):{})}}]));
+ const materials=new Map(program.materials.map(m=>[m.id,{surface:{...(m.surfaceDetail?detailedSurface(m,m.textureId?textures[m.textureId]:undefined):{baseColor:m.color,roughness:m.roughness,metallic:m.metallic,...(m.textureId?textureBindings.get(m.textureId):{})}),...emissionSurface(m.emission)}}]));
  const resolve=(id:string)=>materials.get(id)!;
  const used=new Set(program.instances.map(i=>i.template));
  const library=new Map(program.templates.filter(t=>used.has(t.id)).map(t=>[t.id,t.parts.map(part=>{
@@ -159,7 +176,7 @@ export function compileGeometryProgram(program:GeometryProgram,textures:Record<s
   const baseUvs=[...mesh.geometry.uvs];mesh.geometry.uvs=mapSurfaceUvs(baseUvs,part.uvScale,part.uvTransform);
   const smoothAngle=part.smoothAngle??(['lathe','tube','cushion','shell','cloth'].includes(part.shape.type)?45:part.shape.type==='grid'?30:0);
   if(smoothAngle)mesh.geometry.normals=smoothSurfaceNormals(mesh.geometry,smoothAngle);
-  for(let k=0;k<mesh.geometry.positions.length;k+=3){mesh.geometry.positions.splice(k,3,...transformPoint(mesh.geometry.positions.slice(k,k+3) as V,part));mesh.geometry.normals.splice(k,3,...transformNormal(mesh.geometry.normals.slice(k,k+3) as V,part));}return {...mesh,baseUvs,uvTransform:part.uvTransform,uvScale:part.uvScale??[1,1]};
+  for(let k=0;k<mesh.geometry.positions.length;k+=3){mesh.geometry.positions.splice(k,3,...transformPoint(mesh.geometry.positions.slice(k,k+3) as V,part));mesh.geometry.normals.splice(k,3,...transformNormal(mesh.geometry.normals.slice(k,k+3) as V,part));}return {...mesh,baseUvs,uvTransform:part.uvTransform,uvProjection:part.uvProjection,uvScale:part.uvScale??[1,1]};
  })]));
  const meshes:any[]=[],min:V=[Infinity,Infinity,Infinity],max:V=[-Infinity,-Infinity,-Infinity];
  for(const instance of program.instances)for(const original of library.get(instance.template)!){
@@ -169,6 +186,7 @@ export function compileGeometryProgram(program:GeometryProgram,textures:Record<s
    ...(binding&&(binding.uvScale||binding.uvTransform)?{uvs:mapSurfaceUvs(original.baseUvs,binding.uvScale??original.uvScale,binding.uvTransform??original.uvTransform)}:{}),
   };
   for(let k=0;k<geometry.positions.length;k+=3){const point=transformPoint(geometry.positions.slice(k,k+3) as V,instance);assert(point.every(n=>finite(n,-1000,1000)),'展开后的坐标超出场景范围');for(let j=0;j<3;j++){geometry.positions[k+j]=point[j];min[j]=Math.min(min[j],point[j]);max[j]=Math.max(max[j],point[j]);}geometry.normals.splice(k,3,...transformNormal(geometry.normals.slice(k,k+3) as V,instance));}
+  if(original.uvProjection?.mode==='world-box')geometry.uvs=mapSurfaceUvs(projectSurfaceUvs(geometry,original.uvProjection,original.baseUvs),binding?.uvScale??original.uvScale,binding?.uvTransform??original.uvTransform);
   meshes.push({name:instance.id+'__'+original.name,geometry,entityId:instance.id,requirementIds:instance.requirementIds});
  }
  assert(new Set(meshes.map(m=>m.name)).size===meshes.length,'组合后的网格 ID 冲突');

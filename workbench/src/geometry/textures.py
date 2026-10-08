@@ -47,7 +47,8 @@ def extract(root):
         registry[t['id']]={'width':size,'height':size,'rgba8':base64.b64encode(rgba.tobytes()).decode(),'colorSpace':'srgb'}
         receipts.append({**t,'sourceSha256':hashlib.sha256(path.read_bytes()).hexdigest(),'file':output.name,'sha256':hashlib.sha256(output.read_bytes()).hexdigest(),'method':'参考图局部四边形透视纠正；保留原拍摄光照，不生成虚构细节'})
     (root/'texture-registry.json').write_text(json.dumps(registry,separators=(',',':'))+'\n')
-    (root/'texture-provenance.json').write_text(json.dumps({'textures':receipts,'source':'本次任务输入','qualityAssessment':'not-run'},ensure_ascii=False,indent=2)+'\n')
+    has_catalog=any(r.get('source',{}).get('kind')=='licensed-pbr-catalog' for r in receipts)
+    (root/'texture-provenance.json').write_text(json.dumps({'textures':receipts,'source':'本次任务输入及逐项声明的固定授权材质' if has_catalog else '本次任务输入','qualityAssessment':'not-run'},ensure_ascii=False,indent=2)+'\n')
     print(json.dumps({'textures':len(registry),'references':len(request['references'])}))
 
 

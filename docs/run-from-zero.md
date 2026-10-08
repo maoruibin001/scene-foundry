@@ -28,6 +28,7 @@ git rev-parse HEAD
 ```sh
 python3 prototype/bin/bootstrap.py
 python3 scripts/setup-python.py
+bun scripts/setup-materials.ts
 git -C engine rev-parse HEAD
 git -C scene-generator rev-parse HEAD
 cd workbench
@@ -39,6 +40,8 @@ cd ..
 `bootstrap.py` 会克隆 `prototype/brief.json` 指定的两个精确提交，安装、构建 Engine 与 Scene Generator，并建立模板项目的本地 Engine 类型链接。已有但提交不符或被修改的依赖会使脚本停止；它不会私自切换已有 checkout。测试通过只证明源码和模板集成，不等于模型路由、浏览器运行或生成质量已通过。
 
 `setup-python.py` 会在 `workbench/data/reconstruction-env/` 创建虚拟环境，安装固定版本的 Pillow、NumPy 和 OpenCV，用于贴图提取、几何诊断图及录屏取帧。它不下载深度模型或模型权重，也不执行模型请求。若设置了 `PIPELINE_DATA_DIR`，环境也建立在该数据目录中；自定义目录测试与启动服务时须使用同一个设置。
+
+`setup-materials.ts` 按仓库内的固定来源下载 Poly Haven 材质通道，逐个验证原文件摘要，转换后再核对材质目录 ID。来源、许可链接和作者信息随代码保存，原图及解码像素保存在被忽略的数据目录。首次准备需要联网；已有文件仍须通过校验。固定材质缺失或摘要不符时，管线会在模型请求前停止。
 
 `bun test` 请按上面的工作目录执行：生成任务会在 `workbench/data/versions/` 保存源码快照，从仓库根目录按文件名搜索测试时可能把快照里的旧测试也运行一次。
 

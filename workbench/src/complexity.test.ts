@@ -1,9 +1,14 @@
 import {test,expect} from 'bun:test';
-import {complexityOf,generationBrief,inspectComplexity,exportBudget} from './complexity';
+import {complexityOf,complexityPolicy,generationBrief,inspectComplexity,exportBudget} from './complexity';
 import {compileIR,validateIR,solveIR} from './scene-ir';
 import {validateRecipe} from './recipe';
 import {evidenceSpans} from './grounding';
 const plan={name:'测试',summary:'',requirements:[{id:'main',text:'红白灯塔',critical:true,weight:5}]};
+test('图像规划与修正共享对象范围，复杂度继续限制资源上限',()=>{
+ expect(complexityPolicy('complex',true)).toMatchObject({minEntities:1,minKinds:1,maxEntities:28,maxParts:512,maxMaterials:128});
+ expect(generationBrief('原图一个主体','complex',true).budget.nonGroundEntities).toEqual([1,28]);
+ expect(generationBrief('文字创造复杂场景','complex').budget.nonGroundEntities).toEqual([17,28]);
+});
 function scene(n:number){return {name:'海岛站',entities:[{id:'floor',label:'地面',kind:'ground',role:'ground',position:[0,0,-.2],size:[24,24,.2],color:'#879376',accent:'#879376',rotation:0,requirementIds:[]},...Array.from({length:n},(_,i)=>({id:'asset'+i,label:'设施'+i,kind:['lighthouse','building','tree','lamp','crate'][i%5],role:i===0?'subject':'context',position:[-8+(i%5)*4,-8+Math.floor(i/5)*4,0],size:[1.5,1.5,2],color:'#916D50',accent:'#3F7660',rotation:0,requirementIds:i===0?['main']:[]}))],relations:[]};}
 test('level defaults and enriched directions preserve the exact original input',()=>{
  expect(complexityOf(undefined)).toBe('simple');for(const x of [null,'__proto__','ultra',3])expect(()=>complexityOf(x)).toThrow();

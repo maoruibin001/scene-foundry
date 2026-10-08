@@ -14,7 +14,7 @@ test('codex传输结束和空输出可恢复，身份、额度和未知代码故
  for(const error of ['PROVIDER_CODEX_FAILED: command not found','PROVIDER_HTTP_401 stream terminated','MODEL_BUDGET_EXHAUSTED stream closed'])expect(providerFault(error).recoverable).toBe(false);
 });
 test('新任务默认登记模型中断并只续接一次，不复活历史任务或用户取消',async()=>{
- const d=mkdtempSync(join(tmpdir(),'continuation-')),jobs:any[]=[{id:'active',status:'blocked',error:'PROVIDER_RECOVERY_EXHAUSTED: stream terminated before completion',executionRecoveryPolicy:{enabled:true}},{id:'old',status:'blocked',error:'PROVIDER_TIMEOUT'},{id:'cancel',status:'cancelled',error:'PROVIDER_TIMEOUT',executionRecoveryPolicy:{enabled:true}},{id:'hard',status:'blocked',error:'MODEL_BUDGET_EXHAUSTED',executionRecoveryPolicy:{enabled:true}}];let calls=0;
+ const d=mkdtempSync(join(tmpdir(),'continuation-')),jobs:any[]=[{id:'active',status:'blocked',error:'PROVIDER_CODEX_FAILED: stream terminated before completion',executionRecoveryPolicy:{enabled:true}},{id:'old',status:'blocked',error:'PROVIDER_TIMEOUT'},{id:'cancel',status:'cancelled',error:'PROVIDER_TIMEOUT',executionRecoveryPolicy:{enabled:true}},{id:'hard',status:'blocked',error:'MODEL_BUDGET_EXHAUSTED',executionRecoveryPolicy:{enabled:true}}];let calls=0;
  try{const x=new AutomaticResumer(join(d,'requests.json'),{list:()=>jobs,executing:()=>false,resume:async s=>{calls++;const j={id:'next',recoverySourceJobId:s.id,...automaticContinuationOptions(s,true)};jobs.push(j);return j;}});await Promise.all([x.tick(),x.tick()]);await x.tick();expect(calls).toBe(1);expect(read(join(d,'requests.json')).requests).toHaveLength(1);expect(jobs.at(-1).attempt).toBe(1);expect(jobs.at(-1).automaticResumeCount).toBe(1);}finally{rmSync(d,{recursive:true,force:true});}
 });
 test('自动续接保持生成次数，只有人工新尝试才递增',()=>{
@@ -36,3 +36,9 @@ test('传输失败后同一逻辑调用继续，完整保留两次执行记录',
 });
 
 test('执行输出卡片识别断流为恢复而非未知管线失败',async()=>{const {failureDisposition}=await import('./output-delivery');expect(failureDisposition('PROVIDER_EMPTY_OUTPUT')).toMatchObject({kind:'transient',retryable:true});});
+
+test('新质量优先窗超时后仍可恢复瞬态缺失资产；原计时不改，硬额度仍阻止',async()=>{
+ const {executionFaultOf}=await import('./provider-recovery');
+ const j={executionRecoveryPolicy:{version:'execution-recovery-v2'},partialOutput:{completed:15,total:16},quality:{score:81},productionWindow:{version:'quality-delivery-window-v3',workDeadlineAt:1},assetFailures:[{error:'PROVIDER_HTTP_429 token rate limit'}]};
+ expect(executionFaultOf(j).recoverable).toBe(true);expect(executionFaultOf({...j,assetFailures:[{error:'PROVIDER_RECOVERY_EXHAUSTED: token rate limit'}]}).recoverable).toBe(false);expect(executionFaultOf({...j,productionWindow:{version:'score-delivery-window-v2',workDeadlineAt:1}}).recoverable).toBe(false);expect(executionFaultOf({...j,executionFault:'MODEL_BUDGET_EXHAUSTED'}).recoverable).toBe(false);
+});

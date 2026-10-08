@@ -1,4 +1,5 @@
 import type {SceneInput} from './scene-contract';
+import {repairPartContext} from './repair-part-context';
 /** 共用写入对象或耦合空间调整放在同一调用；独立目标才可并行。 */
 export function repairBatches(selection:any,source:SceneInput,maxBatches=Infinity){
  if(maxBatches!==Infinity&&(!Number.isInteger(maxBatches)||maxBatches<1))throw Error('修复调用额度不足，需保留成品评审额度');
@@ -24,11 +25,12 @@ export function repairBatches(selection:any,source:SceneInput,maxBatches=Infinit
 }
 /** 模型只收到可编辑部件；未选物件仍保留世界变换和范围，防止失去空间上下文。 */
 export function repairSourceContext(source:SceneInput,anchors:any[],selection:any){
- const editable=new Set(selection.goals.flatMap(g=>g.templateIds)),surfaceOnly=selection.goals.every(g=>['surface','lighting'].includes(g.kind));
- const selected=anchors.filter(t=>editable.has(t.id)).map(t=>surfaceOnly?{...t,parts:t.parts.map(p=>({...p,shape:p.shape.type==='grid'?{type:'grid',rows:p.shape.rows,columns:p.shape.columns,doubleSided:p.shape.doubleSided,pointCount:p.shape.points.length,pointsOmitted:true}:p.shape}))}:t);
+ const templatesFor=(g:any)=>[...g.templateIds,...source.program.instances.filter(i=>g.instanceIds?.includes(i.id)).map(i=>i.template)];
+ const editable=new Set(selection.goals.flatMap(templatesFor)),geometry=new Set(selection.goals.filter(g=>!['surface','lighting'].includes(g.kind)).flatMap(templatesFor)),surfaceOnly=geometry.size===0;
+ const selected=anchors.filter(t=>editable.has(t.id)).map(t=>({...t,parts:t.parts.map(p=>repairPartContext(p,geometry.has(t.id)))}));
  return {...source,assumptions:source.assumptions.slice(0,14),program:{...source.program,templates:selected},
   frozenTemplates:anchors.filter(t=>!editable.has(t.id)).map(t=>({id:t.id,meshBounds:t.meshBounds,partCount:t.parts.length})),
-  surfaceOnly,contextRule:(surfaceOnly?'当前仅修改表面与光照。网格顶点已省略，使用surfaceUpdates，不得重写几何。':'')+'program.templates 仅列可编辑部件；frozenTemplates 是保留的真实资产，不是缺失资产。完整 instances、cameras 与所有材质保持可见；未选对象禁止重建或修改。'};
+  surfaceOnly,contextRule:(surfaceOnly?'当前仅修改表面与光照，使用surfaceUpdates，不得重写几何。':'')+'逐模板按目标提供上下文：仅改表面的模板省略密集形状数组；几何目标保留小型完整数据，大型数组标注 Omitted、数量、来源摘要和可用范围。省略不是缺失几何，禁止把摘要当作完整部件提交；需要修改具体形状时先用 inspect_scene_parts 读取原始部件。program.templates 仅列可编辑部件；frozenTemplates 是保留的真实资产。完整 instances、cameras 与所有材质保持可见；未选对象禁止重建或修改。'};
 }
 /** 并行结果不做 last-write-wins；冲突必须显式停止，完整合并后再做原契约检查。 */
 export function mergeRefinementPatches(patches:any[]){

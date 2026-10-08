@@ -1,0 +1,80 @@
+{
+  "version": "material-catalog-sources-v1",
+  "resources": [
+    {
+      "expectedId": "320a4a57e9a67b8e01e8ab4a027fab05444dc591ed7161d01200c93671382ec4",
+      "assetId": "wood_table_001",
+      "assetUrl": "https://polyhaven.com/a/wood_table_001",
+      "license": "CC0-1.0",
+      "licenseUrl": "https://polyhaven.com/license",
+      "authors": {
+        "Dimitrios Savva": "Photography",
+        "Rico Cilliers": "Processing"
+      },
+      "label": "深色家具木材 · Poly Haven",
+      "description": "Free 16K wood texture: clean, stained red-brown table surface with fine grain and a smooth, varnished glossy finish",
+      "physicalSizeMeters": [
+        1.5,
+        1.5000001192092896
+      ],
+      "size": 512,
+      "files": [
+        {
+          "channel": "Diffuse",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Textures/png/1k/wood_table_001/wood_table_001_diff_1k.png",
+          "sha256": "aef45ab36d9f258b80edf278d417920b7326ad77c341d6618498d4598c59fd2c",
+          "md5": "a28439982226ee094079489878df3c05"
+        },
+        {
+          "channel": "nor_gl",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Textures/png/1k/wood_table_001/wood_table_001_nor_gl_1k.png",
+          "sha256": "3d1dc2cc14cd9a3d2bc0035560aa715f4f8786902b4b72e78135f1d097428f98",
+          "md5": "e34b6eb7939a0f99bd11740f8d85a56c"
+        },
+        {
+          "channel": "arm",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Textures/png/1k/wood_table_001/wood_table_001_arm_1k.png",
+          "sha256": "3cf680cefc5a01cef895ef835220421b75a9108b6dc16a8761839e05f63b4107",
+          "md5": "6fca21c59c05de84025bf07d8682a320"
+        }
+      ]
+    },
+    {
+      "expectedId": "7c81d8bfa869f548f8755089557926e1b36c472ed62a9db4011801d750795bc9",
+      "assetId": "marble_01",
+      "assetUrl": "https://polyhaven.com/a/marble_01",
+      "license": "CC0-1.0",
+      "licenseUrl": "https://polyhaven.com/license",
+      "authors": {
+        "Rob Tuytel": "All"
+      },
+      "label": "浅米色石材砖 · Poly Haven",
+      "description": "Free 8K marble texture of smooth, even cream-beige tiles with subtle veining and low sheen, clean indoor floor and wall material.",
+      "physicalSizeMeters": [
+        1.5,
+        1.5
+      ],
+      "size": 512,
+      "files": [
+        {
+          "channel": "Diffuse",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Textures/png/1k/marble_01/marble_01_diff_1k.png",
+          "sha256": "3dca2e4d474d2be25efb41c0fdc6f3c62121fb6a6cd56bce8b85e2970e58cda1",
+          "md5": "44220ada5f12a7d192bbcaae185173e4"
+        },
+        {
+          "channel": "nor_gl",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Textures/png/1k/marble_01/marble_01_nor_gl_1k.png",
+          "sha256": "fc704b82aaff2634ebadd1939c8e675cd6cc8280953c1d28db7f66b4c6b6dbab",
+          "md5": "795c424f8a8e24be7229d08c6d66fe21"
+        },
+        {
+          "channel": "arm",
+          "url": "https://dl.polyhaven.org/file/ph-assets/Textures/png/1k/marble_01/marble_01_arm_1k.png",
+          "sha256": "cb7082108641396d149ca722fefa34a1cacdc62f07905cd5dcc8629587bee6f2",
+          "md5": "1dd2e9f27f28b3e09ed1991c087684b1"
+        }
+      ]
+    }
+  ]
+}

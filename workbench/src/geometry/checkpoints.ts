@@ -1,3 +1,4 @@
+import {verifyAssetGeometryBasis} from './asset-geometry-basis';
 import {freshCheckpointScope} from '../reuse-mode';
 import {verifyAssetReview} from './asset-review';
 import {mkdirSync,existsSync,readFileSync,writeFileSync,readdirSync,renameSync,rmSync,lstatSync} from 'node:fs';
@@ -31,14 +32,15 @@ export class CheckpointStore{
  inspect({job,planFile,generationDir,textureFile,provenance,evidence={},skipInvalidAssets=false}:Registration){
   const input=checkpointInput(job),plan=validateGroundedPlan(read(planFile),job.prompt),layout=validateLayout(read(join(generationDir,'layout.json')),plan,input.images.length,job.complexity),textures=read(textureFile),buffers:Record<string,Buffer>={},assets:any[]=[],issues:{id:string;reason:string}[]=[];
   const add=(name:string,file:string)=>{buffers[name]=readFileSync(file);};add('plan.json',planFile);add('layout.json',join(generationDir,'layout.json'));
-  for(const name of ['space.json','surface.json'])if(existsSync(join(generationDir,name)))add(name,join(generationDir,name));
+  for(const name of ['space.json','surface.json','reference-observations.json'])if(existsSync(join(generationDir,name)))add(name,join(generationDir,name));
   const receipts=(dir:string,prefix:string)=>{for(const name of readdirSync(dir))if(/^(?:plan|scene-space|scene-surface|geometry-asset)-[a-zA-Z0-9_-]+\.(?:json|txt|log)$/.test(name)&&lstatSync(join(dir,name)).isFile())add(prefix+name,join(dir,name));};receipts(generationDir,'evidence/');
   for(const brief of layout.program.templates){
    const folder=join(generationDir,'assets',brief.id),file=join(folder,'geometry.json'),record=join(folder,'checkpoint.json');if(!existsSync(file)||!existsSync(record)){issues.push({id:brief.id,reason:'没有完整的已完成资产'});continue;}
    try{
    const source=read(record);if(source.status!=='passed'){issues.push({id:brief.id,reason:'资产尚未完成'});continue;}
    const value=read(file);if(source.geometrySha256!==digest(JSON.stringify(value))||source.layoutSha256!==digest(JSON.stringify(layout))||source.planSha256!==digest(JSON.stringify(plan))||hash(source.referenceSha256)!==hash(input.images.map((i:any)=>i.id))||hash(source.modelSettings)!==hash(input.modelSettings))throw Error('资产检查点来源与布局不一致：'+brief.id);
-   validateAsset(value,brief,layout,textures);assets.push({id:brief.id,source:{pipelineVersion:source.pipelineVersion,geometrySha256:source.geometrySha256}});add('assets/'+brief.id+'/geometry.json',file);add('assets/'+brief.id+'/checkpoint.json',record);const review=join(folder,'asset-visual-review.json');if(existsSync(review)&&verifyAssetReview(value,read(review)))add('assets/'+brief.id+'/asset-visual-review.json',review);receipts(folder,'assets/'+brief.id+'/');
+   if(source.acceptedGeometrySha256){const basis=join(folder,'accepted-geometry.json');if(!existsSync(basis)||!verifyAssetGeometryBasis(read(basis),source.acceptedGeometrySha256,brief.id))throw Error('资产已验收结构来源不一致：'+brief.id);add('assets/'+brief.id+'/accepted-geometry.json',basis);}
+   validateAsset(value,brief,layout,textures);assets.push({id:brief.id,source:{pipelineVersion:source.pipelineVersion,geometrySha256:source.geometrySha256,...(source.acceptedGeometrySha256?{acceptedGeometrySha256:source.acceptedGeometrySha256}:{})}});add('assets/'+brief.id+'/geometry.json',file);add('assets/'+brief.id+'/checkpoint.json',record);const review=join(folder,'asset-visual-review.json');if(existsSync(review)&&verifyAssetReview(value,read(review)))add('assets/'+brief.id+'/asset-visual-review.json',review);receipts(folder,'assets/'+brief.id+'/');
    }catch(error){if(!skipInvalidAssets)throw error;for(let i=assets.length-1;i>=0;i--)if(assets[i].id===brief.id)assets.splice(i,1);for(const name of Object.keys(buffers))if(name.startsWith('assets/'+brief.id+'/'))delete buffers[name];issues.push({id:brief.id,reason:String(error)});}
   }
   for(const [name,file] of Object.entries(evidence)){if(!/^[a-zA-Z0-9_-]+\.(json|txt)$/.test(name))throw Error('来源证据名称无效');add('evidence/'+name,file);}
@@ -53,6 +55,6 @@ export class CheckpointStore{
   try{for(const [name,bytes] of Object.entries(buffers)){const file=join(temp,'payload',name);mkdirSync(dirname(file),{recursive:true});writeFileSync(file,bytes);}save(join(temp,'manifest.json'),{id,...body});renameSync(temp,this.path(id));}finally{rmSync(temp,{recursive:true,force:true});}
   return this.verify(id,job);
  }
- restore(id:string,job:any,generationDir:string){const value=this.load(id,job);mkdirSync(generationDir,{recursive:true});for(const name of ['layout.json','space.json','surface.json'])if(value.manifest.files[name])writeFileSync(join(generationDir,name),readFileSync(join(value.folder,name)));for(const a of value.assets){const folder=join(generationDir,'assets',a.id);mkdirSync(folder,{recursive:true});for(const [name] of Object.entries(value.manifest.files))if(name.startsWith('assets/'+a.id+'/'))writeFileSync(join(generationDir,name),readFileSync(join(value.folder,name)));}save(join(generationDir,'resumed-from.json'),value.manifest);return value;}
+ restore(id:string,job:any,generationDir:string){const value=this.load(id,job);mkdirSync(generationDir,{recursive:true});for(const name of ['layout.json','space.json','surface.json','reference-observations.json'])if(value.manifest.files[name])writeFileSync(join(generationDir,name),readFileSync(join(value.folder,name)));for(const a of value.assets){const folder=join(generationDir,'assets',a.id);mkdirSync(folder,{recursive:true});for(const [name] of Object.entries(value.manifest.files))if(name.startsWith('assets/'+a.id+'/'))writeFileSync(join(generationDir,name),readFileSync(join(value.folder,name)));}save(join(generationDir,'resumed-from.json'),value.manifest);return value;}
 }
 export const checkpoints=new CheckpointStore(join(DATA,'checkpoints'));

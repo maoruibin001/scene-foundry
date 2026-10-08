@@ -21,7 +21,7 @@ export function uiHandler(publicDir:string, upstream:string, productionTiming?:(
       const timing=req.method==='GET'&&url.pathname.match(/^\/api\/jobs\/([a-f0-9-]{36})\/timing$/);
       if(timing&&productionTiming&&response.ok){
         const body=await response.json();
-        try{if(!body.production)body.production=productionTiming(timing[1]);}catch{body.productionError=true;}
+        try{body.production=productionTiming(timing[1]);}catch{body.productionError=true;}
         const timingHeaders=new Headers(response.headers);timingHeaders.delete('Content-Length');timingHeaders.delete('Content-Encoding');timingHeaders.set('Cache-Control','no-store');
         return Response.json(body,{status:response.status,headers:timingHeaders});
       }

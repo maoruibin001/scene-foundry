@@ -1,3 +1,4 @@
+import {cameraAspect} from './reference-frame.mjs';
 import {project} from './camera-fit';
 import {compileGeometryProgram} from './program';
 import type {V} from './mesh';
@@ -9,7 +10,7 @@ const assert=(ok:unknown,message:string)=>{if(!ok)throw Error('图像位置约�
 export function fitScreenTargets(source:SceneInput,targets:ScreenTarget[]){
  assert(Array.isArray(targets)&&targets.length<=8&&new Set(targets.map(t=>t.instanceId)).size===targets.length,'对象重复或超限');
  if(!targets.length)return {instances:[],reports:[]};
- const meshes=compileGeometryProgram({...source.program,materials:source.program.materials.map(m=>({...m,textureId:null}))}).meshes;
+ const meshes=compileGeometryProgram({...source.program,materials:source.program.materials.map(m=>({...m,textureId:null,surfaceDetail:null}))}).meshes;
  const instances:any[]=[],reports:any[]=[];
  for(const target of targets){
   const instance=source.program.instances.find(i=>i.id===target.instanceId);
@@ -25,7 +26,7 @@ export function fitScreenTargets(source:SceneInput,targets:ScreenTarget[]){
   const bounds=(x:number[],view:number)=>{const pts=points.map(p=>project(cameras[view],[origin[0]+x[0]+(p[0]-origin[0])*x[2],origin[1]+x[1]+(p[1]-origin[1])*x[2],minZ+(p[2]-minZ)*x[2]]));
    if(pts.some(p=>p[2]<=.1))return null;
    return [Math.min(...pts.map(p=>p[0])),Math.min(...pts.map(p=>p[1])),Math.max(...pts.map(p=>p[0])),Math.max(...pts.map(p=>p[1]))];};
-  const errors=(x:number[])=>target.views.map((v,i)=>{const r=bounds(x,i);return r?Math.sqrt(r.reduce((s,n,k)=>s+((n-v.rect[k])*(k%2?1:16/9))**2,0)/4):10;});
+  const errors=(x:number[])=>target.views.map((v,i)=>{const r=bounds(x,i);return r?Math.sqrt(r.reduce((s,n,k)=>s+((n-v.rect[k])*(k%2?1:cameraAspect(cameras[i])))**2,0)/4):10;});
   const cost=(x:number[])=>errors(x).reduce((s,n)=>s+n*n,0)+.00002*(x[0]**2+x[1]**2+(x[2]-1)**2);
   const span=Math.max(...points.map(p=>Math.hypot(p[0]-origin[0],p[1]-origin[1]))),travel=Math.min(1.5,Math.max(.4,span));
   const ranges=[[-travel,travel],[-travel,travel],[.7,1.3]],before=errors([0,0,1]);let x=[0,0,1],value=cost(x),steps=[travel/2,travel/2,.1];
@@ -39,4 +40,4 @@ export function fitScreenTargets(source:SceneInput,targets:ScreenTarget[]){
 }
 
 /** 显式暴露贴图使用部件与 UV；未贴图并不自动判错，由原图和截图决定。 */
-export function surfaceBindings(scene:SceneInput){return scene.program.materials.map(m=>({...m,parts:scene.program.templates.flatMap(t=>t.parts.filter(p=>p.material===m.id).map(p=>({templateId:t.id,partId:p.id,shape:p.shape.type,uvScale:p.uvScale??[1,1],uvTransform:p.uvTransform??null,instances:scene.program.instances.filter(i=>i.template===t.id).map(i=>({id:i.id,override:i.surfaceOverrides?.find(o=>o.sourceMaterialId===m.id)??null}))})))}));}
+export function surfaceBindings(scene:SceneInput){return scene.program.materials.map(m=>({...m,parts:scene.program.templates.flatMap(t=>t.parts.filter(p=>p.material===m.id).map(p=>({templateId:t.id,partId:p.id,shape:p.shape.type,uvScale:p.uvScale??[1,1],uvTransform:p.uvTransform??null,uvProjection:p.uvProjection??null,instances:scene.program.instances.filter(i=>i.template===t.id).map(i=>({id:i.id,override:i.surfaceOverrides?.find(o=>o.sourceMaterialId===m.id)??null}))})))}));}

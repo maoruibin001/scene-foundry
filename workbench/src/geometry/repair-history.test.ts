@@ -1,3 +1,6 @@
+import {assess} from '../assessment';
+import {EVIDENCE_POLICY,DIMENSIONS,HARD_CHECKS} from '../quality';
+import {VISUAL_RULE_IDS} from '../spec';
 import {test,expect} from 'bun:test';
 import {mkdtempSync,mkdirSync,writeFileSync,rmSync,readFileSync,cpSync} from 'node:fs';
 import {tmpdir} from 'node:os';
@@ -73,6 +76,16 @@ function addRepair(f:ReturnType<typeof fixture>,id:string,parentId:string,source
  f.save(id,'generation/refinement/receipt.json',{sourceDigest:digest(JSON.stringify(source)),sceneDigest:digest(JSON.stringify(after))});
  return {...structuredClone(f.candidate),id,endedAt};
 }
+
+test('持续闭环第三轮之后仍读取已核验失败历史，不能因旧两轮上限遗忘',()=>{
+ const f=fixture();try{
+  const dir=f.locate('candidate'),snap=join(dir,'iterations/4');mkdirSync(snap,{recursive:true});
+  for(const name of ['generated-scene.json','quality.json','review.json','runtime'])cpSync(join(dir,name),join(snap,name),{recursive:true});
+  cpSync(join(dir,'generation/refinement'),join(dir,'generation/iteration-4/refinement'),{recursive:true});
+  f.save('candidate','iterations/4/candidate.json',{jobId:'candidate',pipelineVersionId:'candidate-version',cycle:{index:4,status:'failed',endedAt:1000},fields:{quality:f.quality}});
+  const h=repairHistory(f.target,f.source,f.refs,{jobs:[f.candidate],locate:f.locate});expect(h.attempts).toHaveLength(1);expect(h.attempts[0]).toMatchObject({iteration:4,scoreGain:-1});expect(h.excluded).toEqual([]);
+ }finally{f.cleanup();}
+});
 
 test('评估证据契约变化后保留已核验经验，历史分差不能当作当前收益',()=>{
  const f=fixture();try{
@@ -156,4 +169,27 @@ test('根目录修复及显式辅助证据目录同样核对来源与真实画�
   const h=repairHistory(f.target,f.after,f.refs,{jobs:[candidate],locate:f.locate});expect(h.totalVerified).toBe(1);expect(h.attempts[0].validationKind).toBe('native-assisted');
   writeFileSync(join(f.locate('candidate'),'runtime/reference-1.png'),'tampered');expect(repairHistory(f.target,f.after,f.refs,{jobs:[candidate],locate:f.locate}).attempts).toHaveLength(0);
  }finally{f.cleanup();}}
+});
+
+test('评分版本迁移保留已核验失败经验，不混算当前得分或放宽门槛',()=>{const f=fixture();try{f.target.policy={...f.target.policy,version:'scene-quality-v7'};f.target.profile={...f.target.profile,policy:f.target.policy,assessmentProtocolSha256:'v7'};const r=repairHistory(f.target,f.source,f.refs,{jobs:[f.candidate],locate:f.locate});expect(r.totalVerified).toBe(1);expect(r.attempts[0].actualChanges.reason).toBe('此前只调整局部');expect(r.attempts[0].scoreComparison.comparableToCurrentAssessment).toBe(false);expect(r.attempts[0].roundAudit.comparison.delta).toBeNull();const changed={...f.target,policy:{...f.target.policy,score:90}};expect(repairHistory(changed,f.source,f.refs,{jobs:[f.candidate],locate:f.locate}).totalVerified).toBe(0);}finally{f.cleanup();}});
+
+test('basic历史复盘使用该轮交付和原始分，不被任务后来的通过或综合分上涨污染',()=>{
+ const f=fixture();try{
+  const policy={...EVIDENCE_POLICY,deliveryStandard:'basic70' as const},frames=['reference-1.png'];
+  const plan={requirements:[{id:'R1',critical:true,source:'image'}],acceptanceCriteria:DIMENSIONS.map((d,i)=>({id:'C'+i,requirementId:'R1',dimension:d.id,description:'可观察条件'+d.id,source:'image',evidence:['参考'],critical:true,weight:1}))};
+  const runtime={images:frames,hashes:[digest('actual render')],submittedFps:30,hard:{...Object.fromEntries(HARD_CHECKS.map(k=>[k,true])),video:true,cameraStopped:true}};
+  const review=(formal:number,raw:number)=>({confidence:.9,requirements:[{id:'R1',verdict:'met',reason:'主体存在',frames}],criteria:plan.acceptanceCriteria.map(c=>({id:c.id,score:formal,verdict:'met',reason:'观测',frames})),dimensions:DIMENSIONS.map(d=>({id:d.id,score:raw,reason:'观测',frames})),specRules:VISUAL_RULE_IDS.map(id=>({id,status:'passed',reason:'观测',frames})),entityCounts:[]});
+  const beforeReview=review(3.6,3.3),afterReview=review(3.8,3.304),sourceJob={policy,plan,structure:{passed:true,semanticCounts:{}},stages:{build:{status:'passed'},verify:{status:'passed'}},runtime};
+  const before=assess(sourceJob,beforeReview,runtime),after=assess(sourceJob,afterReview,runtime);
+  f.save('parent','job.json',sourceJob);f.save('parent','quality.json',before.quality);f.save('parent','review.json',beforeReview);f.save('parent','spec-report.json',before.spec);
+  const meta=JSON.parse(readFileSync(join(f.locate('candidate'),'generation/refinement/source.json'),'utf8'));
+  const profile={...f.target.profile,policy};
+  f.save('candidate','generation/refinement/source.json',{...meta,qualityBefore:before.quality,sourceCriteria:plan.acceptanceCriteria,baselineProfile:profile});
+  f.save('candidate','quality.json',after.quality);f.save('candidate','review.json',afterReview);f.save('candidate','spec-report.json',after.spec);f.save('candidate','delivery-assessment.json',after.deliveryAssessment);f.save('candidate','runtime/runtime.json',runtime);
+  const candidate={...f.candidate,policy,plan,profile,deliveryAssessment:{status:'passed',reasons:[]}},target={...f.target,policy,plan,profile};
+  const beforeFiles=['quality.json','delivery-assessment.json'].map(p=>readFileSync(join(f.locate('candidate'),p),'utf8'));
+  const result=repairHistory(target,f.source,f.refs,{jobs:[candidate],locate:f.locate});expect(result.excluded).toEqual([]);expect(result.attempts).toHaveLength(1);
+  const audit=result.attempts[0].roundAudit;expect(audit.deliveryStandard).toBe('basic70');expect(audit.deliveryStatus).toBe('failed');expect(audit.comparison.rawDelta).toBe(.08);expect(audit.selection.meaningful).toBe(false);expect(audit.requiresDiagnosis).toBe(true);expect(result.attempts[0].conclusion).toContain('不得仅重复');
+  expect(['quality.json','delivery-assessment.json'].map(p=>readFileSync(join(f.locate('candidate'),p),'utf8'))).toEqual(beforeFiles);
+ }finally{f.cleanup();}
 });

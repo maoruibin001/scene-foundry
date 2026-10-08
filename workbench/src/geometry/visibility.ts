@@ -1,3 +1,4 @@
+import {diagnosticFrame} from './reference-frame.mjs';
 import {basis,type Camera} from './camera-fit';
 import {compileGeometryProgram,type Texture} from './program';
 import type {SceneInput} from './scene-contract';
@@ -52,7 +53,7 @@ export function rasterVisibility(meshes:Mesh[],camera:Camera,width=320,height=18
 
 /** 仅诊断不透明几何；不会产生质量得分、失败门槛或删除建议。 */
 export function sceneVisibility(source:SceneInput,textures:Record<string,Texture>={}){
- const compiled=compileGeometryProgram({...source.program,materials:source.program.materials.map(m=>({...m,textureId:null}))});
+ const compiled=compileGeometryProgram({...source.program,materials:source.program.materials.map(m=>({...m,textureId:null,surfaceDetail:null}))});
  const excluded=source.program.materials.filter(m=>{
   if(m.color[3]<.95)return true;if(!m.textureId)return false;const texture=textures[m.textureId];if(!texture)return true;
   const bytes=Buffer.from(texture.rgba8,'base64');for(let i=3;i<bytes.length;i+=4)if(bytes[i]<255)return true;return false;
@@ -62,7 +63,7 @@ export function sceneVisibility(source:SceneInput,textures:Record<string,Texture
  const kept=allMeta.map((m,i)=>({m,mesh:compiled.meshes[i]})).filter(x=>!excluded.includes(x.m.materialId));
  const meshes=kept.map(x=>x.mesh),metadata=kept.map(x=>x.m),palette=source.program.instances.map((i,n)=>({number:n+1,instanceId:i.id,label:i.label,templateId:i.template}));
  const views=source.cameras.map(camera=>{
-  const raster=rasterVisibility(meshes,camera),count=raster.width*raster.height;
+  const frame=diagnosticFrame(camera),raster=rasterVisibility(meshes,camera,frame.width,frame.height),count=raster.width*raster.height;
   const stats=new Map<number,{pixels:number;sumX:number;sumY:number;rect:number[]}>(),pairs=new Map<string,number>(),objectPairs=new Map<string,number>();
   for(let p=0;p<count;p++){
    const id=raster.front[p];if(id<0)continue;const x=p%raster.width,y=Math.floor(p/raster.width),s=stats.get(id)??{pixels:0,sumX:0,sumY:0,rect:[x,y,x+1,y+1]};

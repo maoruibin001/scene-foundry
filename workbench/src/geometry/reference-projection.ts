@@ -10,7 +10,7 @@ export const validRect=(r:any)=>Array.isArray(r)&&r.length===4&&r.every(Number.i
 export function referenceProjection(scene:any,observation:any){
  const report:any={version:'reference-projection-v1',scope:'三维完整包围投影与原图标注比较；局部遮挡不自动判错，无法确定的旧裁切不猜测。',rows:[],unverified:[]};
  if(!observation){report.unverified.push('缺少参考图观察记录');return report;}
- const compiled=compileGeometryProgram({...scene.program,materials:scene.program.materials.map((m:any)=>({...m,textureId:null}))});
+ const compiled=compileGeometryProgram({...scene.program,materials:scene.program.materials.map((m:any)=>({...m,textureId:null,surfaceDetail:null}))});
  for(const l of observation.landmarks??[]){
   const binding=scene.observedBindings?.find((b:any)=>b.landmarkId===l.id);
   if(!binding){report.unverified.push(l.id+' 缺少实例对应');continue;}

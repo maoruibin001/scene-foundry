@@ -1,3 +1,4 @@
+import {inspectContacts,contactSummary} from './contacts';
 import {inspectOpenings,openingSummary,assertAssetOpenings} from './openings';
 import {readFileSync,mkdirSync} from 'node:fs';
 import {join} from 'node:path';
@@ -39,14 +40,14 @@ function bounds(positions:number[]){const min=[Infinity,Infinity,Infinity],max=[
 function corners(b:{min:number[];max:number[]}){return Array.from({length:8},(_,i)=>[0,1,2].map(k=>(i>>k)&1?b.max[k]:b.min[k]));}
 /** 几何和真实范围同时提供，空间修正才能处理相互连接的复合结构。 */
 export function spatialContext(source:SceneInput){
- const materials=source.program.materials.map(m=>({...m,textureId:null}));
+ const materials=source.program.materials.map(m=>({...m,textureId:null,surfaceDetail:null}));
  const templates=source.program.templates.map(t=>{
   const compiled=compileGeometryProgram({...source.program,materials,templates:[t],instances:[{id:'bounds',label:'模板局部范围',template:t.id,position:[0,0,0],rotation:[0,0,0],scale:[1,1,1],requirementIds:[]}]});
   return {id:t.id,localBounds:compiled.bounds,parts:t.parts.map((p,i)=>({id:p.id,...poseOf(p),shape:structuredClone(p.shape),uvScale:p.uvScale??[1,1],material:p.material,localBounds:bounds(compiled.meshes[i].geometry.positions)}))};
  });
  const compiled=compileGeometryProgram({...source.program,materials});
  const instances=source.program.instances.map(i=>{const worldBounds=bounds(compiled.meshes.filter(m=>m.entityId===i.id).flatMap(m=>m.geometry.positions));return {...i,worldBounds,projectedBounds:source.cameras.filter(c=>c.referenceIndex!==null).map(c=>{const pts=corners(worldBounds).map(p=>project(c,p));return {referenceIndex:c.referenceIndex,hasBehindCamera:pts.some(p=>p[2]<=.1),rect:[Math.min(...pts.map(p=>p[0])),Math.min(...pts.map(p=>p[1])),Math.max(...pts.map(p=>p[0])),Math.max(...pts.map(p=>p[1]))]};})};});
- return {spatialOpenings:source.spatialOpenings??null,openingDiagnostics:openingSummary(inspectOpenings(source)),name:source.program.name,worldBounds:compiled.bounds,templates,instances,cameras:source.cameras};
+ return {spatialOpenings:source.spatialOpenings??null,openingDiagnostics:openingSummary(inspectOpenings(source)),spatialContacts:source.spatialContacts??null,contactDiagnostics:contactSummary(inspectContacts(source)),name:source.program.name,worldBounds:compiled.bounds,templates,instances,cameras:source.cameras};
 }
 export function applySpatialRefinement(source:SceneInput,patch:any,plan:any,references:number,frameNames:string[]){
  assert(patch?.version===SPATIAL_METHOD&&typeof patch.reason==='string'&&patch.reason.trim(),'空间修正版本或依据无效');
@@ -64,7 +65,7 @@ export function applySpatialRefinement(source:SceneInput,patch:any,plan:any,refe
  for(const p of patch.parts)update('part:'+p.templateId+'/'+p.partId,next.program.templates.find(t=>t.id===p.templateId)?.parts.find(x=>x.id===p.partId),p);
  for(const p of patch.shapes){const key='shape:'+p.templateId+'/'+p.partId,target=next.program.templates.find(t=>t.id===p.templateId)?.parts.find(x=>x.id===p.partId);assert(target,'结构修正引用未知部件');assert(!seen.has(key),'结构修正部件重复');assert(Array.isArray(p.uvScale)&&p.uvScale.length===2,'结构修正缺少完整贴图比例');seen.add(key);target!.shape=structuredClone(p.shape);target!.uvScale=structuredClone(p.uvScale);}
  for(const p of patch.cameras){const key='camera:'+p.name,target=next.cameras.find(c=>c.name===p.name&&c.referenceIndex===p.referenceIndex);assert(target&&!seen.has(key),'空间修正引用未知或重复机位');seen.add(key);Object.assign(target!,{position:p.position,target:p.target,fov:p.fov});}
- validateScene(next,plan,references);for(const t of next.program.templates)assertAssetOpenings(next,t.id);compileGeometryProgram({...next.program,materials:next.program.materials.map(m=>({...m,textureId:null}))});if(digest(JSON.stringify(next))===digest(JSON.stringify(source)))throw new NoActionableChange('空间修正没有任何可执行变化');return next;
+ validateScene(next,plan,references);for(const t of next.program.templates)assertAssetOpenings(next,t.id);compileGeometryProgram({...next.program,materials:next.program.materials.map(m=>({...m,textureId:null,surfaceDetail:null}))});if(digest(JSON.stringify(next))===digest(JSON.stringify(source)))throw new NoActionableChange('空间修正没有任何可执行变化');return next;
 }
 export function preferSpatialRefinement(review:any,policy:any,iteration:number,previousMethod?:string){
  const score=review?.dimensions?.find((d:any)=>d.id==='spatial')?.score;

@@ -16,10 +16,10 @@ test('CLI route mismatch is rejected, no fabricated returned model',()=>{
 });
 test('nullable schema relation values preserve IR defaults',()=>{
  const ir=normalizeModelValue('generate',{relations:[{radius:null,gap:null},{radius:6,gap:0}]});expect(ir.relations).toEqual([{}, {radius:6,gap:0}]);
- for(const role of ['plan','generate','judge','repair','scene-space','scene-surface','scene-refine','scene-spatial-refine','geometry-asset']){const visit=(s:any)=>{if(s.type==='object'){expect(s.additionalProperties).toBe(false);expect(s.required).toEqual(Object.keys(s.properties));Object.values(s.properties).forEach(visit)}if(s.items)visit(s.items);s.anyOf?.forEach(visit)};visit(modelSchema(role));}
+ for(const role of ['plan','generate','judge','repair','scene-space','scene-blockout','scene-surface','scene-refine','scene-spatial-refine','geometry-asset']){const visit=(s:any)=>{if(s.type==='object'){expect(s.additionalProperties).toBe(false);expect(s.required).toEqual(Object.keys(s.properties));Object.values(s.properties).forEach(visit)}if(s.items)visit(s.items);s.anyOf?.forEach(visit)};visit(modelSchema(role));}
 });
 
 test('全部输出契约不包含服务端不支持的正则前后查找',()=>{
- const walk=(s:any)=>{if(!s||typeof s!=='object')return;if(s.pattern)expect(s.pattern).not.toMatch(/\(\?[=!<]/);Object.values(s).forEach(v=>Array.isArray(v)?v.forEach(walk):walk(v));};
- for(const role of ['scene-refine','scene-spatial-refine','scene-space','scene-surface','scene-layout','geometry-asset','scene-generation','geometry','plan','judge','repair'])walk(modelSchema(role));
+ const walk=(s:any)=>{if(!s||typeof s!=='object')return;if(typeof s.pattern==='string')expect(s.pattern).not.toMatch(/\(\?[=!<]/);Object.values(s).forEach(v=>Array.isArray(v)?v.forEach(walk):walk(v));};
+ for(const role of ['scene-refine','scene-spatial-refine','scene-space','scene-blockout','scene-surface','scene-layout','geometry-asset','scene-generation','geometry','plan','judge','repair'])walk(modelSchema(role));
 });

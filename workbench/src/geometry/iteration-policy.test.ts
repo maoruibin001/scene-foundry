@@ -7,3 +7,7 @@ test('首稿已通过时零修正；未通过也不超过两轮',async()=>{let s
 test('预算不足保留首稿；取消不会启动下一轮；模型异常不自动重试',async()=>{const s=setup([{status:'failed',score:60}]);expect((await boundedIterations({...s.options,canRefine:()=>false})).stopReason).toBe('budget');expect(s.sources).toHaveLength(0);s.ctl.abort();await expect(boundedIterations(s.options)).rejects.toThrow();const b=setup([{status:'failed',score:60}]);await expect(boundedIterations({...b.options,refine:async()=>{throw Error('PROVIDER_TIMEOUT')}})).rejects.toThrow('PROVIDER_TIMEOUT');expect(b.snapshots).toHaveLength(1);});
 
 test('首轮小波动不提前停止，保留最佳候选继续受限修复',async()=>{const s=setup([{status:'failed',score:55.7},{status:'failed',score:56.1},{status:'passed',score:81}]);const r=await boundedIterations(s.options);expect(r.bestIndex).toBe(2);expect(r.stopReason).toBe('passed');expect(r.cycles[1].score).toBe(56.1);expect(s.sources).toHaveLength(2);});
+
+test('策略停滞与调用或轮数耗尽分别显示，首稿和证据仍保留',async()=>{
+ for(const reason of ['no-improvement','budget','limit'] as const){const s=setup([{status:'failed',score:90}]);const r=await boundedIterations({...s.options,canRefine:()=>false,refineBlockedReason:()=>reason});expect(r.stopReason).toBe(reason);expect(r.bestIndex).toBe(0);expect(s.snapshots).toHaveLength(1);expect(s.sources).toHaveLength(0);}
+});

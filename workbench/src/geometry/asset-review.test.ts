@@ -26,7 +26,7 @@ test('模拟渲染：重要资产必须选已预览数据；证据篡改拒绝�
    const denied=await fetch(url,{method:'POST',body:JSON.stringify({method:'tools/call',params:{name:'render_scene_patch'}})});expect(denied.status).toBe(400);
   }finally{server.close();}
   expect(()=>tool.assertReviewed(value(1))).toThrow('缺少');
-  expect((await tool.kit.call('preview_asset',{assetJson:JSON.stringify(value(1))})).isError).not.toBe(true);
+  const preview=await tool.kit.call('preview_asset',{assetJson:JSON.stringify(value(1))});expect(preview.isError).not.toBe(true);expect(JSON.parse((preview.content[0] as any).text).contacts.status).toBe('not-declared');
   const record=tool.assertReviewed(value(1));expect(verifyAssetReview(value(1),record)).toBe(true);
   const resolved=tool.kit.resolveOutput!({selectedAssetSha256:digest(stable(value(1))),reason:'已看模拟画面，仅用于单元测试'});expect(resolved).toEqual(value(1));
   await tool.kit.call('preview_asset',{assetJson:JSON.stringify(value(1))});expect(calls).toBe(1);

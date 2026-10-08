@@ -1,14 +1,16 @@
 const dot=(a,b)=>a.reduce((n,v,i)=>n+v*b[i],0),sub=(a,b)=>a.map((v,i)=>v-b[i]),unit=a=>a.map(v=>v/Math.hypot(...a)),cross=(a,b)=>[a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]];
 export function analyzeSceneRun(samples,audit,width=1600,height=900){
  if(!samples.length||samples.some(s=>!s?.position?.every(Number.isFinite)||!s.target?.every(Number.isFinite)))throw Error('缺少真实相机位姿');
- const reference=samples.filter(s=>s.kind==='view'),continuous=samples.filter(s=>s.kind==='continuous'),first=continuous[0],last=continuous.at(-1);
+ const reference=samples.filter(s=>s.kind==='view'),continuous=samples.filter(s=>s.kind==='continuous'||s.kind==='motion-observation'),first=continuous[0],last=continuous.at(-1);
  if(continuous.length<4||!reference.length)throw Error('缺少固定机位或连续观测证据');
  const hasReferenceViews=audit.views.some(v=>Number.isInteger(v.referenceIndex)&&v.referenceIndex>0);
  const project=(s,landmarks)=>{
-  const forward=unit(sub(s.target,s.position)),right=unit(cross(forward,[0,1,0])),up=cross(right,forward),f=height/(2*Math.tan(s.fov/2));
-  const boxes=landmarks.map(l=>{const d=sub(l.position,s.position),z=dot(d,forward),x=width/2+dot(d,right)*f/z,y=height/2-dot(d,up)*f/z,r=Math.max(...l.size)/2*f/z;return {id:l.id,z,x,y,r};}).filter(p=>p.z>.03&&p.x+p.r>0&&p.x-p.r<width&&p.y+p.r>0&&p.y-p.r<height);
-  const lo=boxes.length?Math.max(0,Math.min(...boxes.map(p=>p.y-p.r))):0,hi=boxes.length?Math.min(height,Math.max(...boxes.map(p=>p.y+p.r))):0;
-  return {frame:s.name,heightRatio:(hi-lo)/height,visibleCandidateParts:boxes.length,estimate:'实际相机投影的主体包围球范围；不等于可见像素，遮挡仍须视觉核验'};
+  const frame=audit.views[s.selectedView]?.frame;const w=s.width??frame?.width??width,h=s.height??frame?.height??height;
+  if(!(w>0&&h>0))throw Error('相机采集尺寸无效');
+  const forward=unit(sub(s.target,s.position)),right=unit(cross(forward,[0,1,0])),up=cross(right,forward),f=h/(2*Math.tan(s.fov/2));
+  const boxes=landmarks.map(l=>{const d=sub(l.position,s.position),z=dot(d,forward),x=w/2+dot(d,right)*f/z,y=h/2-dot(d,up)*f/z,r=Math.max(...l.size)/2*f/z;return {id:l.id,z,x,y,r};}).filter(p=>p.z>.03&&p.x+p.r>0&&p.x-p.r<w&&p.y+p.r>0&&p.y-p.r<h);
+  const lo=boxes.length?Math.max(0,Math.min(...boxes.map(p=>p.y-p.r))):0,hi=boxes.length?Math.min(h,Math.max(...boxes.map(p=>p.y+p.r))):0;
+  return {frame:s.name,heightRatio:(hi-lo)/h,visibleCandidateParts:boxes.length,estimate:'实际相机投影的主体包围球范围；不等于可见像素，遮挡仍须视觉核验'};
  };
  const subjects=audit.landmarks.filter(l=>l.role==='subject');
  const measure=s=>{

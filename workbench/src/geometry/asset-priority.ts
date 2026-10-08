@@ -8,3 +8,14 @@ export function prioritizeAssets(briefs:any[],layout:any,plan:any,observation:an
   return {brief,index,critical,salience,priority:salience*100+critical*4};
  }).sort((a,b)=>b.priority-a.priority||a.index-b.index);
 }
+
+/** 预览预算与制作排序分离：至少覆盖一个已声明主体，避免大面积地面包揽检查。 */
+export function selectAssetPreviews(ranked:ReturnType<typeof prioritizeAssets>,layout:any,limit:number){
+ const count=Math.max(0,Math.min(ranked.length,Math.floor(limit)||0));
+ if(!count)return [];
+ const subjects=new Set((layout.entities??[]).filter((e:any)=>e.role==='subject').map((e:any)=>e.instanceId));
+ const subject=ranked.find(r=>layout.program.instances.some((i:any)=>i.template===r.brief.id&&subjects.has(i.id)));
+ const selected=subject?[subject]:[];
+ for(const row of ranked)if(selected.length<count&&!selected.includes(row))selected.push(row);
+ return selected.map(row=>({templateId:row.brief.id,reason:row===subject?'覆盖图中主要主体；其余名额按可见面积和关键需求分配':'按可见面积和关键需求分配'}));
+}
