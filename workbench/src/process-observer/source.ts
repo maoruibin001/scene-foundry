@@ -3,6 +3,7 @@ import { Reader, safeId } from "./reader";
 import { normalize, arr, timestamp, active, jobTiming } from "./model";
 import { statSync } from "node:fs";
 import { assetPreviewSvg } from "./asset-preview";
+import { grayboxSnapshot } from "./graybox";
 const FIXED = [
   "observer-progress.json",
   "generation/resumed-from.json",
@@ -151,6 +152,7 @@ export class Source {
     const { kind, id, base } = this.locate(key),
       r = this.reader.session(),
       files: Record<string, any> = {};
+    const mediaReadStart = this.reader.mediaReadBytes;
     let job: any;
     if (kind === "run") job = r.json(`${base}/job.json`);
     else {
@@ -239,6 +241,7 @@ export class Source {
               : "unknown";
       }
     }
+    const graybox = kind === "run" ? grayboxSnapshot(job, base, this.reader, r, files) : { value: null, warnings: [] };
     const model = normalize(job, files),
       artifacts: any[] = [];
     for (const asset of model.assets) {
@@ -250,7 +253,7 @@ export class Source {
         ? [...new Set((geometry.template.parts ?? []).map((part: any) => part.material).filter((id: any) => typeof id === "string" && safeId(id)))]
         : [];
     }
-    const add = (rel: string, label: string, stage: string, media = false) => {
+    const add = (rel: string, label: string, stage: string, media = false, metadata = {}) => {
       try {
         const st = statSync(this.reader.path(rel));
         if (st.isFile())
@@ -261,6 +264,7 @@ export class Source {
             media,
             bytes: st.size,
             url: `${this.mediaPath}?path=${encodeURIComponent(rel)}`,
+            ...metadata,
           });
       } catch {}
     };
@@ -277,6 +281,9 @@ export class Source {
     for (const f of runtimeImages)
       if (/^[\w.-]+\.(png|jpg|jpeg)$/.test(f))
         add(`${base}/runtime/${f}`, f, "runtime", true);
+    for (const frame of graybox.value?.frames ?? [])
+      add(frame.path, `灰模第 ${graybox.value!.round + 1} 轮 · ${frame.file}`, "runtime", true,
+        { kind: "graybox", round: graybox.value!.round, file: frame.file, referenceIndex: frame.referenceIndex });
     for (const f of this.reader.list(`${base}/materials`, 80))
       if (/^[\w.-]+\.(png|jpg|jpeg)$/.test(f))
         add(`${base}/materials/${f}`, f, "materials", true);
@@ -293,6 +300,8 @@ export class Source {
     }));
     const value = {
       ...model,
+      graybox: graybox.value,
+      milestones: { ...model.milestones, grayboxGenerated: Boolean(graybox.value) },
       files,
       artifacts,
       source: {
@@ -308,8 +317,8 @@ export class Source {
         observedAt: new Date().toISOString(),
         adapterVersion: "scene-observer-v1",
       },
-      warnings: [...new Set([...r.warnings, ...model.adapterWarnings])],
-      io: r.stats(),
+      warnings: [...new Set([...r.warnings, ...model.adapterWarnings, ...graybox.warnings])],
+      io: { ...r.stats(), mediaReadBytes: this.reader.mediaReadBytes - mediaReadStart },
     };
     if (this.detailCache.size >= 12)
       this.detailCache.delete(this.detailCache.keys().next().value!);

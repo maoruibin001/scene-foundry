@@ -13,6 +13,8 @@ test('mounted observer leaves pipeline mutations alone and confines its own rout
   expect(route(req('/api/process/index',{headers:{origin:'https://foreign.example'}}))?.status).toBe(403);
   expect((await route(req('/api/process/index'))?.json()).total).toBe(0);
   const page=route(req('/process/'))!;expect(await page.text()).toContain('<main>process</main>');
+  writeFileSync(join(root,'graybox-view.js'),'export const graybox = true;');
+  const module=route(req('/process/graybox-view.js'))!;expect(module.status).toBe(200);expect(await module.text()).toContain('export const graybox');
   expect(page.headers.get('content-security-policy')).toContain("frame-ancestors 'self'");
   expect(route(req('/process/server.ts'))?.status).toBe(404);
   expect(route(req('/api/process/media?path=../secret'))?.status).toBe(400);

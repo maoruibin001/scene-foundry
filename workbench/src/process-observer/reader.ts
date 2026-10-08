@@ -14,6 +14,8 @@ export const safeId = (id: string) =>
   /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,100}$/.test(id);
 export class Reader {
   root: string;
+  mediaHashes = new Map<string, { stamp: string; hash: string }>();
+  mediaReadBytes = 0;
   cache = new Map<
     string,
     { stamp: string; value: any; bytes: number; hash: string }
@@ -110,5 +112,30 @@ export class Reader {
   }
   digest(rel: string) {
     return this.cache.get(rel)?.hash ?? null;
+  }
+  // Hash only bounded, record-scoped screenshots; unchanged media is never reread.
+  mediaDigest(rel: string) {
+    if (!/\.(png|jpg|jpeg)$/.test(rel)) throw Error("不支持的截图格式");
+    const path = this.path(rel), st = statSync(path, { bigint: true });
+    const stamp = `${st.ino}:${st.size}:${st.mtimeNs}:${st.ctimeNs}`;
+    if (!st.isFile() || st.size > BigInt(40 * 1024 * 1024)) throw Error("截图超过 40 MiB 限额或不是文件");
+    const cached = this.mediaHashes.get(rel);
+    if (cached?.stamp === stamp) return cached.hash;
+    const hash = createHash("sha256"), buffer = Buffer.alloc(64 * 1024), fd = openSync(path, "r");
+    try {
+      let size, readBytes = 0;
+      while ((size = readSync(fd, buffer, 0, buffer.length, null)) > 0) {
+        readBytes += size;
+        if (readBytes > Number(st.size)) throw Error("截图写入中");
+        this.mediaReadBytes += size;
+        hash.update(buffer.subarray(0, size));
+      }
+    } finally { closeSync(fd); }
+    const after = statSync(path, { bigint: true });
+    if (`${after.ino}:${after.size}:${after.mtimeNs}:${after.ctimeNs}` !== stamp) throw Error("截图写入中");
+    const value = hash.digest("hex");
+    if (this.mediaHashes.size >= 256) this.mediaHashes.delete(this.mediaHashes.keys().next().value!);
+    this.mediaHashes.set(rel, { stamp, hash: value });
+    return value;
   }
 }

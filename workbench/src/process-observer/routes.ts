@@ -26,7 +26,7 @@ export function createProcessRoutes(dataRoot: string, publicRoot: string) {
       if (u.pathname === '/api/process/live') return liveOutput(source,u.searchParams.get('key') ?? '',u.searchParams.get('call') ?? '',u.searchParams.get('stream') ?? 'log',req.signal);
       if (u.pathname === '/api/process/call') return json(source.call(u.searchParams.get('key') ?? '', u.searchParams.get('call') ?? '', u.searchParams.get('stream') ?? 'log'));
       if (u.pathname === '/api/process/media') return new Response(Bun.file(source.media(u.searchParams.get('path') ?? '')), {headers});
-      const assets: Record<string,string> = {'/process/':'index.html','/process/app.js':'app.js','/process/call-console.js':'call-console.js','/process/style.css':'style.css','/process/vendor/xterm.mjs':'vendor/xterm.mjs','/process/vendor/xterm.css':'vendor/xterm.css'};
+      const assets: Record<string,string> = {'/process/':'index.html','/process/app.js':'app.js','/process/graybox-view.js':'graybox-view.js','/process/call-console.js':'call-console.js','/process/style.css':'style.css','/process/vendor/xterm.mjs':'vendor/xterm.mjs','/process/vendor/xterm.css':'vendor/xterm.css'};
       if (assets[u.pathname]) return new Response(Bun.file(join(publicRoot,assets[u.pathname])),{headers});
       return json({error:'未找到'},404);
     } catch (error) { return json({error:String(error)},400); }

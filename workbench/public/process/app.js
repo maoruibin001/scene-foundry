@@ -1,4 +1,5 @@
 import { consoleHTML, mountConsole, hideConsole } from "./call-console.js";
+import { displayFrames, referenceFrame, grayboxSummary, grayboxView } from "./graybox-view.js";
 const $ = (s) => document.querySelector(s);
 const E = (v) =>
   String(v ?? "").replace(
@@ -141,10 +142,7 @@ function imageCard(a) {
   return `<button class="image-card" data-media="${E(a.path)}"><img loading="lazy" src="${E(a.url)}" alt="${E(a.label)}"><span>${E(a.label)}</span></button>`;
 }
 const refs = () => data.artifacts.filter((a) => a.stage === "input");
-const renders = () =>
-  data.artifacts.filter(
-    (a) => a.stage === "runtime" && !a.path.endsWith(".webm"),
-  );
+const renders = () => displayFrames(data);
 function sourceLabel(s) {
   return s === "image"
     ? ["图中观察", ""]
@@ -169,6 +167,7 @@ function layoutData() {
   const layout =
     data.scene ??
     data.layout ??
+    data.graybox?.scene ??
     data.space ??
     data.files["reference-layout.json"] ??
     data.job.sceneIR ??
@@ -177,6 +176,7 @@ function layoutData() {
     Boolean(data.files["reference-layout.json"]) &&
     !data.scene &&
     !data.layout &&
+    !data.graybox &&
     !data.space;
   const items = A(layout?.program?.instances).length
     ? layout.program.instances
@@ -220,7 +220,7 @@ function layoutView() {
         `<g><line x1="${x(c.position[0])}" y1="${y(c.position[1])}" x2="${x(c.target?.[0] ?? c.position[0])}" y2="${y(c.target?.[1] ?? c.position[1])}"></line><circle class="camera" cx="${x(c.position[0])}" cy="${y(c.position[1])}" r="5"></circle><text x="${x(c.position[0]) + 8}" y="${y(c.position[1]) + 14}">${E(c.name ?? c.id ?? "相机")}</text></g>`,
     )
     .join("");
-  return `<div class="section"><h2>布局投影与参考机位</h2><p class="muted compact">Z 向上 · XY 平面示意。位置来自已保存规划；矩形仅表示尺寸或定位标记，未绘制旋转与真实几何。</p><div class="layout-wrap"><svg class="map" viewBox="0 0 600 390" aria-label="场景布局与相机二维投影">${boxes}${cams}</svg><div class="object-list">${items.map((i) => `<button data-object="${E(i.id)}">${E(i.label ?? i.id)}<small>规划位置 ${E(JSON.stringify(i.position ?? "未知"))} · ${i.source === "image" ? "图中观察" : i.source === "inferred" ? "推断补全" : "来源未细分"}</small></button>`).join("")}</div></div><div id="object-detail" class="source-footer">点击对象查看坐标、绑定需求与来源；位置可视化不等于资产已生成。</div>${json("相机位置与朝向", cameras)}<h3>空间关系与推断说明</h3>${list(observations?.topology ?? layout?.relations ?? layout?.relationships ?? [])}${list(layout?.assumptions ?? data.plan?.assumptions ?? [])}${json("布局原始数据", layout)}</div>`;
+  return `${layout === data.graybox?.scene ? grayboxSummary(data.graybox) : ""}<div class="section"><h2>布局投影与参考机位</h2><p class="muted compact">Z 向上 · XY 平面示意。位置来自已保存规划；矩形仅表示尺寸或定位标记，未绘制旋转与真实几何。</p><div class="layout-wrap"><svg class="map" viewBox="0 0 600 390" aria-label="场景布局与相机二维投影">${boxes}${cams}</svg><div class="object-list">${items.map((i) => `<button data-object="${E(i.id)}">${E(i.label ?? i.id)}<small>规划位置 ${E(JSON.stringify(i.position ?? "未知"))} · ${i.source === "image" ? "图中观察" : i.source === "inferred" ? "推断补全" : "来源未细分"}</small></button>`).join("")}</div></div><div id="object-detail" class="source-footer">点击对象查看坐标、绑定需求与来源；位置可视化不等于资产已生成。</div>${json("相机位置与朝向", cameras)}<h3>空间关系与推断说明</h3>${list(observations?.topology ?? layout?.relations ?? layout?.relationships ?? [])}${list(layout?.assumptions ?? data.plan?.assumptions ?? [])}${json("布局原始数据", layout)}</div>`;
 }
 function assets() {
   const textures = data.artifacts.filter((a) => a.stage === "materials");
@@ -241,17 +241,15 @@ function assets() {
     const ids = A(s.materialIds);
     return `<article class="asset-card"><div class="asset-card-top">${s.previewAvailable ? `<button class="asset-visual" data-asset="${E(s.id)}" aria-label="放大查看 ${E(s.label ?? s.id)}"><img loading="lazy" src="${E(previewUrl(s.id))}" alt="${E(s.label ?? s.id)}的已保存几何形状"></button>` : `<div class="asset-visual pending-visual">${s.status === "waiting" || s.status === "pending" ? "等待生成" : "没有可预览的几何工件"}</div>`}<div><h3>${E(s.label ?? s.id)}</h3>${badge(s.status)}<p class="muted compact">${E(s.id)} · ${E(s.checkpoint?.triangles ?? "未知")} 个三角形 · ${s.status==="reused"?"本次 0 秒（历史复用）":duration(s.checkpoint?.durationMs)}</p><p class="muted compact">${s.previewAvailable ? "真实几何的等轴投影；贴图效果以右侧材质图和 Engine 画面为准。" : "仅展示已保存的工件，不推测未生成的形状。"}</p></div></div>${ids.length ? `<div class="asset-materials"><strong>使用材质 ${ids.length} 种</strong><div class="material-list">${ids.map((id) => material(materialById.get(id) ?? { id, color: [.55,.65,.59,1] }, true)).join("")}</div></div>` : ""}${s.checkpoint?.error ? `<p class="status failed">${E(s.checkpoint.error)}</p>` : ""}${json("资产简报与完成回执", s)}</article>`;
   });
-  return `<div class="section"><h2>资产与物料总览</h2><p class="muted compact">随任务工件保存进度自动更新。逐资产预览显示已保存的真实几何形状；最终外观请看 Engine 渲染。点击图片可放大。</p><div class="inventory-counts"><span>参考图 <b>${refs().length}</b></span><span>逐资产几何 <b>${data.assets.filter((s) => s.previewAvailable).length} / ${data.assets.length || "未知"}</b></span><span>材质定义 <b>${materials.length}</b></span><span>贴图 <b>${textures.length}</b></span><span>Engine 画面 <b>${renders().length}</b></span></div></div><div class="section"><h2>逐资产形状与所用材质</h2>${assetCards.length ? `<div class="asset-grid">${assetCards.join("")}</div>` : empty("暂无逐资产几何工件。旧版整体生成若未保存单资产文件，无法还原单资产形状。")}${data.job.objectCount ? `<p class="muted compact">旧记录另报告 ${E(data.job.objectCount)} 个几何对象；这不是已生成资产数。</p>` : ""}</div><div class="section"><h2>材质定义与贴图 <span class="muted">${materials.length} 种</span></h2>${materials.length ? `<div class="material-grid">${materials.map((m) => material(m)).join("")}</div>` : empty("尚无材质定义")}${json("材质参数与颜色", materials)}</div><div class="section"><h2>已生成的贴图文件 <span class="muted">${textures.length} 张</span></h2>${textures.length ? `<div class="gallery">${textures.map(imageCard).join("")}</div>` : empty("尚无材质图片工件")}${json("材质来源与摘要", data.files["materials/texture-provenance.json"] ?? { status: "暂无逐贴图来源回执；仅展示已有文件" })}</div><div class="section"><h2>输入参考图 <span class="muted">${refs().length} 张</span></h2>${refs().length ? `<div class="gallery">${refs().map(imageCard).join("")}</div>` : empty("这条记录没有参考图片")}</div><div class="section"><h2>Engine 实际画面 <span class="muted">${renders().length} 张</span></h2>${renders().length ? `<div class="gallery">${renders().map(imageCard).join("")}</div>` : empty("尚无 Engine 运行截图")}</div>`;
+  return `${grayboxView(data, imageCard)}<div class="section"><h2>资产与物料总览</h2><p class="muted compact">随任务工件保存进度自动更新。逐资产预览显示已保存的真实几何形状；最终外观请看 Engine 渲染。点击图片可放大。</p><div class="inventory-counts"><span>参考图 <b>${refs().length}</b></span><span>逐资产几何 <b>${data.assets.filter((s) => s.previewAvailable).length} / ${data.assets.length || "未知"}</b></span><span>材质定义 <b>${materials.length}</b></span><span>贴图 <b>${textures.length}</b></span><span>Engine 画面 <b>${renders().length}</b></span></div></div><div class="section"><h2>逐资产形状与所用材质</h2>${assetCards.length ? `<div class="asset-grid">${assetCards.join("")}</div>` : empty("暂无逐资产几何工件。旧版整体生成若未保存单资产文件，无法还原单资产形状。")}${data.job.objectCount ? `<p class="muted compact">旧记录另报告 ${E(data.job.objectCount)} 个几何对象；这不是已生成资产数。</p>` : ""}</div><div class="section"><h2>材质定义与贴图 <span class="muted">${materials.length} 种</span></h2>${materials.length ? `<div class="material-grid">${materials.map((m) => material(m)).join("")}</div>` : empty("尚无材质定义")}${json("材质参数与颜色", materials)}</div><div class="section"><h2>已生成的贴图文件 <span class="muted">${textures.length} 张</span></h2>${textures.length ? `<div class="gallery">${textures.map(imageCard).join("")}</div>` : empty("尚无材质图片工件")}${json("材质来源与摘要", data.files["materials/texture-provenance.json"] ?? { status: "暂无逐贴图来源回执；仅展示已有文件" })}</div><div class="section"><h2>输入参考图 <span class="muted">${refs().length} 张</span></h2>${refs().length ? `<div class="gallery">${refs().map(imageCard).join("")}</div>` : empty("这条记录没有参考图片")}</div><div class="section"><h2>Engine 实际画面 <span class="muted">${renders().length} 张</span></h2>${renders().length ? `<div class="gallery">${renders().map(imageCard).join("")}</div>` : empty("尚无 Engine 运行截图")}</div>`;
 }
 function comparison() {
   const reference = refs(),
     frames = renders();
   const index = Math.min(compareIndex, Math.max(reference.length, 1) - 1),
     ref = reference[index];
-  const named = frames.find(
-    (a) => a.label === `reference-view-${index + 1}.png`,
-  );
-  const matched = named ?? (reference.length === 1 ? frames[0] : null);
+  const named = referenceFrame(frames, index);
+  const matched = named ?? (reference.length === 1 && frames[0]?.kind !== "graybox" ? frames[0] : null);
   return `<div class="section"><div class="compare-head"><h2>参考图 / Engine 实际渲染</h2><select id="compare-view" aria-label="参考视角">${reference.map((a, i) => `<option value="${i}" ${i === index ? "selected" : ""}>参考视角 ${i + 1}</option>`).join("") || "<option>没有参考图</option>"}</select></div><p class="muted compact">${named ? "对应关系来自 reference-view 文件名；非像素配准。" : matched ? "单图与首帧并列展示；未确认相机匹配。" : "没有可核验的对应帧，不自动配对不同机位。"}</p><div class="grid"><div><h3>原始参考</h3>${ref ? imageCard(ref) : empty("无参考图")}</div><div><h3>实际渲染</h3>${matched ? imageCard(matched) : empty("此视角暂无对应的 Engine 渲染")}</div></div></div><div class="section"><h2>已保存的 Engine 运行画面</h2>${frames.length ? `<div class="gallery">${frames.map(imageCard).join("")}</div>` : empty("尚未运行或尚无截图")}<p class="muted compact">这些是历史采集结果，不代表当前正在运行。</p></div>`;
 }
 function review() {
@@ -314,9 +312,10 @@ function outputs() {
   if (["space", "layout", "surface"].includes(id)) return layoutView();
   if (["materials", "assets"].includes(id) || id.startsWith("asset:"))
     return assets();
-  if (["judge", "spec", "gate"].includes(id)) return review() + preview();
+  if (id === "graybox") return grayboxView(data, imageCard) + layoutView();
+  if (["judge", "spec", "gate"].includes(id)) return grayboxView(data, imageCard) + review() + preview();
   if (id === "runtime") return preview() + comparison();
-  return `<div class="section"><h2>已保留产物</h2><p class="body-copy">${E(data.plan?.summary ?? "产物将在生成器保存后逐步出现。")}</p><div class="milestones"><span class="${data.plan ? "done" : ""}">需求 ${A(data.plan?.requirements).length || "暂无"} 项</span><span>布局 ${layoutData().layout ? "已保存" : "暂无"}</span><span>材质图片 ${data.artifacts.filter((a) => a.stage === "materials").length}</span><span>Engine 画面 ${renders().length}</span></div><div class="detail-links"><button data-tab="requirements">查看需求</button><button data-tab="layout">查看布局</button><button data-tab="assets">查看资产</button><button data-tab="compare">参考对照</button><button data-tab="calls">调用活动</button></div></div>${preview()}`;
+  return `${grayboxView(data, imageCard)}<div class="section"><h2>已保留产物</h2><p class="body-copy">${E(data.plan?.summary ?? "产物将在生成器保存后逐步出现。")}</p><div class="milestones"><span class="${data.plan ? "done" : ""}">需求 ${A(data.plan?.requirements).length || "暂无"} 项</span><span>布局 ${layoutData().layout ? "已保存" : "暂无"}</span><span>材质图片 ${data.artifacts.filter((a) => a.stage === "materials").length}</span><span>Engine 画面 ${renders().length}</span></div><div class="detail-links"><button data-tab="requirements">查看需求</button><button data-tab="layout">查看布局</button><button data-tab="assets">查看资产</button><button data-tab="compare">参考对照</button><button data-tab="calls">调用活动</button></div></div>${preview()}`;
 }
 function selectedStage() {
   return [...data.stages, ...data.children].find((s) => s.id === stage);
@@ -326,7 +325,9 @@ function stageDetail() {
   if (!s) return "";
   const id = s.id;
   const outputKeys = Object.keys(data.files).filter((f) =>
-    id === "scene-repair-plan"
+    id === "graybox"
+      ? Boolean(data.graybox && f.startsWith(data.graybox.folder + "/"))
+      : id === "scene-repair-plan"
       ? /repair-(?:goals|history)\.json$/.test(f)
       : id === "plan"
       ? f === "plan.json"
@@ -349,14 +350,14 @@ function stageDetail() {
       ? data.job.prompt
       : id === "plan"
         ? data.job.prompt
-        : id === "space" || id === "generate"
+        : id === "space" || id === "generate" || id === "graybox"
           ? data.plan
           : id === "surface"
             ? data.space
             : id === "assets" || id.startsWith("asset:")
               ? data.layout
               : null;
-  return `<div class="detail"><div class="detail-grid"><div><h3>${E(s.label)} ${badge(s.status)}</h3><dl class="kv"><dt>依赖</dt><dd>${E([...data.stages, ...data.children].find((x) => x.id === s.dependsOn)?.label ?? s.dependsOn ?? "原始输入")}</dd><dt>开始</dt><dd>${stamp(s.start)}</dd><dt>结束</dt><dd>${stamp(s.end ?? (s.start && s.durationMs !== null && s.durationMs !== undefined ? s.start + s.durationMs : null))}</dd><dt>耗时</dt><dd data-stage-duration="${E(s.id)}">${duration(stageDuration(s))}</dd><dt>状态依据</dt><dd>${E(s.evidence ?? "生成检查点；未发生步骤以契约预期显示")}</dd></dl></div><div><h3>输入、约束与输出</h3><p class="compact">${E(s.inputSummary ?? (id === "input" ? "用户原始文字与图片" : id === "plan" ? "从输入冻结需求与来源" : s.dependsOn ? "依赖上一步真实产物；没有产物时不视为执行完成" : "原始输入与冻结需求"))}</p><p class="muted compact">${E(data.job.kind === "diagnostic" ? data.job.kind + ": " + (data.job.stopConditions ?? []).join("；") : `${A(data.plan?.requirements).filter((r) => r.critical).length} 项关键需求 · 质量门槛 ${data.job.policy?.score ?? "未知"} 分`)}</p><p class="compact">已保存输出：${s.outputSummary ? E(s.outputSummary) : outputKeys.length ? outputKeys.map(E).join("、") : id === "runtime" ? renders().length + " 张运行截图" : "暂无可展示结构化输出；请查看调用或阶段记录"}</p></div></div>${s.error ? `<div class="alert">${E(s.error)}</div>` : ""}${json("展开阶段输入 / 输出", { input: inputs, output: Object.fromEntries(outputKeys.map((k) => [k, data.files[k]])), record: s })}</div>`;
+  return `<div class="detail"><div class="detail-grid"><div><h3>${E(s.label)} ${badge(s.status)}</h3><dl class="kv"><dt>依赖</dt><dd>${E([...data.stages, ...data.children].find((x) => x.id === s.dependsOn)?.label ?? s.dependsOn ?? "原始输入")}</dd><dt>开始</dt><dd>${stamp(s.start)}</dd><dt>结束</dt><dd>${stamp(s.end ?? (s.start && s.durationMs !== null && s.durationMs !== undefined ? s.start + s.durationMs : null))}</dd><dt>耗时</dt><dd data-stage-duration="${E(s.id)}">${duration(stageDuration(s))}</dd><dt>状态依据</dt><dd>${E(s.evidence ?? "生成检查点；未发生步骤以契约预期显示")}</dd></dl></div><div><h3>输入、约束与输出</h3><p class="compact">${E(s.inputSummary ?? (id === "input" ? "用户原始文字与图片" : id === "plan" ? "从输入冻结需求与来源" : s.dependsOn ? "依赖上一步真实产物；没有产物时不视为执行完成" : "原始输入与冻结需求"))}</p><p class="muted compact">${E(data.job.kind === "diagnostic" ? data.job.kind + ": " + (data.job.stopConditions ?? []).join("；") : `${A(data.plan?.requirements).filter((r) => r.critical).length} 项关键需求 · 质量门槛 ${data.job.policy?.score ?? "未知"} 分`)}</p><p class="compact">已保存输出：${s.outputSummary ? E(s.outputSummary) : id === "graybox" && data.graybox ? `第 ${data.graybox.round + 1} 轮布局、灰模几何及 ${data.graybox.frames.length} 张 Engine 画面；空间评审${data.graybox.status === "passed" ? "已通过" : data.graybox.status === "not_met" ? "未通过" : "待完成"}` : outputKeys.length ? outputKeys.map(E).join("、") : id === "runtime" ? renders().length + " 张运行截图" : "暂无可展示结构化输出；请查看调用或阶段记录"}</p></div></div>${s.error ? `<div class="alert">${E(s.error)}</div>` : ""}${json("展开阶段输入 / 输出", { input: inputs, output: Object.fromEntries(outputKeys.map((k) => [k, data.files[k]])), record: s })}</div>`;
 }
 function render() {
   if (!data) return;
@@ -373,7 +374,8 @@ function render() {
   $("#main").innerHTML =
     `<div class="hero-title"><div><div class="eyebrow">${j.kind === "diagnostic" ? "DIAGNOSTIC / 诊断记录 · 非完整生成" : "SCENE PIPELINE / 场景生成"}</div><h1>${E(j.plan?.name ?? j.id)}</h1><div class="hero-id">${E(j.pipelineVersion?.label ?? "历史版本")} · ${E(j.generationMethod ?? "方法未记录")} · ${E(j.id)}</div></div><div class="hero-status">${badge(j.status)}</div></div>${data.error ? `<div class="alert"><strong>${data.terminal ? "已停止 · 保留以下产物" : "当前错误"}</strong><br>${E(data.error)}</div>` : ""}${data.source.replay ? '<div class="notice"><strong>测试回放 · 合成工件 · 非实时生成</strong>。仅用于验证进行中、等待、取消等状态，不计入真实生成。</div>' : ""}${j.kind === "diagnostic" ? `<div class="notice">独立诊断，不计入正常场景生成成功率或质量通过。来源任务 ${E(j.sourceJob)}。</div>` : ""}<div class="metrics"><div class="metric"><span>当前 / 最后阶段</span><strong>${E(data.currentLabel)}</strong><small id="activity-summary">${E(data.activity)}</small></div><div class="metric"><span>阶段耗时 / 总耗时</span><strong id="duration">${duration(data.stageElapsed)}</strong><small id="total-duration">总计 ${duration(data.totalMs)}${data.end ? " · 已结束" : ""}</small></div><div class="metric"><span>已完成资产 / 已知总数</span><strong>${data.count.completed ?? "未知"} / ${data.count.total ?? "未知"}</strong><small>${E(data.count.source)}</small></div><div class="metric"><span>最后活动时间</span><strong class="activity-time">${stamp(data.lastActivity)}</strong><small id="activity-age">${data.lastActivity ? "距今 " + duration(Date.now() - data.lastActivity) : "旧记录没有活动回执"}</small></div></div><div class="milestones">${[
       ["planned", "已规划"],
-      ["generated", "几何已生成"],
+      ...(data.graybox ? [["grayboxGenerated", "灰模几何已生成"]] : []),
+      ["generated", data.graybox ? "详细场景几何已生成" : "几何已生成"],
       ["built", "场景已构建"],
       ["visual", "视觉已通过"],
     ]
@@ -383,7 +385,7 @@ function render() {
       )
       .join(
         "",
-      )}</div>${data.warnings.length || index?.warnings.length ? `<div class="notice">读取提示：${[...data.warnings, ...(index?.warnings ?? [])].map(E).join("；")}</div>` : ""}<section class="section"><div class="section-head"><h2>执行路径</h2><p>点击阶段回看 · 灰色步骤尚无执行记录</p></div><div class="timeline">${data.stages.map((s, i) => `<button class="stage ${s.id === stage ? "selected" : ""}" data-stage="${E(s.id)}" aria-pressed="${s.id === stage}"><span class="step">${String(i + 1).padStart(2, "0")} ${s.dependsOn ? "← 依赖上游" : ""}</span><b>${E(s.label)}</b>${badge(s.status)}</button>`).join("") || '<p class="muted">暂无阶段记录</p>'}</div>${data.children.length ? `<div class="substeps">${data.children.map((s) => `<button class="${stage === s.id ? "selected" : ""}" data-stage="${E(s.id)}">${E(s.label)} · ${badge(s.status)}</button>`).join("")}</div>` : ""}${stageDetail()}</section><div class="tabs" role="tablist">${tabs.map(([id, label]) => `<button role="tab" aria-selected="${id === tab}" data-tab="${id}" class="${id === tab ? "selected" : ""}">${label}</button>`).join("")}</div><div id="content">${{ outputs, requirements, layout: layoutView, assets, compare: comparison, review, calls }[tab]()}</div><footer class="provenance">观测数据 ${E(data.source.observedAt)} · 适配器 ${E(data.source.adapterVersion)}<br>来源：${E(data.source.root)}/${E(data.source.record)}<br>管线摘要：${E(data.source.pipeline?.id ?? "未知")}${json("数据来源、内容摘要与读取开销", { ...data.source, io: data.io })}<p>只读模式 · 取消 / 重试 / 新建生成未接入。上游细粒度事件缺失时显示未知，不推测隐藏推理。</p></footer>`;
+      )}</div>${grayboxSummary(data.graybox)}${data.warnings.length || index?.warnings.length ? `<div class="notice">读取提示：${[...data.warnings, ...(index?.warnings ?? [])].map(E).join("；")}</div>` : ""}<section class="section"><div class="section-head"><h2>执行路径</h2><p>点击阶段回看 · 灰色步骤尚无执行记录</p></div><div class="timeline">${data.stages.map((s, i) => `<button class="stage ${s.id === stage ? "selected" : ""}" data-stage="${E(s.id)}" aria-pressed="${s.id === stage}"><span class="step">${String(i + 1).padStart(2, "0")} ${s.dependsOn ? "← 依赖上游" : ""}</span><b>${E(s.label)}</b>${badge(s.status)}</button>`).join("") || '<p class="muted">暂无阶段记录</p>'}</div>${data.children.length ? `<div class="substeps">${data.children.map((s) => `<button class="${stage === s.id ? "selected" : ""}" data-stage="${E(s.id)}">${E(s.label)} · ${badge(s.status)}</button>`).join("")}</div>` : ""}${stageDetail()}</section><div class="tabs" role="tablist">${tabs.map(([id, label]) => `<button role="tab" aria-selected="${id === tab}" data-tab="${id}" class="${id === tab ? "selected" : ""}">${label}</button>`).join("")}</div><div id="content">${{ outputs, requirements, layout: layoutView, assets, compare: comparison, review, calls }[tab]()}</div><footer class="provenance">观测数据 ${E(data.source.observedAt)} · 适配器 ${E(data.source.adapterVersion)}<br>来源：${E(data.source.root)}/${E(data.source.record)}<br>管线摘要：${E(data.source.pipeline?.id ?? "未知")}${json("数据来源、内容摘要与读取开销", { ...data.source, io: data.io })}<p>只读模式 · 取消 / 重试 / 新建生成未接入。上游细粒度事件缺失时显示未知，不推测隐藏推理。</p></footer>`;
   if (tab === "calls") mountConsole(); else hideConsole();
 }
 async function refreshIndex() {
