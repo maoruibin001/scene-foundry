@@ -1,11 +1,13 @@
 import {test,expect} from 'bun:test';
-import {mkdtempSync,mkdirSync,writeFileSync,rmSync,symlinkSync} from 'node:fs';
+import {mkdtempSync,mkdirSync,writeFileSync,readFileSync,rmSync,symlinkSync,cpSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {digest,save,read} from './store';
 import {deliveryInfo,preserveOutput,failureDisposition,sealAssessment,inspectOutput} from './output-delivery';
 import {snapshotIteration} from './geometry/iteration-snapshots';
 import {deliveryHTML} from '../public/delivery-ui.js';
+import {freezeImageGoal,assessImageReconstruction,IMAGE_ATTRIBUTES} from './image-reconstruction';
+import {imageReconstructionHTML} from '../public/image-reconstruction-ui.js';
 function fixture(folder=''){
  const root=mkdtempSync(join(tmpdir(),'output-contract-')),dir=join(root,folder);for(const p of ['runtime','project/game/dist','project/evidence'])mkdirSync(join(dir,p),{recursive:true});
  const job:any={id:'job',status:'running',stage:'assets',profile:{engineSha:'engine',generatorSha:'generator'},pipelineVersion:{id:'v1'}};
@@ -80,4 +82,125 @@ test('基础交付回执与运行证据一起冻结，不伪造完整规范通�
   save(join(f.root,'delivery-assessment.json'),{...f.job.deliveryAssessment,rawScore:99});
   expect(inspectOutput(f.job,f.root,'','scene')?.deliveryStatus).toBeNull();
  }finally{f.cleanup();}
+});
+
+function imageScored(f:ReturnType<typeof fixture>,difference='major_difference'){
+ scored(f,'passed');f.job.prompt='';f.job.images=[{id:'a'.repeat(64)}];f.job.reconstructionGoal=freezeImageGoal(f.job.images);
+ f.job.runtime.referenceFrames=[{referenceIndex:1,file:'view.png'}];save(join(f.root,'runtime/runtime.json'),f.job.runtime);
+ const review={referenceMatch:[{referenceIndex:1,referenceSha256:f.job.images[0].id,frames:['view.png'],attributes:Object.fromEntries(IMAGE_ATTRIBUTES.map(a=>[a.id,{status:a.id==='shape'?difference:'close',reason:'fixture evidence'}]))}]};
+ save(join(f.root,'review.json'),review);save(join(f.root,'reconstruction-goal.json'),f.job.reconstructionGoal);
+ f.job.imageReconstruction=assessImageReconstruction(f.job,review,f.job.runtime).imageReconstruction;save(join(f.root,'image-reconstruction.json'),f.job.imageReconstruction);
+ f.job.deliveryAssessment={standard:'basic70',status:'passed',score:85.2,rawScore:80};sealAssessment(f.job,f.root);
+}
+test('70通过与原图明显不同分别交付，独立报告连同回执封存',()=>{
+ const f=fixture();try{
+  imageScored(f);const saved=preserveOutput(f.job,f.root,'','scene')!;
+  expect(saved.deliveryStatus).toBe('passed');expect(saved.imageReconstruction.status).toBe('failed');
+  expect(saved.imageReconstructionFile).toBe(saved.folder+'/image-reconstruction.json');
+  const evidence=read(join(f.root,saved.folder,'assessment-evidence.json'));expect(evidence.files['image-reconstruction.json']).toBe(digest(readFileSync(join(f.root,saved.folder,'image-reconstruction.json'))));
+  writeFileSync(join(f.root,'runtime/view.png'),'damaged root');const d=deliveryInfo(f.job,f.root);
+  expect(d.best?.folder).toBe(saved.folder);expect(d.best?.imageReconstruction).toEqual(saved.imageReconstruction);
+  expect(imageReconstructionHTML({...f.job,delivery:d})).toContain('存在明显差异');
+ }finally{f.cleanup();}
+});
+test('缺少或改写原图侧车不丢弃场景也不改变70结果，且不冒称一致',()=>{
+ for(const defect of ['missing-report','goal','report','frame-hash','dist','scope','status']){
+  const f=fixture();try{
+   imageScored(f,'close');const report=read(join(f.root,'image-reconstruction.json'));
+   if(defect==='missing-report')rmSync(join(f.root,'image-reconstruction.json'));
+   if(defect==='goal'){const goal=read(join(f.root,'reconstruction-goal.json'));goal.references[0].sha256='b'.repeat(64);save(join(f.root,'reconstruction-goal.json'),goal);}
+   if(defect==='report'){report.references[0].attributes.shape.reason='changed';save(join(f.root,'image-reconstruction.json'),report);}
+   if(defect==='frame-hash')report.references[0].frameHashes[0].sha256='b'.repeat(64);
+   if(defect==='dist')report.distManifestDigest='b'.repeat(64);
+   if(defect==='scope')report.scope='partial';
+   if(defect==='status')report.status='failed';
+   // Even sealing an internally inconsistent report cannot make its attribution valid.
+   if(['frame-hash','dist','scope','status'].includes(defect)){save(join(f.root,'image-reconstruction.json'),report);sealAssessment(f.job,f.root);}
+   const checked=inspectOutput(f.job,f.root,'','scene')!;
+   expect(checked.deliveryStatus).toBe('passed');expect(checked.imageReconstruction.status).toBe('needs_review');expect(checked.imageReconstructionFile).toBeNull();
+  }finally{f.cleanup();}
+ }
+});
+test('报告缺失的草稿和历史输出保持未核实，不借用其他轮原图报告',()=>{
+ const f=fixture();try{
+  scored(f);expect(inspectOutput(f.job,f.root,'','scene')?.imageReconstruction).toBeNull();
+  imageScored(f,'close');snapshotIteration(f.root,f.job,{index:0,status:'passed',score:85.2,startedAt:1,endedAt:2});
+  f.job.selectedIteration=0;f.job.imageReconstruction={...f.job.imageReconstruction,status:'failed',level:'major_differences'};save(join(f.root,'image-reconstruction.json'),f.job.imageReconstruction);
+  const best=deliveryInfo(f.job,f.root).best!;expect(best.folder).toBe('iterations/0');expect(best.imageReconstruction.status).toBe('passed');
+  expect(imageReconstructionHTML({...f.job,delivery:{best}})).toContain('/iterations/0/image-reconstruction.json');
+  const review=read(join(f.root,'review.json'));review.referenceMatch=null;save(join(f.root,'review.json'),review);
+  f.job.partialOutput={completed:1,total:2,missing:[{id:'x'}]};f.job.imageReconstruction=assessImageReconstruction(f.job,review,f.job.runtime).imageReconstruction;save(join(f.root,'image-reconstruction.json'),f.job.imageReconstruction);sealAssessment(f.job,f.root);
+  const partial=inspectOutput(f.job,f.root,'','scene')!;expect(partial.kind).toBe('partial');expect(partial.imageReconstruction).toMatchObject({status:'needs_review',scope:'partial'});expect(partial.imageReconstructionFile).toBe('image-reconstruction.json');
+ }finally{f.cleanup();}
+});
+
+function evaluatedGrayboxes(){
+ const f=fixture('generation/blockout/0');
+ f.job.blockout={rounds:[],repairBasis:null};
+ for(const round of [0,1,2]){
+  const folder='generation/blockout/'+round,base=join(f.root,folder);
+  if(round)cpSync(f.dir,base,{recursive:true});
+  const manifest=JSON.stringify({engine:'ForgeaX',round}),hash=digest(manifest);
+  writeFileSync(join(base,'project/game/dist/forgeax-dist.json'),manifest);
+  const runtime=read(join(base,'runtime/runtime.json')),report=read(join(base,'project/evidence/run-report.json'));
+  runtime.distManifestDigest=hash;report.distManifestDigest=hash;
+  save(join(base,'runtime/runtime.json'),runtime);save(join(base,'project/evidence/run-report.json'),report);
+  const proof={jobId:f.job.id,round,folder:base,score:round===1?3.4:3.2,passed:false,runtimeDigest:hash};
+  const gate={round,passed:false,review:{score:proof.score,confidence:.9},runtimeDigest:hash,
+   selection:{eligible:true,changed:round<2,retained:round<2?proof:f.job.blockout.repairBasis}};
+  save(join(base,'gate.json'),gate);f.job.blockout.rounds.push(gate);
+  if(round<2)f.job.blockout.repairBasis=proof;
+  preserveOutput(f.job,f.root,folder,'graybox');
+ }
+ return f;
+}
+test('灰模交付遵从已核验保留候选，预览截图和下载项目指向同一轮',()=>{
+ const f=evaluatedGrayboxes();try{for(const status of ['running','failed','blocked','cancelled']){
+  f.job.status=status;const d=deliveryInfo(f.job,f.root);
+  expect(d.best).toMatchObject({kind:'graybox',folder:'generation/blockout/1',project:'generation/blockout/1/project',score:null,qualityStatus:'not_assessed'});
+  expect(d.best?.distManifestDigest).toBe(f.job.blockout.repairBasis.runtimeDigest);
+  expect(d.selection).toMatchObject({status:'selected',requestedBlockout:{jobId:f.job.id,round:1},servedBlockout:1});
+  const html=deliveryHTML({...f.job,delivery:d});expect(html).toContain('generation/blockout/1/runtime/view.png');
+  expect(html).toContain('未完成成品评分');expect(html).not.toContain('正式验收通过');
+ }}finally{f.cleanup();}
+});
+test('灰模保留候选证据异常时仅交付可运行备份并明确未重新选优',()=>{
+ for(const defect of ['image','gate-missing','gate-score','proof-digest','unselected-round','foreign-job','path']){
+  const f=evaluatedGrayboxes();try{
+   const basis=f.job.blockout.repairBasis,path=join(f.root,'generation/blockout/1/gate.json');
+   if(defect==='image')writeFileSync(join(f.root,'generation/blockout/1/runtime/view.png'),'corrupt');
+   if(defect==='gate-missing')rmSync(path);
+   if(defect==='gate-score'){const gate=read(path);gate.review.score=5;save(path,gate);}
+   if(defect==='proof-digest')basis.runtimeDigest='other';
+   if(defect==='unselected-round')f.job.blockout.repairBasis={...basis,round:2,folder:join(f.root,'generation/blockout/2'),score:3.2,runtimeDigest:read(join(f.root,'generation/blockout/2/gate.json')).runtimeDigest};
+   if(defect==='foreign-job')basis.jobId='different-job';
+   if(defect==='path')basis.folder=join(f.root,'..','other');
+   const before=JSON.stringify(f.job),d=deliveryInfo(f.job,f.root);
+   expect(d.available).toBe(true);expect(d.selection.status).toBe('fallback');
+   expect(d.selection.reason).toContain('不代表重新选优');expect(JSON.stringify(f.job)).toBe(before);
+   expect(d.best?.score).toBeNull();
+  }finally{f.cleanup();}
+ }
+});
+test('灰模不能取代完整或部分详细场景，历史无选优记录仍可查看',()=>{
+ const f=evaluatedGrayboxes();try{
+  const copy=(name:string)=>cpSync(join(f.dir,name),join(f.root,name),{recursive:true});
+  copy('project');copy('runtime');
+  expect(deliveryInfo(f.job,f.root).best?.kind).toBe('scene');
+  f.job.partialOutput={completed:1,total:2,missing:[{id:'other'}]};
+  expect(deliveryInfo(f.job,f.root).best?.kind).toBe('partial');
+  rmSync(join(f.root,'runtime'),{recursive:true});delete f.job.blockout;
+  expect(deliveryInfo(f.job,f.root).selection.status).toBe('available');
+ }finally{f.cleanup();}
+});
+test('灰模选优兼容同一任务目录的真实路径和符号链接，不接受非法轮次',()=>{
+ const f=evaluatedGrayboxes(),aliases=mkdtempSync(join(tmpdir(),'output-alias-'));
+ try{
+  const alias=join(aliases,'run');symlinkSync(f.root,alias,'dir');
+  expect(deliveryInfo(f.job,alias).selection.status).toBe('selected');
+  for(const round of [-1,.5,Infinity,'../other',Number.MAX_SAFE_INTEGER+1]){
+   f.job.blockout.repairBasis.round=round;
+   expect(deliveryInfo(f.job,f.root).selection.status).toBe('available');
+  }
+ }finally{rmSync(aliases,{recursive:true,force:true});f.cleanup();}
 });

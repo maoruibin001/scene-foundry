@@ -1,8 +1,21 @@
 import {test,expect} from 'bun:test';
-import {mkdtempSync,writeFileSync,rmSync,symlinkSync} from 'node:fs';
+import {mkdtempSync,mkdirSync,writeFileSync,rmSync,symlinkSync} from 'node:fs';
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
 import {uiHandler} from './ui-server';
+
+test('执行过程目录入口提供index.html及相对模块，目录不能作为Bun.file响应',async()=>{
+ const root=mkdtempSync(join(tmpdir(),'scene-ui-process-'));mkdirSync(join(root,'process'));mkdirSync(join(root,'no-index'));
+ writeFileSync(join(root,'index.html'),'<h1>生成记录</h1>');writeFileSync(join(root,'process/index.html'),'<h1>生成过程</h1><script type="module" src="./app.js"></script>');writeFileSync(join(root,'process/app.js'),'export const viewer=true;');
+ let forwarded=0;const upstream=Bun.serve({hostname:'127.0.0.1',port:0,fetch(req){forwarded++;return Response.json({path:new URL(req.url).pathname});}});
+ try{
+  const handle=uiHandler(root,upstream.url.toString());
+  for(const path of ['/','/process/']){const response=await handle(new Request('http://127.0.0.1:19774'+path));expect(response.status).toBe(200);expect(response.headers.get('Content-Type')).toContain('text/html');expect(await response.text()).toContain(path==='/'?'生成记录':'生成过程');}
+  expect(await(await handle(new Request('http://127.0.0.1:19774/process/app.js'))).text()).toContain('viewer=true');expect(forwarded).toBe(0);
+  expect(await(await handle(new Request('http://127.0.0.1:19774/no-index/'))).json()).toEqual({path:'/no-index/'});
+  expect(await(await handle(new Request('http://127.0.0.1:19774/process'))).json()).toEqual({path:'/process'});
+ }finally{upstream.stop(true);rmSync(root,{recursive:true,force:true});}
+});
 
 test('独立界面保留隔离响应头，API 原样转发，不启动生成器；私有目录不可作为 UI 文件读取',async()=>{
  const root=mkdtempSync(join(tmpdir(),'scene-ui-'));

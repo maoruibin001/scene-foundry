@@ -1,7 +1,7 @@
 // Serve an independent UI release without changing an active worker's frozen inputs.
 // This process owns no jobs, scheduler, model calls, or persisted task state.
 import {resolve, sep} from 'node:path';
-import {existsSync, realpathSync} from 'node:fs';
+import {existsSync, realpathSync, statSync} from 'node:fs';
 
 export function uiHandler(publicDir:string, upstream:string, productionTiming?:(id:string)=>any) {
   const root=realpathSync(publicDir), target=new URL(upstream);
@@ -11,8 +11,8 @@ export function uiHandler(publicDir:string, upstream:string, productionTiming?:(
     const url=new URL(req.url);
     if(req.headers.get('origin')&&req.headers.get('origin')!==url.origin)return Response.json({error:'跨站请求被拒绝'},{status:403});
     if(req.method==='GET' && !url.pathname.startsWith('/api/') && !url.pathname.startsWith('/files/')) {
-      const file=resolve(root,url.pathname==='/'?'index.html':'.'+decodeURIComponent(url.pathname));
-      if(file.startsWith(root+sep) && existsSync(file) && realpathSync(file).startsWith(root+sep)) return new Response(Bun.file(file),{headers});
+      const pathname=decodeURIComponent(url.pathname),file=resolve(root,'.'+pathname+(pathname.endsWith('/')?'index.html':''));
+      if(file.startsWith(root+sep) && existsSync(file) && realpathSync(file).startsWith(root+sep) && statSync(file).isFile()) return new Response(Bun.file(file),{headers});
     }
     try {
       const proxy=new URL(url.pathname+url.search,target);

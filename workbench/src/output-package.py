@@ -10,7 +10,7 @@ with zipfile.ZipFile(tmp,'w',zipfile.ZIP_DEFLATED,compresslevel=3) as z:
         if not folder.is_dir():continue
         for f in folder.rglob('*'):
             if f.is_file() and not f.is_symlink() and f.resolve().is_relative_to(source):z.write(f,str(f.relative_to(source)))
-    for name in ['project/game/forge.json','project/game/package.json','project/brief.json','generated-scene.json','quality.json','review.json','spec-report.json','assessment-evidence.json','output.json']:
+    for name in ['project/game/forge.json','project/game/package.json','project/brief.json','generated-scene.json','quality.json','review.json','spec-report.json','delivery-assessment.json','assessment-evidence.json','reconstruction-goal.json','image-reconstruction.json','output.json']:
         f=source/name
         if f.is_file() and not f.is_symlink():z.write(f,name)
     z.writestr('delivery.json',json.dumps(descriptor,ensure_ascii=False,indent=2))
