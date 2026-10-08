@@ -6,6 +6,8 @@ This repository contains the pipeline source, UI, tests, and a small Engine proj
 
 The [source coverage record](docs/source-coverage.md) identifies which parts of the live local workbench are represented here and the deliberate differences in the public copy.
 
+The [image reconstruction goal and acceptance guide](docs/image-reconstruction-goal.md) explains how original images define the target, how per-image comparisons bind to actual rendered evidence, and which improvements still require real generation validation.
+
 For a clean installation and the browser acceptance procedure, follow the [from-zero runbook](docs/run-from-zero.md). The [latest fresh-clone validation record](docs/clean-run-validation-2026-09-24.md) distinguishes the checks that passed from the model-backed generation step that remains blocked.
 
 ## Layout

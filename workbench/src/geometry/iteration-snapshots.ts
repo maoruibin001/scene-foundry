@@ -1,8 +1,8 @@
 import {existsSync,mkdirSync,readFileSync,writeFileSync,cpSync,rmSync,constants} from 'node:fs';
 import {join} from 'node:path';
 import type {CycleResult} from './iteration-policy';
-const FILES=['delivery-assessment.json','assessment-evidence.json','repair-outcome.json','spatial-openings.json','spatial-contacts.json','generated-scene.json','recipe.json','structure.json','complexity.json','materials','project','quality.json','review.json','spec-report.json','runtime','judge-receipt.json','judge-response.txt','judge-prompt.json','judge-input-receipt.json','judge-execution.json','judge-attempts.json'];
-const FIELDS=['sceneProgram','bounds','objectCount','entityCount','complexityReport','structure','runtime','quality','review','spec','countContradictions','deliveryAssessment','strictStatus','status','visualRefinement','repairGoals','partialOutput','assessmentScope'];
+const FILES=['reconstruction-goal.json','image-reconstruction.json','delivery-assessment.json','assessment-evidence.json','repair-outcome.json','spatial-openings.json','spatial-contacts.json','generated-scene.json','recipe.json','structure.json','complexity.json','materials','project','quality.json','review.json','spec-report.json','runtime','judge-receipt.json','judge-response.txt','judge-prompt.json','judge-input-receipt.json','judge-execution.json','judge-attempts.json'];
+const FIELDS=['imageReconstruction','sceneProgram','bounds','objectCount','entityCount','complexityReport','structure','runtime','quality','review','spec','countContradictions','deliveryAssessment','strictStatus','status','visualRefinement','repairGoals','partialOutput','assessmentScope'];
 function folder(dir:string,index:number){if(!Number.isSafeInteger(index)||index<0)throw Error('轮次索引无效');return join(dir,'iterations',String(index));}
 const copy=(from:string,to:string)=>cpSync(from,to,{recursive:true,dereference:false,verbatimSymlinks:true,mode:constants.COPYFILE_FICLONE});
 /** 每轮拥有独立的产物与评分，归档只创建一次。 */

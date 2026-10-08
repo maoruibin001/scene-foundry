@@ -1,7 +1,9 @@
+import {assessImageReconstruction} from './image-reconstruction';
 import {basicDelivery,deliveryStandard} from './delivery-standard';
 import {qualityGate} from './quality';
 import {specGate} from './spec';
 export function assess(job:any,review:any,runtime:any){
+ const reconstruction=assessImageReconstruction(job,review,runtime);
  const hard=assessmentHardChecks(job,runtime);
  const frames=new Set(runtime.images);
  for(const v of [...review.requirements??[],...review.dimensions??[],...review.specRules??[],...review.criteria??[]])if(!Array.isArray(v.frames)||v.frames.some((f:string)=>!frames.has(f)))throw Error('评估引用了不存在的运行截图');
@@ -14,8 +16,8 @@ export function assess(job:any,review:any,runtime:any){
  let status=[quality.status,spec.status].includes('failed')?'failed':[quality.status,spec.status].includes('needs_review')||countContradictions.length||objections.length||geometryReview?'needs_review':'passed';
  if(job.partialOutput){status='needs_review';if(spec.status==='passed')spec.status='needs_review';}
  if(countContradictions.length&&spec.status==='passed')spec.status='needs_review';
- if(deliveryStandard(job.policy)==='basic70'){const delivery=basicDelivery(job,review,runtime,quality,spec,status,countContradictions,objections);return {quality,spec,countContradictions,objections,strictStatus:status,deliveryAssessment:delivery,status:delivery.status,realizationStatus:delivery.status};}
- return {quality,spec,countContradictions,objections,status,realizationStatus:job.partialOutput?'needs_review':quality.status};
+ if(deliveryStandard(job.policy)==='basic70'){const delivery=basicDelivery(job,review,runtime,quality,spec,status,countContradictions,objections);return {...reconstruction,quality,spec,countContradictions,objections,strictStatus:status,deliveryAssessment:delivery,status:delivery.status,realizationStatus:delivery.status};}
+ return {...reconstruction,quality,spec,countContradictions,objections,status,realizationStatus:job.partialOutput?'needs_review':quality.status};
 }
 
 export function assessmentHardChecks(job:any,runtime:any){return {build:job.stages?.build?.status==='passed',catalog:job.stages?.verify?.status==='passed',...runtime.hard,frameRate:runtime.hard.frameRate&&runtime.submittedFps>=job.policy.minSubmittedFps};}
