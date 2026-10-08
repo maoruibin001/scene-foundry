@@ -2,6 +2,8 @@
 
 Scene Foundry is a standalone repository for the scene generation pipeline and its local web workbench. It accepts a text prompt, reference images, or both; produces a ForgeaX Engine scene; and keeps generation steps, model-call receipts, assets, previews, and evaluation results in the local workbench.
 
+An experimental [voxel scene mode](docs/voxel-scenes.md) is available at `/voxel/` alongside the existing scene workflow. It generates integer-grid solids, native Engine meshes and editable `.vox` files from uploaded voxel references. Real build/render/export verification is complete; automatic image fidelity has not yet met the existing acceptance standard.
+
 This repository contains the pipeline source, UI, tests, and a small Engine project template. It does **not** contain historical jobs, uploaded images, model weights, credentials, generated scenes, or the ForgeaX Engine and Scene Generator source. Those two upstream repositories are currently private. Access to them is required for a full scene build, even though this repository is public. The model provider is also an external prerequisite.
 
 The [source coverage record](docs/source-coverage.md) identifies which parts of the live local workbench are represented here and the deliberate differences in the public copy.
