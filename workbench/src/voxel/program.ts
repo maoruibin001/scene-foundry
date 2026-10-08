@@ -4,7 +4,7 @@ import { compileGeometryProgram, type Part } from "../geometry/program";
 export const VOXEL_VERSION = "voxel-scene-v1";
 export const VOXEL_LIMITS = { dimension: 192, gridCells: 2_000_000, filledCells: 500_000, operationCells: 8_000_000, entities: 64, palette: 64, operations: 512, boxesPerEntity: 128, boxes: 2048 };
 type V = [number, number, number];
-export type VoxelOperation = { action: "fill" | "erase" | "paint"; shape: "box" | "ellipsoid" | "ramp"; min: V; size: V; palette: string | null; slopeAxis: "x" | "y"; reverse: boolean };
+export type VoxelOperation = { action: "fill" | "erase" | "paint"; shape: "box" | "ellipsoid" | "ramp"; min: V; size: V; palette: string | null; slopeAxis: "x" | "y"; reverse: boolean; overlap?:'reject'|'keep-existing'|'replace' };
 export type VoxelEntity = { id: string; label: string; category: string; role: "subject" | "context" | "ground"; requirementIds: string[]; operations: VoxelOperation[] };
 export type VoxelProgram = {
   version: typeof VOXEL_VERSION; name: string; size: V; cellSize: number;
@@ -12,7 +12,7 @@ export type VoxelProgram = {
   cameras: { name: string; referenceIndex: number | null; position: V; target: V; projection: "perspective" | "orthographic"; fov: number; orthographicHeight: number | null }[];
   lighting: SceneInput["lighting"]; assumptions: string[];
 };
-export type VoxelGrid = { size: V; cellSize: number; colors: Uint8Array; owners: Uint8Array; filled: number; operations: number };
+export type VoxelGrid = { size: V; cellSize: number; colors: Uint8Array; owners: Uint8Array; filled: number; operations: number; composition:{keptCells:number;replacedCells:number} };
 function assert(ok: unknown, reason: string): asserts ok { if (!ok) throw Error("VOXEL_CONTRACT: " + reason); }
 const integer = (v: any, lo: number, hi: number) => Number.isSafeInteger(v) && v >= lo && v <= hi;
 const vector = (v: any, lo: number, hi: number) => Array.isArray(v) && v.length === 3 && v.every(n => integer(n, lo, hi));
@@ -22,7 +22,7 @@ export function paletteColor(hex: string): [number, number, number, number] {
   return [srgb(parseInt(hex.slice(1, 3), 16) / 255), srgb(parseInt(hex.slice(3, 5), 16) / 255), srgb(parseInt(hex.slice(5, 7), 16) / 255), 1];
 }
 
-/** Execute bounded integer-grid operations. Inter-entity overlap is an error, never silent deletion. */
+/** Execute integer-grid solids. Cross-entity composition must be explicitly authored. */
 export function voxelGrid(program: VoxelProgram): VoxelGrid {
   assert(program?.version === VOXEL_VERSION, "体素数据版本无效");
   assert(typeof program.name === "string" && program.name.trim(), "场景名称缺失");
@@ -31,19 +31,20 @@ export function voxelGrid(program: VoxelProgram): VoxelGrid {
   assert(cells <= VOXEL_LIMITS.gridCells, "网格超过 200 万格上限");
   assert(Number.isFinite(program.cellSize) && program.cellSize >= .02 && program.cellSize <= 1, "体素边长须为 .02–1 米");
   assert(Array.isArray(program.palette) && program.palette.length > 0 && program.palette.length <= VOXEL_LIMITS.palette &&
-    program.palette.every(p => id(p.id) && /^#[a-fA-F0-9]{6}$/.test(p.color)) && new Set(program.palette.map(p => p.id)).size === program.palette.length, "颜色表须为 1–64 个唯一 ID 与十六进制 RGB");
+    program.palette.every(p => id(p.id) && /^#[a-fA-F0-9]{6}$/.test(p.color)) && new Set(program.palette.map(p => p.id)).size === program.palette.length, "颜色表须为 1–64 个唯一英文 ID（英文字母开头、仅字母数字下划线横线、最多49字符）与 #RRGGBB");
   assert(Array.isArray(program.entities) && program.entities.length > 0 && program.entities.length <= VOXEL_LIMITS.entities &&
     program.entities.every(e => id(e.id) && typeof e.label === "string" && e.label.trim()) && new Set(program.entities.map(e => e.id)).size === program.entities.length, "体素实体 ID 无效或数量超限");
   const colors = new Uint8Array(cells), owners = new Uint8Array(cells), palette = new Map(program.palette.map((p, i) => [p.id, i + 1]));
-  let work = 0, operations = 0, filled = 0;
+  let work = 0, operations = 0, filled = 0;const composition={keptCells:0,replacedCells:0};
   for (const [index, entity] of program.entities.entries()) {
     const owner = index + 1;
     assert(Array.isArray(entity.operations) && entity.operations.length > 0, "每个实体须有体素构造");
-    for (const op of entity.operations) {
+    for (const [operationIndex,op] of entity.operations.entries()) {
       assert(++operations <= VOXEL_LIMITS.operations, "构造操作超过 512 项");
       assert(["fill", "erase", "paint"].includes(op.action) && ["box", "ellipsoid", "ramp"].includes(op.shape), "构造操作类型无效");
       assert(vector(op.min, 0, VOXEL_LIMITS.dimension - 1) && vector(op.size, 1, VOXEL_LIMITS.dimension) && op.min.every((n, axis) => n + op.size[axis] <= program.size[axis]), "操作须在网格内，坐标和尺寸须为整数");
       assert(["x", "y"].includes(op.slopeAxis) && typeof op.reverse === "boolean", "斜坡方向无效");
+      const overlap=op.overlap??'reject';assert(['reject','keep-existing','replace'].includes(overlap),'实体组合策略无效');
       const color = op.palette === null ? 0 : palette.get(op.palette);
       assert(op.action === "erase" ? op.palette === null : color, "填充与着色须引用实际颜色，挖空的 palette 须为 null");
       work += op.size[0] * op.size[1] * op.size[2];
@@ -52,7 +53,12 @@ export function voxelGrid(program: VoxelProgram): VoxelGrid {
         if (op.shape === "ellipsoid" && [x, y, z].reduce((sum, n, axis) => sum + ((n + .5) / op.size[axis] * 2 - 1) ** 2, 0) > 1) continue;
         if (op.shape === "ramp") { const axis = op.slopeAxis === "x" ? 0 : 1, n = axis === 0 ? x : y, t = (n + .5) / op.size[axis]; if ((z + .5) / op.size[2] > (op.reverse ? 1 - t : t)) continue; }
         const key = op.min[0] + x + width * (op.min[1] + y + depth * (op.min[2] + z));
-        assert(!owners[key] || owners[key] === owner, "不同实体占用同一格；请调整坐标，不得覆盖其他主体");
+        if(owners[key]&&owners[key]!==owner){
+          if(op.action!=='fill')continue; // paint/erase address this entity's cells only.
+          if(overlap==='keep-existing'){composition.keptCells++;continue;}
+          assert(overlap==='replace',`不同实体占用同一格：${entity.id} 第${operationIndex+1}项 fill 与 ${program.entities[owners[key]-1].id} 在 [${op.min[0]+x},${op.min[1]+y},${op.min[2]+z}] 冲突；修正范围或显式选择 keep-existing/replace，不能默默删除其他主体`);
+          composition.replacedCells++;
+        }
         if (op.action === "erase") { if (owners[key]) { colors[key] = 0; owners[key] = 0; filled--; } }
         else if (op.action === "paint") { if (owners[key]) colors[key] = color!; }
         else { if (!owners[key]) filled++; colors[key] = color!; owners[key] = owner; }
@@ -61,7 +67,7 @@ export function voxelGrid(program: VoxelProgram): VoxelGrid {
   }
   assert(filled > 0 && filled <= VOXEL_LIMITS.filledCells, "实体体素为空或超过 50 万格");
   const used = new Set(owners); assert(program.entities.every((_, i) => used.has(i + 1)), "存在没有实际体素的实体");
-  return { size: program.size, cellSize: program.cellSize, colors, owners, filled, operations };
+  return { size: program.size, cellSize: program.cellSize, colors, owners, filled, operations,composition };
 }
 
 /** Merge only equal-color, equal-owner cells; the result exactly preserves occupied volume. */
@@ -108,7 +114,7 @@ export function compileVoxelScene(program: VoxelProgram, plan: any, referenceCou
   };
   validateScene(scene, plan, referenceCount);
   const compiled = compileGeometryProgram(scene.program);
-  return { scene, grid, metrics: { version: "voxel-metrics-v1", cells: grid.filled, gridSize: grid.size, cellSize: unit, operations: grid.operations, mergedSurfaceQuads: surfaces.reduce((n, s) => n + s.triangles.length / 2, 0), triangles: compiled.triangles, entities: program.entities.length, palette: materials.length, representation: "integer-grid voxels with hidden-face removal and equal-color surface merging" } };
+  return { scene, grid, metrics: { version: "voxel-metrics-v1", cells: grid.filled, gridSize: grid.size, cellSize: unit, operations: grid.operations,composition:grid.composition, mergedSurfaceQuads: surfaces.reduce((n, s) => n + s.triangles.length / 2, 0), triangles: compiled.triangles, entities: program.entities.length, palette: materials.length, representation: "integer-grid voxels with hidden-face removal and equal-color surface merging" } };
 }
 
 /** Greedy exposed-face meshing, grouped by semantic entity and palette. No internal faces. */
