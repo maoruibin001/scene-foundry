@@ -51,7 +51,7 @@ test('solid composition is explicit, retains occupied volume and ownership; pain
  const p=input();p.entities[0].operations=[operation([1,1,1],[2,2,2])];p.entities.push({...p.entities[0],id:'second',requirementIds:[],operations:[{...operation([2,1,1],[2,2,2]),overlap:'keep-existing'}]});
  const combined=voxelGrid(p);expect(combined.filled).toBe(12);expect(combined.composition.keptCells).toBe(4);expect(combined.owners[2+8*(1+8)]).toBe(1);expect(combined.owners[3+8*(1+8)]).toBe(2);
  p.entities[1].operations[0].overlap='replace';const replaced=voxelGrid(p);expect(replaced.filled).toBe(12);expect(replaced.composition.replacedCells).toBe(4);expect(replaced.owners[2+8*(1+8)]).toBe(2);
- p.entities[1].operations.push(operation([1,1,1],[3,2,2],'erase'));const carved=voxelGrid(p);expect(carved.filled).toBe(4);expect(carved.owners[1+8*(1+8)]).toBe(1);
+ p.entities[1].operations.push(operation([1,1,1],[3,2,1],'erase'));const carved=voxelGrid(p);expect(carved.filled).toBe(8);expect(carved.owners[1+8*(1+8)]).toBe(1);
  const hidden=input();hidden.entities.push({...hidden.entities[0],id:'covers',operations:[{...hidden.entities[0].operations[0],overlap:'replace'}]});expect(()=>voxelGrid(hidden)).toThrow('没有实际体素');
 });
 test("ellipsoids and stair ramps remain occupied integer cells", () => {
