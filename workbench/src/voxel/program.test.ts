@@ -54,6 +54,19 @@ test('solid composition is explicit, retains occupied volume and ownership; pain
  p.entities[1].operations.push(operation([1,1,1],[3,2,1],'erase'));const carved=voxelGrid(p);expect(carved.filled).toBe(8);expect(carved.owners[1+8*(1+8)]).toBe(1);
  const hidden=input();hidden.entities.push({...hidden.entities[0],id:'covers',operations:[{...hidden.entities[0].operations[0],overlap:'replace'}]});expect(()=>voxelGrid(hidden)).toThrow('没有实际体素');
 });
+function clippedSubject(){
+ const p=input();p.palette.push({id:'green',color:'#80aa40'});const subject=p.entities[0];subject.operations=[operation([1,1,1],[3,4,2]),{...operation([1,1,3],[3,4,3]),overlap:'keep-existing'}];
+ p.entities=[{...subject,id:'background',role:'context',label:'背景山体',requirementIds:[],operations:[{...operation([1,1,3],[4,4,3]),palette:'green'}]},subject];return p;
+}
+test('a surviving base cannot certify a subject whose contrasting upper part was completely skipped',()=>{
+ const p=clippedSubject();expect(()=>voxelGrid(p)).toThrow('主体 subject 第2项 fill');expect(()=>compileVoxelScene(p,plan,1)).toThrow('没有生成这个部件');
+ p.entities[1].operations[1].overlap='replace';const g=voxelGrid(p);expect(g.filled).toBe(72);expect([...g.owners].filter(owner=>owner===2)).toHaveLength(60);expect(compileVoxelScene(p,plan,1).scene.program.instances).toHaveLength(2);
+});
+test('shared ground, matching-color joints and own-entity union remain valid',()=>{
+ const ground=clippedSubject();ground.entities[0].role='ground';expect(voxelGrid(ground).filled).toBe(72);
+ const same=clippedSubject();same.palette[1].color=same.palette[0].color.toUpperCase();expect(voxelGrid(same).filled).toBe(72);
+ const own=input();own.entities[0].operations.push({...own.entities[0].operations[0],overlap:'keep-existing'});expect(voxelGrid(own).filled).toBe(60);
+});
 test("ellipsoids and stair ramps remain occupied integer cells", () => {
   const p = input(); p.entities[0].operations = [{ ...operation([1, 1, 1], [6, 6, 6]), shape: "ellipsoid" }]; const round = voxelGrid(p); expect(round.filled).toBeLessThan(216); expect(round.filled).toBeGreaterThan(100);
   p.entities[0].operations = [{ ...operation([1, 1, 1], [6, 4, 6]), shape: "ramp" }]; const ramp = voxelGrid(p); expect(ramp.colors[1 + 8 * (2 + 8 * 5)]).toBe(0); expect(ramp.colors[6 + 8 * (2 + 8 * 5)]).toBe(1);

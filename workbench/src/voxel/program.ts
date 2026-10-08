@@ -35,6 +35,7 @@ export function voxelGrid(program: VoxelProgram): VoxelGrid {
   assert(Array.isArray(program.entities) && program.entities.length > 0 && program.entities.length <= VOXEL_LIMITS.entities &&
     program.entities.every(e => id(e.id) && typeof e.label === "string" && e.label.trim()) && new Set(program.entities.map(e => e.id)).size === program.entities.length, "体素实体 ID 无效或数量超限");
   const colors = new Uint8Array(cells), owners = new Uint8Array(cells), palette = new Map(program.palette.map((p, i) => [p.id, i + 1]));
+  const paletteHex=program.palette.map(p=>p.color.toLowerCase());
   let work = 0, operations = 0, filled = 0;const composition={keptCells:0,replacedCells:0};
   for (const [index, entity] of program.entities.entries()) {
     const owner = index + 1;
@@ -49,13 +50,20 @@ export function voxelGrid(program: VoxelProgram): VoxelGrid {
       assert(op.action === "erase" ? op.palette === null : color, "填充与着色须引用实际颜色，挖空的 palette 须为 null");
       work += op.size[0] * op.size[1] * op.size[2];
       assert(work <= VOXEL_LIMITS.operationCells, "累计操作范围超过 800 万格");
+      let shapeCells=0,blockedSubjectCells=0;const blockedBy=new Set<string>();
       for (let z = 0; z < op.size[2]; z++) for (let y = 0; y < op.size[1]; y++) for (let x = 0; x < op.size[0]; x++) {
         if (op.shape === "ellipsoid" && [x, y, z].reduce((sum, n, axis) => sum + ((n + .5) / op.size[axis] * 2 - 1) ** 2, 0) > 1) continue;
         if (op.shape === "ramp") { const axis = op.slopeAxis === "x" ? 0 : 1, n = axis === 0 ? x : y, t = (n + .5) / op.size[axis]; if ((z + .5) / op.size[2] > (op.reverse ? 1 - t : t)) continue; }
+        shapeCells++;
         const key = op.min[0] + x + width * (op.min[1] + y + depth * (op.min[2] + z));
         if(owners[key]&&owners[key]!==owner){
           if(op.action!=='fill')continue; // paint/erase address this entity's cells only.
-          if(overlap==='keep-existing'){composition.keptCells++;continue;}
+          if(overlap==='keep-existing'){
+            composition.keptCells++;
+            const other=program.entities[owners[key]-1];
+            if(entity.role==='subject'&&other.role!=='ground'&&paletteHex[colors[key]-1]!==paletteHex[color!-1]){blockedSubjectCells++;blockedBy.add(other.id);}
+            continue;
+          }
           assert(overlap==='replace',`不同实体占用同一格：${entity.id} 第${operationIndex+1}项 fill 与 ${program.entities[owners[key]-1].id} 在 [${op.min[0]+x},${op.min[1]+y},${op.min[2]+z}] 冲突；修正范围或显式选择 keep-existing/replace，不能默默删除其他主体`);
           composition.replacedCells++;
         }
@@ -63,6 +71,7 @@ export function voxelGrid(program: VoxelProgram): VoxelGrid {
         else if (op.action === "paint") { if (owners[key]) colors[key] = color!; }
         else { if (!owners[key]) filled++; colors[key] = color!; owners[key] = owner; }
       }
+      assert(!(entity.role==='subject'&&op.action==='fill'&&shapeCells>0&&blockedSubjectCells===shapeCells),`主体 ${entity.id} 第${operationIndex+1}项 fill 的 ${shapeCells} 格全部被异色实体 ${[...blockedBy].join(',')} 的已有格挡住；keep-existing 实际没有生成这个部件。修正构造范围或明确使用 replace 保留主体部件，不能仅凭实体底座仍存在判定完整`);
     }
   }
   assert(filled > 0 && filled <= VOXEL_LIMITS.filledCells, "实体体素为空或超过 50 万格");
