@@ -2,6 +2,7 @@ import { validateProgress } from "./progress-contract";
 // Adapter contract: frozen rc.22 runner + generation files. Unknown keys remain visible.
 export const LABELS: Record<string, string> = {
   input: "接收输入",
+  voxel: "生成体素结构与颜色",
   plan: "提取需求",
   generate: "旧版生成总阶段",
   observe: "图片观察与跨视角对应",
@@ -233,7 +234,7 @@ export function normalize(
       method === "general-geometry-v3" ||
       Boolean(space) ||
       Object.keys(files).some((k) => k.includes("scene-space-"));
-  const splitV2 = method === "general-geometry-v2" || Boolean(layout);
+  const splitV2 = method === "general-geometry-v2" || Boolean(layout) && method !== "voxel-scene-v1";
   const callStage = (
     id: string,
     label: string,

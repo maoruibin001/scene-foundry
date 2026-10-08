@@ -1,4 +1,5 @@
 import {bindPointShadows} from './point-shadows';
+import {voxelProjection} from '../voxel/projection';
 import {bindReflectionProbes,reflectionProbeEntities,REFLECTION_COMPONENT_BOOTSTRAP} from './reflection-probes';
 import {bindCameraOutput} from './camera-output';
 import {spotEntities,bindDirectionalShadow,directionalShadowFields} from './lighting';
@@ -68,7 +69,8 @@ export function prepareGeometryProject(root:string,program:GeometryProgram,textu
  if(views){
   // 自由相机的运动算法无场景初值；所有机位来自本次生成数据。
   const controller=readFileSync(join(W,'src/native/camera.txt'),'utf8').replace("[0,1].includes(e.data.index)","Number.isInteger(e.data.index)&&e.data.index>=0&&e.data.index<audit.views.length").replace("if(input.keyboard.justPressedCode('Digit1'))view(0);if(input.keyboard.justPressedCode('Digit2'))view(1);","for(let n=0;n<audit.views.length;n++)if(input.keyboard.justPressedCode('Digit'+(n+1)))view(n);").replace("cameraControls:'free-inspection-v2'","fov:audit.views[selected].fov,motionBlockReason:motion.blockReason??null,cameraControls:'free-inspection-v2'");
-  writeFileSync(join(assets,'camera.plugin.ts'),controller);copyFileSync(join(W,'src/native/camera-motion.ts'),join(assets,'camera-motion.ts'));
+  const projection=voxelProjection(world,controller,views);world=projection.world;writeFileSync(join(assets,'world.pack.ts'),world);
+  writeFileSync(join(assets,'camera.plugin.ts'),projection.controller);copyFileSync(join(W,'src/native/camera-motion.ts'),join(assets,'camera-motion.ts'));
   let ui=readFileSync(join(W,'src/ui-v3.txt'),'utf8').replace('Space 巡航/暂停 · 方向键移动 · H 隐藏/恢复 · R 开始/停止录屏','WASD 移动 · Q/E 升降 · 拖动转向 · 数字键选择机位 · Space 连续观测 · H 隐藏 · R 录屏');
   ui=ui.replace('const hud=document.createElement',"const motionStatus=document.createElement('div');motionStatus.setAttribute('role','status');const hud=document.createElement").replace('hud.append(help);','hud.append(help,motionStatus);').replace('sources.add(e.data.sourceId);',"sources.add(e.data.sourceId);motionStatus.textContent=e.data.motionBlockReason??'';");
   ui=ui.replace('const record=document.createElement',`for(const [index,v] of audit.views.entries()){const b=document.createElement('button');b.textContent=v.name;b.style.cssText='margin:8px 4px;padding:5px 9px;cursor:pointer';b.onclick=()=>{channel.postMessage({action:'view',index});const canvas=document.querySelector('canvas');if(canvas){canvas.tabIndex=0;canvas.focus();}};hud.append(b);}hud.append(document.createElement('br'));const record=document.createElement`);

@@ -1,4 +1,6 @@
 import {assetGeometryBasis,assetGeometryBasisMatches} from './asset-geometry-basis';
+import {VOXEL_LIMITS} from '../voxel/program';
+import {generateVoxelScene} from '../voxel/generate';
 import {assertProceduralHandoff,assertProceduralBudget} from './procedural-handoff';
 import {referenceComposition} from './reference-composition';
 import {sceneVisibility} from './visibility';
@@ -48,13 +50,13 @@ import {COMPLEXITIES,complexityPolicy} from '../complexity';
 import {executionSettings} from '../execution-settings';
 import {generationPhase,finishGeneration} from '../timing';
 import {assetCache,assetKey,cacheCheckpointAssets} from './asset-cache';
-export function sceneComplexity(scene:any,level:keyof typeof COMPLEXITIES,parts:number){const p=complexityPolicy(level,Array.isArray(scene.observedBindings)),entities=scene.entities.filter((e:any)=>e.role!=='ground'),kinds=[...new Set(entities.map((e:any)=>e.category))];const checks=[{id:'entityBudget',passed:entities.length>=p.minEntities&&entities.length<=p.maxEntities,actual:entities.length,expected:[p.minEntities,p.maxEntities]},{id:'kindVariety',passed:kinds.length>=p.minKinds,actual:kinds.length,expected:p.minKinds},{id:'partBudget',passed:parts<=p.maxParts,actual:parts,expected:p.maxParts},{id:'materialBudget',passed:scene.program.materials.length<=p.maxMaterials,actual:scene.program.materials.length,expected:p.maxMaterials}];return {level,label:p.label,entityCount:entities.length,kindCount:kinds.length,kinds,partCount:parts,checks,passed:checks.every(c=>c.passed),method:'自由语义类别、实例与部件预算；丰富度和还原效果由真实画面独立评估'};}
+export function sceneComplexity(scene:any,level:keyof typeof COMPLEXITIES,parts:number,kind='scene'){const p=kind==='voxel'?{...complexityPolicy(level,true),maxEntities:VOXEL_LIMITS.entities,maxParts:2048,maxMaterials:VOXEL_LIMITS.palette}:complexityPolicy(level,Array.isArray(scene.observedBindings)),entities=scene.entities.filter((e:any)=>e.role!=='ground'),kinds=[...new Set(entities.map((e:any)=>e.category))];const checks=[{id:'entityBudget',passed:entities.length>=p.minEntities&&entities.length<=p.maxEntities,actual:entities.length,expected:[p.minEntities,p.maxEntities]},{id:'kindVariety',passed:kinds.length>=p.minKinds,actual:kinds.length,expected:p.minKinds},{id:'partBudget',passed:parts<=p.maxParts,actual:parts,expected:p.maxParts},{id:'materialBudget',passed:scene.program.materials.length<=p.maxMaterials,actual:scene.program.materials.length,expected:p.maxMaterials}];return {level,label:p.label,entityCount:entities.length,kindCount:kinds.length,kinds,partCount:parts,checks,passed:checks.every(c=>c.passed),method:'自由语义类别、实例与部件预算；丰富度和还原效果由真实画面独立评估'};}
 
 function prepareScene(job:any,plan:any,dir:string,value:any,textures:any,provenance:any){
  assertStorageAvailable(undefined,2*1024**3);
  value=bindReferenceFrames(value,(job.images??[]).map((i:any)=>({path:join(UPLOADS,i.file)})));const result={value};save(join(dir,'generated-scene.json'),result.value);job.sceneProgram={version:result.value.version,file:'generated-scene.json'};
   const prepared=prepareGeometryProject(join(dir,'project'),result.value.program,textures,{id:'scene-'+job.id,summary:plan.summary,scene:result.value,provenance:{pipelineVersion:job.pipelineVersion,references:(job.images??[]).map((i:any)=>i.id),textures:provenance,modelSettings:job.modelSettings}});
-  job.bounds=prepared.bounds;job.objectCount=prepared.meshes;job.entityCount=result.value.program.instances.length;job.complexityReport=sceneComplexity(result.value,job.complexity,prepared.meshes);
+  job.bounds=prepared.bounds;job.objectCount=prepared.meshes;job.entityCount=result.value.program.instances.length;job.complexityReport=sceneComplexity(result.value,job.complexity,prepared.meshes,job.sceneKind);
   job.structure={passed:true,semanticCounts:semanticCounts(result.value.entities),checks:[{id:'geometry-contract',passed:true},{id:'requirement-bindings',passed:true},{id:'texture-provenance',passed:true}],geometry:{triangles:prepared.triangles,suspects:[],scope:'仅证明网格契约、来源和需求绑定；空间接触、遮挡和穿插由实际画面验收，未冒充碰撞检测'},assumptions:result.value.assumptions};
   save(join(dir,'surface-audit.json'),surfaceAudit(value,textures));
   const observationPath=join(dir,'generation/reference-observations.json');save(join(dir,'reference-projection.json'),referenceProjection(value,existsSync(observationPath)?read(observationPath):null));
@@ -67,9 +69,13 @@ function prepareScene(job:any,plan:any,dir:string,value:any,textures:any,provena
 }
 export async function runGeneralScene({job,plan,dir,signal,stage,command,preview,resetPreview,evaluate}:any){
  const images=(job.images??(job.image?[job.image]:[])).map((i:any)=>({path:join(UPLOADS,i.file),mime:i.mime}));
- job.generationMethod='general-geometry-v3';job.stageTrackingVersion='exclusive-stages-v1';job.iteration=0;
+ job.generationMethod=job.sceneKind==='voxel'?'voxel-scene-v1':'general-geometry-v3';job.stageTrackingVersion='exclusive-stages-v1';job.iteration=0;
  assertFixedDependencies();
  const scene=await (async()=>{
+  if(job.sceneKind==='voxel'){
+   const produced=await stage('voxel',()=>generateVoxelScene({job,plan,images,root:dir,dir:join(dir,'generation/voxel'),signal}));
+   return stage('assembly',async()=>prepareScene(job,plan,dir,produced.scene,{},produced.provenance));
+  }
   const validate=(value:any)=>{const s=validateScene(value,plan,images.length),parts=s.program.instances.reduce((n,i)=>n+s.program.templates.find(t=>t.id===i.template)!.parts.length,0),c=sceneComplexity(s,job.complexity,parts);if(!c.passed)throw Error('所选复杂度未满足：'+JSON.stringify(c.checks));return s;};
   const source=job.reuseSceneFrom?join(runDir(job.reuseSceneFrom),'generated-scene.json'):null;
   // 在任何模型调用前校验保存场景和关系，完整场景仍须重新通过真实灰模验收。
@@ -176,7 +182,12 @@ export async function runGeneralScene({job,plan,dir,signal,stage,command,preview
  onProgress:(cycles,bestIndex)=>{job.visualIterations={cycles,bestIndex,maxRepairs,status:'running'};job.firstDraft??=structuredClone(cycles[0]);saveJob(job);},
  refine:async(sourceIndex,index)=>{job.status='running';await stage('repair',async()=>{
   improvement.reserveRepair(job.improvementId,'final',job.review?.summary??'依据本轮真实画面的具体失败项修正');
-  event(job,'visual-repair','自动视觉修正 '+index+(maxRepairs===null?'':'/'+maxRepairs)+'；复用第 '+sourceIndex+' 轮的最佳候选');
+   event(job,'visual-repair','自动视觉修正 '+index+(maxRepairs===null?'':'/'+maxRepairs)+'；复用第 '+sourceIndex+' 轮的最佳候选');
+   if(job.sceneKind==='voxel'){
+    const source=join(dir,'iterations',String(sourceIndex));
+    const produced=await generateVoxelScene({job,plan,images,root:dir,dir:join(dir,'generation','iteration-'+index,'voxel'),signal},{folder:source,runtime:read(join(source,'runtime/runtime.json')),review:read(join(source,'review.json')),source:read(join(source,'voxel-program.json'))});
+    resetPreview(job.id);job.previewUrl=null;prepareScene(job,plan,dir,produced.scene,{},produced.provenance);return;
+   }
   const next=await refineScene(job,plan,images,join(dir,'generation','iteration-'+index),signal,{dir:join(dir,'iterations',String(sourceIndex)),jobId:job.id,version:job.pipelineVersion,iteration:sourceIndex});
   validateScene(next,plan,images.length);
   const parts=next.program.instances.reduce((n,i)=>n+next.program.templates.find(t=>t.id===i.template)!.parts.length,0);

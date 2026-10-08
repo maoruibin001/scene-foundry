@@ -14,7 +14,7 @@ export function versionId(input:VersionInput){return digest(stableJson({configur
 const validId=(id:string)=>{if(!/^(?:[a-f0-9]{64}|legacy-[a-f0-9]{64})$/.test(id))throw Error('非法版本 ID');return id;};
 export function versionOf(job:any){return job.pipelineVersion?.id??job.profile.pipelineVersionId??'legacy-'+job.profile.id;}
 export function assessmentVersionOf(job:any){return job.assessmentVersion?.id??job.assessmentProfile?.pipelineVersionId??(job.assessmentProfile?'legacy-'+job.assessmentProfile.id:versionOf(job));}
-export function inputKey(j:any){return digest(stableJson([j.prompt??'',j.images?.map((i:any)=>i.id)??j.image?.id??j.image?.file??null,j.mode,j.complexity??null,j.validationKind??'generation']));}
+export function inputKey(j:any){return digest(stableJson([j.prompt??'',j.images?.map((i:any)=>i.id)??j.image?.id??j.image?.file??null,j.mode,j.complexity??null,j.validationKind??'generation',...(j.sceneKind==='voxel'?['voxel']:[])]));}
 export function modelKey(j:any){const p=j.profile;return [p.provider,p.model,p.judgeModel,p.reasoningEffort??'default',p.executionRoute?.configurationSha256??'legacy-openai'].join(' / ');}
 export function versionStats(jobs:any[]){
  const continuations=jobs.filter(j=>!automaticGeneration(j)&&j.validationKind!=='native-assisted'),assisted=jobs.filter(j=>j.validationKind==='native-assisted'),ended=jobs.filter(j=>TERMINAL.includes(j.status)&&automaticGeneration(j)&&!executionInterrupted(j)),mixed=ended.filter(j=>assessmentVersionOf(j)!==versionOf(j)),eligible=ended.filter(j=>assessmentVersionOf(j)===versionOf(j)),scored=eligible.filter(j=>!j.partialOutput&&Number.isFinite(j.quality?.score));

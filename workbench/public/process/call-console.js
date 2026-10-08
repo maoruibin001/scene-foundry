@@ -1,3 +1,4 @@
+import {apiPath} from './api-path.js';
 import {Terminal} from './vendor/xterm.mjs';
 const escape=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const streams=[['log','实时执行日志'],['stdout','实时标准输出'],['input','调用输入'],['inputReceipt','输入附件与配置'],['response','最终结果'],['partial','未完成输出']];
@@ -46,7 +47,7 @@ function connect(){
  disconnect();if(!panel?.isConnected)return;
  resetView();if(!live()){void saved();return;}
  terminal.reset();$('#console-meta').textContent='正在连接当前调用输出…';
- const source=new EventSource('/api/process/live?'+new URLSearchParams({key:record,call:selected,stream}));connection=source;
+ const source=new EventSource(apiPath('/api/process/live?')+new URLSearchParams({key:record,call:selected,stream}));connection=source;
  const active=()=>connection===source&&panel?.isConnected;
  let hasOutput=false,truncated=false;
  source.addEventListener('reset',event=>{if(!active())return;const data=JSON.parse(event.data);terminal.reset();hasOutput=false;truncated=data.truncated;});
@@ -62,7 +63,7 @@ async function saved(){
  const token=++request;
  $('#console-meta').textContent='正在读取已保存内容…';$('#call-console-output').textContent='';
  try{
-  const response=await fetch('/api/process/call?'+new URLSearchParams({key:record,call:selected,stream}),{signal:AbortSignal.timeout(8000)});
+  const response=await fetch(apiPath('/api/process/call?')+new URLSearchParams({key:record,call:selected,stream}),{signal:AbortSignal.timeout(8000)});
   const data=await response.json();if(!response.ok)throw Error(data.error);
   if(token!==request||!panel?.isConnected)return;
   $('#call-console-output').textContent=data.state==='missing'?'此调用未保存这项内容。':data.state==='empty'?'文件已创建，当前为 0 字节。':data.text;

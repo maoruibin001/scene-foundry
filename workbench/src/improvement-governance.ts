@@ -58,7 +58,7 @@ export class ImprovementLedger {
   (v.scopeCorrections??=[]).push({key,at:Date.now(),reason:'草稿与完整成品按不可变评估凭据分开比较；原始评分、修复次数和实际调用不变',before,after:{noGain:v.noGain,progress,stopped:v.stopped??null},receipts:rows.filter(r=>r.assessmentScope).map(r=>({jobId:r.jobId,assessmentId:r.assessmentId,scope:r.assessmentScope}))});
   save(this.path(v.id),v);
  }
- inputKey(input:any){return digest(JSON.stringify([String(input.prompt??'').trim().replace(/\s+/g,' '),(input.images??[]).map((i:any)=>i.id)]));}
+ inputKey(input:any){return digest(JSON.stringify([String(input.prompt??'').trim().replace(/\s+/g,' '),(input.images??[]).map((i:any)=>i.id),...(input.sceneKind==='voxel'?['voxel']:[])]));}
  key(input:any){const key=this.inputKey(input);return input.reuseMode==='fresh'&&input.generationMode==='first-pass'&&input.baselineId?digest(JSON.stringify([key,'fresh-first-pass',input.baselineId])):key;}
  path(id:string){if(!/^[a-f0-9]{64}$/.test(id))throw Error('实验标识无效');return join(this.root,id+'.json');}
  get(id:string){return read(this.path(id));}

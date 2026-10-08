@@ -3,6 +3,7 @@ import {firstPassCallEstimate} from './matching-level';
 // A conservative admission envelope, not permission to increase the task's budget.
 export const FRESH_SCENE_CALLS=firstPassCallEstimate(16).plannedCalls+8;
 export function freshSceneReservation(input:any,options:any){
+ if(input.sceneKind==='voxel'&&!['reuseSceneFrom','reuseCheckpoint','reuseAssessmentFrom','reuseFrom','reusePlanFrom','recoverySourceJobId'].some(k=>options[k]))return {version:'scene-call-reserve-v1',calls:8,plannedCalls:3,recoveryAllowance:5};
  if(input.matchingLevel!=='standard'||['reuseSceneFrom','reuseCheckpoint','reuseAssessmentFrom','reuseFrom','reusePlanFrom','recoverySourceJobId'].some(k=>options[k]))return null;
  return {version:'scene-call-reserve-v1',calls:FRESH_SCENE_CALLS,plannedCalls:firstPassCallEstimate(16).plannedCalls,recoveryAllowance:8};
 }

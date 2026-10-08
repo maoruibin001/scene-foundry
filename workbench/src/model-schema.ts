@@ -1,4 +1,5 @@
 import {imageMatchSchema} from './image-reconstruction';
+import {voxelSchema} from './voxel/schema';
 import {grayboxSpaceRepairSchema} from './geometry/graybox-space-repair';
 import {expandBlockoutGeometry} from './geometry/blockout-contract';
 import {observationSchema} from './geometry/reference-observations';
@@ -23,6 +24,7 @@ const choice=(...values:string[])=>({type:'string',enum:values});
 const nullableNum={type:['number','null']};
 export type ModelSchemaContext={requirementIds?:string[];referenceCount?:number;repairReferences?:RepairGoalReferences;repairComplexity?:Complexity;qualityVersion?:string;imageGoal?:boolean;grayboxRepair?:boolean};
 export function modelSchema(role:string,context?:ModelSchemaContext):any {
+ if(role==='voxel-scene')return voxelSchema(context?.requirementIds);
  if(role==='scene-repair-plan')return repairGoalsSchema(context?.repairReferences,context?.repairComplexity?repairBudget(context.repairComplexity):LEGACY_REPAIR_BUDGET);
  if(role==='scene-openings')return openingObservationSchema();
  if(role==='scene-spatial-refine')return spatialRefinementSchema();

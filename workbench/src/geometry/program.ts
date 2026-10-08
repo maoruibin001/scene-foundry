@@ -11,6 +11,7 @@ import {validateMaterialEmission,emissionSurface,type MaterialEmission} from './
 
 // 数据契约只描述构造操作，不枚举家具、建筑或其他物体类别。
 export type PrimitiveShape = CurvedShape | BezierPatch | BranchCrown
+ | {type:'indexedMesh';positions:V[];triangles:[number,number,number][]}
  | {type:'box';size:V;radius:number}
  | {type:'lathe';profile:number[][];segments:number;arc?:number|null;start?:number|null}
  | {type:'extrusion';outline:number[][];depth:number}
@@ -50,6 +51,11 @@ function outline(points:number[][]){
 }
 export function shapeTriangles(s:Shape){
  switch(s?.type){
+  case 'indexedMesh':{
+   assert(Array.isArray(s.positions)&&s.positions.length>=3&&s.positions.length<=750000&&s.positions.every(p=>vector(p,-1000,1000)),'内部网格坐标无效或超限');
+   assert(Array.isArray(s.triangles)&&s.triangles.length>0&&s.triangles.length<=GEOMETRY_LIMITS.triangles&&s.triangles.every(t=>Array.isArray(t)&&t.length===3&&t.every(i=>Number.isSafeInteger(i)&&i>=0&&i<s.positions.length)&&hasTriangleArea(cross(sub(s.positions[t[1]],s.positions[t[0]]),sub(s.positions[t[2]],s.positions[t[0]])))),'内部网格三角形无效、退化或超限');
+   return s.triangles.length;
+  }
   case 'branchCrown':return crownFaces(s).length;
   case 'bezierPatch':return patchFaces(s).length;
   case 'cushion':case 'cloth':case 'shell':return curvedTriangles(s);
@@ -128,6 +134,7 @@ function transformNormal(v:V,p:Pose):V{return norm(rotate(v.map((n,k)=>n/p.scale
 function draw(g:MeshBuilder,part:Part){
  const m=part.material,s=part.shape;
  switch(s.type){
+  case 'indexedMesh':for(const face of s.triangles)g.triangle(m,face.map(i=>s.positions[i]));break;
   case 'branchCrown':drawCrown(g,m,s);break;
   case 'bezierPatch':drawPatch(g,m,s);break;
   case 'cushion':case 'cloth':case 'shell':drawCurved(g,m,s);break;

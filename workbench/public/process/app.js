@@ -1,3 +1,4 @@
+import {apiPath} from "./api-path.js";
 import { consoleHTML, mountConsole, hideConsole } from "./call-console.js";
 import { displayFrames, referenceFrame, grayboxSummary, grayboxView } from "./graybox-view.js";
 const $ = (s) => document.querySelector(s);
@@ -100,7 +101,7 @@ function pick(next) {
   renderHistory();
 }
 async function get(path) {
-  const r = await fetch(path, { signal: AbortSignal.timeout(8000) });
+  const r = await fetch(apiPath(path), { signal: AbortSignal.timeout(8000) });
   const body = await r.json();
   if (!r.ok) throw Error(body.error ?? r.status);
   return body;
@@ -236,7 +237,7 @@ function assets() {
     return `<span class="material-chip ${compact ? "compact-chip" : ""}">${texture ? `<img loading="lazy" src="${E(texture.url)}" alt="">` : swatch(m)}<span><b>${E(m.id)}</b>${!compact ? `<small>${texture ? `贴图 ${E(m.textureId)}` : "纯色材质"} · 粗糙度 ${E(m.roughness ?? "未知")} · 金属度 ${E(m.metallic ?? "未知")}</small>` : ""}</span></span>`;
   };
   const materialById = new Map(materials.map((m) => [m.id, m]));
-  const previewUrl = (id) => "/api/process/asset-preview?" + new URLSearchParams({ key, asset: id });
+  const previewUrl = (id) => apiPath("/api/process/asset-preview?") + new URLSearchParams({ key, asset: id });
   const assetCards = data.assets.map((s) => {
     const ids = A(s.materialIds);
     return `<article class="asset-card"><div class="asset-card-top">${s.previewAvailable ? `<button class="asset-visual" data-asset="${E(s.id)}" aria-label="放大查看 ${E(s.label ?? s.id)}"><img loading="lazy" src="${E(previewUrl(s.id))}" alt="${E(s.label ?? s.id)}的已保存几何形状"></button>` : `<div class="asset-visual pending-visual">${s.status === "waiting" || s.status === "pending" ? "等待生成" : "没有可预览的几何工件"}</div>`}<div><h3>${E(s.label ?? s.id)}</h3>${badge(s.status)}<p class="muted compact">${E(s.id)} · ${E(s.checkpoint?.triangles ?? "未知")} 个三角形 · ${s.status==="reused"?"本次 0 秒（历史复用）":duration(s.checkpoint?.durationMs)}</p><p class="muted compact">${s.previewAvailable ? "真实几何的等轴投影；贴图效果以右侧材质图和 Engine 画面为准。" : "仅展示已保存的工件，不推测未生成的形状。"}</p></div></div>${ids.length ? `<div class="asset-materials"><strong>使用材质 ${ids.length} 种</strong><div class="material-list">${ids.map((id) => material(materialById.get(id) ?? { id, color: [.55,.65,.59,1] }, true)).join("")}</div></div>` : ""}${s.checkpoint?.error ? `<p class="status failed">${E(s.checkpoint.error)}</p>` : ""}${json("资产简报与完成回执", s)}</article>`;
