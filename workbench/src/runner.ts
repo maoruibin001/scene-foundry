@@ -1,5 +1,6 @@
 import {reserveValidationRound} from './validation-rounds';
 import {sceneKind} from './scene-kind';
+import {reservePreviewPort,previewMatches} from './preview-endpoint';
 import {activeSpatialRepair} from './spatial-diagnosis';
 import {activeRegeneration,isRegeneration} from './regeneration-dispatch';
 import {candidateEvidence} from './geometry/candidate-selection';
@@ -92,10 +93,9 @@ export async function previewDelivery(id:string){const j=getJob(id),d=deliveryIn
 export async function preview(id:string){if(previews.has(id))return previews.get(id).url;if(previewPending.has(id))return previewPending.get(id)!;const pending=previewLaunch.use(id,undefined,()=>startPreview(id));previewPending.set(id,pending);try{return await pending;}finally{previewPending.delete(id);}}
 async function startPreview(id:string,delivery?:{key:string;game:string}){const previewKey=delivery?.key??id;if(previews.has(previewKey))return previews.get(previewKey).url;const job=getJob(id);if(!delivery&&job.stages.build?.status!=='passed')throw Error('构建尚未通过');
  if(previews.size>=3){const idle=[...previews.entries()].find(([key])=>!controllers.has(key));if(idle){const [old,x]=idle;x.process.kill();previews.delete(old);if(!old.includes(':delivery:')){const j=getJob(old);j.previewUrl=null;saveJob(j);}}}
- const net=await import('node:net');let port=19775;while(port<19800){const free=await new Promise(resolve=>{const s=net.createServer();s.once('error',()=>resolve(false));s.listen(port,'::1',()=>s.close(()=>resolve(true)))});if(free)break;port++;}
- if(port===19800)throw Error('无可用预览端口');const game=delivery?.game??join(runDir(id),'project/game');const p=Bun.spawn(['node',CLI,'project','preview','--root',game,'--port',String(port),'--json'],{cwd:game,stdout:'pipe',stderr:'pipe'});
+ const game=delivery?.game??join(runDir(id),'project/game'),expectedManifest=digest(readFileSync(join(game,'dist/forgeax-dist.json')));const {port,release}=await reservePreviewPort();let p;try{p=Bun.spawn(['node',CLI,'project','preview','--root',game,'--port',String(port),'--json'],{cwd:game,stdout:'pipe',stderr:'pipe'});}catch(error){release();throw error;}void p.exited.then(release,release);
  const url='http://localhost:'+port+'/';let logs='';void(async()=>{for await(const x of p.stdout){logs+=new TextDecoder().decode(x);writeFileSync(join(runDir(id),'preview.log'),logs)}})();void(async()=>{for await(const x of p.stderr){logs+=new TextDecoder().decode(x);writeFileSync(join(runDir(id),'preview.log'),logs)}})();
- const stop=Date.now()+20000;while(Date.now()<stop){if(p.exitCode!==null)throw Error('预览启动失败：'+logs.slice(-800));try{const r=await fetch(url,{signal:AbortSignal.timeout(1000)});await r.body?.cancel();if(r.ok){previews.set(previewKey,{process:p,url});if(!delivery){const current=getJob(id);current.previewUrl=url;saveJob(current);}return url;}}catch{}await Bun.sleep(250)}p.kill();throw Error('预览启动超时');}
+ const stop=Date.now()+20000;while(Date.now()<stop){if(p.exitCode!==null)throw Error('预览启动失败：'+logs.slice(-800));try{if(await previewMatches(url,expectedManifest)){previews.set(previewKey,{process:p,url});if(!delivery){const current=getJob(id);current.previewUrl=url;saveJob(current);}return url;}}catch{}await Bun.sleep(250)}p.kill();throw Error('预览启动超时');}
 async function run(id:string){const job=getJob(id),dir=runDir(id),ctl=new AbortController();controllers.set(id,ctl);job.status='running';job.startedAt=Date.now();job.concurrencyAtStart=schedulerSnapshot().limits;saveJob(job);const imgs=(job.images??(job.image?[job.image]:[])).map((i:any)=>({path:join(UPLOADS,i.file),mime:i.mime}));
  try{
  job.executionRuntime=assertProductionReady();saveJob(job);
