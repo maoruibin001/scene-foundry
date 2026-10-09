@@ -6,6 +6,13 @@ import {assertVisibilityCamera} from './geometry/visibility-evidence';
 import type {ImprovementLedger} from './improvement-governance';
 
 const HARD=['framing','cameraMotion','nonFlat','multipleViews','entitiesLoaded','frameRate','runtime','noErrors','hudToggle','video','cameraStopped'];
+/** A viewer/doc update alone cannot reopen a stopped generation strategy. */
+export function assertSpatialMechanismChanged(before:Record<string,string>,after:Record<string,string>){
+ const producer=(key:string)=>/^workbench\/src\/geometry\/.*\.(ts|mjs)$/.test(key)&&!key.endsWith('.test.ts')&&!key.endsWith('/visibility-evidence.ts')||key==='workbench/src/voxel/projection.ts';
+ const old=Object.keys(before??{}).filter(producer),current=Object.keys(after??{}).filter(producer);
+ if(!old.length||!current.length)throw Error('无法核实冻结的空间生成机制，不能新增重跑机会');
+ if([...new Set([...old,...current])].every(key=>before[key]===after[key]))throw Error('空间生成机制没有变化；界面、过程展示或文档更新不能重跑已停止策略');
+}
 export function spatialRepairBasis(source:any,round:unknown){
  if(source.generationMode!=='qualified'||!['failed','needs_review'].includes(source.status)||source.blockout?.status!=='stopped'||!source.improvementId||source.sceneProgram)throw Error('需要已按无改善停止、尚未放行详细资产的灰模任务');
  if(!Number.isInteger(round)||!source.blockout.rounds?.some(r=>r.round===round&&r.passed===false&&Number.isFinite(r.review?.score)&&Number.isFinite(r.endedAt)))throw Error('只能选择已经完整评估的灰模轮次');

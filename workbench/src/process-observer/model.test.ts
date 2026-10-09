@@ -208,3 +208,14 @@ test("复用已有场景修正不展示未执行的逐资产生成依赖",()=>{
  const m=normalize({...base,refineScene:true,reuseSceneFrom:"source"},{"generation/refinement/scene-repair-plan-execution.json":{status:"running",startedAt:1200}},3000);
  expect(m.children.some(s=>["materials","assets","assembly"].includes(s.id))).toBe(false);expect(m.children.find(s=>s.id==="scene-repair-plan").dependsOn).toBe("plan");
 });
+
+test('重复空间阶段进行中不借用上一轮结束事件；调用文件重排仍选择最新实际调用',()=>{
+ const job={...base,stageTrackingVersion:'exclusive-stages-v1',stage:'space',stages:{input:{status:'passed'},plan:{status:'passed'},observe:{status:'passed'},space:{status:'running',startedAt:3000}},events:[{type:'stage',message:'space 完成',at:1500}]};
+ const calls={
+  'generation/space-repair-7/scene-space-execution.json':{status:'running',startedAt:3000},
+  'generation/space-repair-0/scene-space-execution.json':{status:'completed',startedAt:1000,endedAt:1500,durationMs:500},
+ };
+ const result=normalize(job,calls);
+ expect(result.stages.find((s:any)=>s.id==='space').end).toBeNull();
+ const space=result.children.find((s:any)=>s.id==='space');expect(space.status).toBe('running');expect(space.start).toBe(3000);expect(space.end).toBeNull();
+});

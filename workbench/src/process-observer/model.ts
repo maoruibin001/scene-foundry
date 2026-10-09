@@ -189,13 +189,13 @@ export function normalize(
     );
     stageIds.splice(pos < 0 ? stageIds.length : pos, 0, "repair");
   }
-  const stageEnd = (id: string, s: any) =>
+  const stageEnd = (id: string, s: any) => active(s.status) ? (terminal && id === job.stage ? end : null) :
     timestamp(s.endedAt) ??
     (s.startedAt != null && Number.isFinite(s.durationMs)
       ? timestamp(s.startedAt)! + s.durationMs
       : null) ??
     timestamp(
-      events.find((e) => e.type === "stage" && e.message === id + " 完成")?.at,
+      events.filter((e) => e.type === "stage" && e.message === id + " 完成" && (timestamp(e.at) ?? -1) >= (timestamp(s.startedAt) ?? -1)).at(-1)?.at,
     ) ??
     (terminal && id === job.stage ? end : null);
   const stages = stageIds.map((id: string, index: number) => {
@@ -244,7 +244,7 @@ export function normalize(
     const related = (Object.values(calls) as any[]).filter((c) =>
       c.id.split("/").at(-1)?.startsWith(prefix),
     );
-    const c = related.at(-1);
+    const c = [...related].sort((a,b)=>(a.start??-1)-(b.start??-1)).at(-1);
     children.push({
       id,
       label,

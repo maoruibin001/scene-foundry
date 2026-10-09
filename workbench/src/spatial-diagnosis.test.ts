@@ -3,7 +3,7 @@ import {mkdtempSync,rmSync,writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {ImprovementLedger} from './improvement-governance';
-import {spatialRepairBasis,resumeDiagnosedSpatialRepair,activeSpatialRepair} from './spatial-diagnosis';
+import {spatialRepairBasis,resumeDiagnosedSpatialRepair,activeSpatialRepair,assertSpatialMechanismChanged} from './spatial-diagnosis';
 import {spatialDiagnosisHTML} from '../public/spatial-diagnosis-ui.js';
 import {jobOriginHTML} from '../public/delivery-ui.js';
 import {spatialProgress} from '../public/spatial-status.js';
@@ -86,4 +86,14 @@ test('诊断子任务停止后保留来源说明并提供新冻结机制入口�
 test('空间质量续接沿明确来源累计原始总历时，不能算技术恢复或新输入',()=>{
  const root={id:'original',prompt:'same',images:[{id:'ref'}],createdAt:100,startedAt:110,endedAt:210,status:'failed'},source={...root,id:'source',createdAt:400,startedAt:410,endedAt:510,retryRoot:'original'},child={...root,id:'child',createdAt:900,startedAt:910,endedAt:1010,spatialRepairSource:{jobId:'source',round:2},policy:{deliveryStandard:'basic70'}};
  const result=productionTimeline(child,[root,source,child],[],1100);expect(result.startedAt).toBe(100);expect(result.totalMs).toBe(910);expect(result.executionRecoveries).toBe(0);expect(result.runs.at(-1).kind).toBe('空间质量修正');expect(result.successAt).toBeNull();
+});
+
+
+test('界面和诊断网页更新不冒充新空间机制，真实生成或投影变化才可验证续跑',()=>{
+ const before={'workbench/src/geometry/camera-fit.ts':'same','workbench/src/geometry/visibility-evidence.ts':'old'};
+ const ui={...before,'workbench/src/geometry/visibility-evidence.ts':'new','workbench/public/voxel/app.js':'new','workbench/src/process-observer/model.ts':'new','docs/voxel-scenes.md':'new'};
+ expect(()=>assertSpatialMechanismChanged(before,ui)).toThrow('空间生成机制没有变化');
+ expect(()=>assertSpatialMechanismChanged(before,{...ui,'workbench/src/geometry/camera-fit.ts':'changed'})).not.toThrow();
+ expect(()=>assertSpatialMechanismChanged(before,{...ui,'workbench/src/voxel/projection.ts':'new'})).not.toThrow();
+ expect(()=>assertSpatialMechanismChanged({},ui)).toThrow('无法核实');
 });
