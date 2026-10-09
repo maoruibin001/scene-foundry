@@ -1,5 +1,5 @@
 import {test,expect} from 'bun:test';
-import {GEOMETRY_SCOPES,STRICT_VOXEL_CONSTRUCTION,validateVoxelLandmarkCoverage} from './landmark-coverage';
+import {GEOMETRY_SCOPES,STRICT_VOXEL_CONSTRUCTION,validateVoxelLandmarkCoverage,voxelComponentRequirements,VoxelLandmarkCoverageError} from './landmark-coverage';
 
 const landmark=(id:string,geometryScope:any,critical=true)=>({id,label:id,geometryScope,critical,views:[{referenceIndex:1,box:[.1,.1,.4,.5],extent:'occluded',evidence:'原图可见轮廓'}]});
 const template=(id:string)=>({id,bounds:{min:[0,0,0],max:[1,1,2]}});
@@ -75,4 +75,51 @@ test('unknown instances, duplicate instance bindings and duplicate identity meta
   (space:any)=>space.observedBindings[1].landmarkId='wall',
  ];
  for(const mutate of mutations){const {space,observation}=fixture();mutate(space);expect(()=>validateVoxelLandmarkCoverage(space,observation)).toThrow('VOXEL_LANDMARK_COVERAGE');}
+});
+
+// Small portable topology extracted from the failed initial plan: frame/steps,
+// middle terrace/pier and geographically distinct green regions share aliases.
+function failedAliasCore(){
+ const specs=[['left_stone_frame','object','left_frame'],['left_recess_steps','component','left_frame'],['left_middle_landing','component','left_landing'],['central_terrace','component','left_landing'],['front_right_stone_pier','component','left_landing'],['green_left_front','component','green_regions'],['green_rear_top','component','green_regions'],['frame_opening','void','left_frame']];
+ return {observation:{landmarks:specs.map(([id,scope])=>landmark(id,scope))},space:{voxelLattice:{version:STRICT_VOXEL_CONSTRUCTION},program:{templates:[template('frame'),template('landing'),template('green')],instances:[instance('left_frame','frame'),instance('left_landing','landing'),instance('green_regions','green')]},observedBindings:specs.map(([id,,owner])=>({landmarkId:id,instanceIds:[owner]}))}};
+}
+function semanticError(space:any,observation:any){
+ try{validateVoxelLandmarkCoverage(space,observation);}catch(error){expect(error).toBeInstanceOf(VoxelLandmarkCoverageError);return error as VoxelLandmarkCoverageError;}
+ throw Error('fixture must fail semantic coverage');
+}
+test('one error enumerates all independent component aliases with owners and a concrete repair action',()=>{
+ const {space,observation}=failedAliasCore(),before=structuredClone({space,observation}),error=semanticError(space,observation);
+ expect(error.violations.map(v=>v.landmarkId).sort()).toEqual(['left_stone_frame','left_recess_steps','left_middle_landing','central_terrace','front_right_stone_pier','green_left_front','green_rear_top'].sort());
+ expect(error.violations.find(v=>v.landmarkId==='left_recess_steps')).toMatchObject({geometryScope:'component',instanceIds:['left_frame'],otherOwners:{left_frame:['left_stone_frame']}});
+ expect(error.violations.find(v=>v.landmarkId==='green_left_front')!.otherOwners).toEqual({green_regions:['green_rear_top']});
+ for(const violation of error.violations){expect(error.message).toContain(violation.landmarkId);if(violation.geometryScope==='component')expect(violation.requiredAction).toContain('create-independent-component');}
+ expect(error.message).toContain('没有独立实例');expect({space,observation}).toEqual(before);
+});
+test('moving the first bad binding to another host still reports the remaining full workload',()=>{
+ const {space,observation}=failedAliasCore();space.observedBindings.find(b=>b.landmarkId==='left_recess_steps')!.instanceIds=['left_landing'];
+ const error=semanticError(space,observation);
+ expect(error.violations).toHaveLength(6);
+ expect(error.violations.find(v=>v.landmarkId==='left_recess_steps')!.otherOwners).toEqual({left_landing:['left_middle_landing','central_terrace','front_right_stone_pier']});
+ expect(error.violations.some(v=>v.landmarkId==='green_rear_top')).toBe(true);expect(error.violations.some(v=>v.landmarkId==='left_stone_frame')).toBe(false);
+});
+test('bounds and duplicate group sets are included alongside component ownership errors',()=>{
+ const {space,observation}=fixture();space.observedBindings[1].instanceIds=['i_cluster_a','i_wall'];space.program.templates[1].bounds.max[0]=0;space.observedBindings[3].instanceIds=['i_wall'];
+ const error=semanticError(space,observation);
+ expect(error.violations.map(v=>v.landmarkId)).toEqual(['clusters','wall','ruin']);
+ expect(error.violations[0].reason).toContain('不能混入其他主体实例');expect(error.violations[0].reason).toContain('bounds');
+ expect(error.violations[2].otherOwners).toEqual({i_wall:['wall']});expect(error.message).toContain('相同绑定集合');
+});
+test('independent requirements retain target identities and list the full minimum workload without synthetic IDs',()=>{
+ const {observation}=failedAliasCore();observation.landmarks.push(landmark('noncritical','component',false),landmark('assembly','group'));
+ observation.landmarks.find(l=>l.id==='green_left_front')!.views.push({...observation.landmarks[0].views[0],referenceIndex:2});
+ const before=structuredClone(observation),requirements=voxelComponentRequirements(observation);
+ expect(requirements).toHaveLength(7);expect(requirements.every(r=>r.minimumIndependentInstances===1)).toBe(true);
+ expect(requirements.find(r=>r.landmarkId==='left_recess_steps')).toEqual({landmarkId:'left_recess_steps',label:'left_recess_steps',geometryScope:'component',minimumIndependentInstances:1,exclusiveRule:'all-bound-instances-exclusive'});
+ expect(requirements.find(r=>r.landmarkId==='left_stone_frame')!.exclusiveRule).toBe('at-least-one-exclusive-instance');
+ expect(requirements.some(r=>['frame_opening','assembly','noncritical'].includes(r.landmarkId))).toBe(false);
+ expect(requirements.every(r=>!Object.hasOwn(r,'instanceId')&&!Object.hasOwn(r,'position')&&!Object.hasOwn(r,'templateId'))).toBe(true);expect(observation).toEqual(before);
+});
+test('requirement extraction rejects missing scopes, duplicate targets, unclear criticality and missing labels',()=>{
+ const mutations=[(o:any)=>delete o.landmarks[0].geometryScope,(o:any)=>o.landmarks.push({...o.landmarks[0]}),(o:any)=>delete o.landmarks[0].critical,(o:any)=>o.landmarks[0].label=''];
+ for(const mutate of mutations){const {observation}=failedAliasCore();mutate(observation);expect(()=>voxelComponentRequirements(observation)).toThrow('VOXEL_LANDMARK_COVERAGE');}
 });

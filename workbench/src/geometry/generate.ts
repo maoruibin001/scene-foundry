@@ -1,5 +1,6 @@
 import {voxelGeometryGuidance} from '../voxel/construction-guidance';
 import {VOXEL_SPACE_GUIDANCE,VOXEL_STRICT_SPACE_GUIDANCE,VOXEL_GEOMETRY_GUIDANCE,VOXEL_SURFACE_GUIDANCE} from '../voxel/construction-guidance';
+import {voxelComponentRequirements,VOXEL_COMPONENT_REQUIREMENTS_GUIDANCE} from '../voxel/landmark-coverage';
 import {withInitialSpaceDraft} from './space-draft';
 import {assetGeometryBasis} from './asset-geometry-basis';
 import {assertProceduralHandoff,proceduralSeeds,PROCEDURAL_HANDOFF_RULES} from './procedural-handoff';
@@ -54,7 +55,8 @@ export async function generateLayout(ctx:GenerationContext){
   return withInitialSpaceDraft(()=>callValidated({modelSettings:job.modelSettings,role:'scene-space',signal,maxTokens:9000,images,tools:construction?.kit,
    system:(construction?spaceConstructionPrompt(construction.kit.instructions):SPACE_PROMPT)+'\n'+matchingGuidance(job)+(job.sceneKind==='voxel'?'\n'+(strictVoxel?VOXEL_STRICT_SPACE_GUIDANCE:VOXEL_SPACE_GUIDANCE):''),
    schemaContext:{requirementIds:plan.requirements.map((r:any)=>r.id),derivedSpatialRelations:true,...(strictVoxel?{strictVoxel:true}:{})},
-   text:JSON.stringify({input:job.prompt,scoring:scoringGuidance(job.policy),referenceImages:images.length,generationBrief:job.generationBrief,observation:ctx.observation,plan,productionRules:SPEC.rules})},dir,validateNewSpace),()=>construction?.snapshot(),ctx.preserveSpaceDraft,signal,error=>save(join(dir,'space-draft-warning.json'),{error:String(error),originalStageFailurePreserved:true}));
+   text:JSON.stringify({input:job.prompt,scoring:scoringGuidance(job.policy),referenceImages:images.length,generationBrief:job.generationBrief,observation:ctx.observation,plan,productionRules:SPEC.rules,
+    ...(strictVoxel?{requiredIndependentComponents:voxelComponentRequirements(ctx.observation),minimumIndependentInstanceSlots:voxelComponentRequirements(ctx.observation).length,independentComponentGuidance:VOXEL_COMPONENT_REQUIREMENTS_GUIDANCE}:{})})},dir,validateNewSpace),()=>construction?.snapshot(),ctx.preserveSpaceDraft,signal,error=>save(join(dir,'space-draft-warning.json'),{error:String(error),originalStageFailurePreserved:true}));
  });
  const estimate=firstPassCallEstimate(space.value.program.templates.length,job.matchingLevel??'detailed');
  save(join(dir,'call-estimate.json'),estimate);
