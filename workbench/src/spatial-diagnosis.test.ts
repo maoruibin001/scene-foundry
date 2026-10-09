@@ -60,7 +60,7 @@ test('同实验已经排队或运行时返回现任务，不重复创建',()=>{
 });
 test('正常UI选最高灰模且同分最早；未通过来源不改标合格或新样本',()=>{
  const f=fixture();try{const j={...f.source,improvement:f.ledger.get(f.source.improvementId)};j.blockout.rounds.push({round:1,passed:false,review:{score:3},endedAt:20});const html=spatialDiagnosisHTML(j,{id:'new'});
- expect(html).toContain('value="0" selected');expect(html).toContain('未通过');expect(html).toContain('不改标成品最佳或合格');expect(spatialDiagnosisHTML(j,{id:'old'})).not.toContain('id="spatial-refine"');
+ expect(html).toContain('value="0" selected');expect(html).toContain('未通过');expect(html).toContain('不改标成品最佳或合格');expect(spatialDiagnosisHTML(j,{id:'old'})).not.toContain('id="spatial-refine"');expect(spatialDiagnosisHTML({...j,spatialMechanismChangeAvailable:false},{id:'new'})).not.toContain('id="spatial-refine"');
  const child={spatialRepairSource:{jobId:'old',round:0},spatialDiagnosis:{reason}};expect(jobOriginHTML(child)).toContain('空间质量修正');expect(jobOriginHTML(child)).not.toContain('完全从头生成');expect(spatialDiagnosisHTML(child,{id:'new'})).toContain('不是新独立样本或执行恢复');
  }finally{f.close();}
 });
