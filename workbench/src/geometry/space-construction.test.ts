@@ -45,6 +45,24 @@ test('core contract removes only construction declarations; tool output does not
  }finally{f.clean();}
 });
 
+test('strict space checkpoint persists and binds the common lattice; tiny mutations fail before saving',async()=>{
+ const f=fixture();try{
+  const core={...structuredClone(f.core),voxelLattice:{version:'voxel-lattice-v1',cellSize:.25,origin:[0,0,0]}},observation={...f.observation,landmarks:f.observation.landmarks.map(l=>({...l,geometryScope:'object',critical:true}))},options={strictVoxel:true,inputKey:digest('strict voxel frozen input'),validate:(value:any)=>validateSpace(completeObservedSpacePlan(value,observation),f.plan,1,'simple',{strictVoxel:true})};
+  let tool=f.create(options);await expect(f.putCore(tool)).rejects.toThrow('缺少字段');await f.putCore(tool,core);const file=join(f.folder,'checkpoint.json'),before=readFileSync(file),draft=tool.summary().draftSha256;
+  for(const mutate of [v=>v.program.instances[0].position[0]=.000123,v=>v.program.instances[0].rotation[2]=1e-8,v=>v.program.instances[0].scale[0]=1.0001,v=>v.program.templates[0].bounds.min[0]=-.500123,v=>v.voxelLattice.cellSize=.3]){const invalid=structuredClone(core);mutate(invalid);await expect(f.putCore(tool,invalid)).rejects.toThrow();expect(readFileSync(file).equals(before)).toBe(true);expect(tool.summary().draftSha256).toBe(draft);}
+  tool=f.create(options);expect(tool.summary().data.core.voxelLattice).toEqual(core.voxelLattice);expect(readFileSync(file).equals(before)).toBe(true);
+  await f.put(tool,'spatialOpenings',f.openings);await f.put(tool,'spatialContacts',f.contacts);const value=tool.kit.resolveOutput!({selectedSpaceSha256:tool.summary().spaceSha256,reason:'冻结完整共同格网，仍待灰模验收'});expect(value.voxelLattice).toEqual(core.voxelLattice);
+  const changed={...core,voxelLattice:{...core.voxelLattice,cellSize:.125}},previous=tool.summary().draftSha256;await f.putCore(tool,changed);expect(tool.summary().draftSha256).not.toBe(previous);expect(tool.summary().saved).toEqual({core:true,spatialOpenings:false,spatialContacts:false});
+ }finally{f.clean();}
+});
+
+test('strict checkpoint performs grid admission independently of the externally supplied layout validator',async()=>{
+ const f=fixture();try{
+  const tool=f.create({strictVoxel:true,validate:(value:any)=>value}),core={...structuredClone(f.core),voxelLattice:{version:'voxel-lattice-v1',cellSize:.25,origin:[0,0,0]}};
+  core.program.instances[0].position[0]=.000123;await expect(f.putCore(tool,core)).rejects.toThrow('VOXEL_LATTICE');expect(tool.summary().writes).toBe(0);expect(existsSync(join(f.folder,'checkpoint.json'))).toBe(false);
+ }finally{f.clean();}
+});
+
 test('legacy perspective checkpoints and explicit orthographic cameras preserve their declaration across recovery',async()=>{
  const f=fixture();try{
   let tool=f.create();await f.putCore(tool);expect(tool.summary().data.core.cameras).toEqual(f.core.cameras);

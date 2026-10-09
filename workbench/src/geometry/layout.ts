@@ -1,3 +1,5 @@
+import {validateVoxelSpace,type VoxelLattice} from '../voxel/scene-lattice';
+import {validateVoxelTemplate,validateVoxelMaterials} from '../voxel/geometry-lattice';
 import {validateSurfaceDetail} from './surface-detail';
 import {validateContactBounds,inspectContacts,CONTACTS_PROMPT} from './contacts';
 import {assertAssetOpenings,validateOpeningBounds,OPENINGS_PROMPT} from './openings';
@@ -16,14 +18,14 @@ export type AssetGeometry={version:'asset-geometry-v1';template:GeometryProgram[
 const str={type:'string'};
 const obj=(properties:any)=>({type:'object',properties,required:Object.keys(properties),additionalProperties:false});
 export function layoutSchema(ids?:string[]){const s=sceneSchema(ids);s.properties.version.enum=['scene-layout-v1'];s.properties.program.properties.templates.items=obj({id:str,label:str,description:str,origin:str,bounds:obj({min:coordinateVectorSchema(),max:coordinateVectorSchema()}),materialIds:{type:'array',items:str},maxParts:{type:'integer',minimum:1,maximum:ASSET_STEP_LIMITS.parts}});return s;}
-export function assetSchema(voxel=false){return obj({version:{type:'string',enum:['asset-geometry-v1']},template:geometryProgramSchema(undefined,{voxel}).properties.templates.items});}
+export function assetSchema(voxel=false,voxelLattice?:VoxelLattice){return obj({version:{type:'string',enum:['asset-geometry-v1']},template:geometryProgramSchema(undefined,{voxel,voxelLattice}).properties.templates.items});}
 const assert=(v:any,message:string)=>{if(!v)throw Error(message);};
 const id=(v:any)=>typeof v==='string'&&/^[a-zA-Z][a-zA-Z0-9_-]{0,55}$/.test(v);
 export const LAYOUT_COORDINATE_RULES=`空间坐标契约：模板 bounds.min/max、实例 position、相机 position/target 的每一轴必须在 ${-RANGE.max}..${RANGE.max} 米内；bounds 每轴 max-min 必须严格大于 ${RANGE.positiveMin} 米。实例 rotation 每轴在 -2π..2π 弧度内，scale 每轴在 ${RANGE.positiveMin}..${RANGE.max} 内。为当前图片选择一致的合理尺度和局部原点；不得超范围后把单个坐标改为0或钳制，这会破坏空间关系。需要调整时须共同核对尺寸、位置、机位和连接点。`;
 
 export function validateLayout(layout:SceneLayout,plan:any,referenceCount:number,level:Complexity){
- assert(layout?.version==='scene-layout-v1','共享布局版本无效');validateLayoutStructure(layout,plan,referenceCount,level);
- const materials=layout.program.materials;
+ assert(layout?.version==='scene-layout-v1','共享布局版本无效');validateLayoutStructure(layout,plan,referenceCount,level);validateVoxelSpace(layout);
+ const materials=layout.program.materials;if(layout.voxelLattice)validateVoxelMaterials(materials);
  assert(Array.isArray(materials)&&materials.length>0&&materials.length<=COMPLEXITIES[level].maxMaterials&&materials.every(m=>id(m.id))&&new Set(materials.map(m=>m.id)).size===materials.length,'材质数量或身份无效');
  for(const m of materials)assert(Array.isArray(m.color)&&m.color.length===4&&m.color.every(n=>Number.isFinite(n)&&n>=0&&n<=1)&&Number.isFinite(m.roughness)&&m.roughness>=0&&m.roughness<=1&&Number.isFinite(m.metallic)&&m.metallic>=0&&m.metallic<=1&&(m.textureId===null||id(m.textureId)),'布局材质无效');
  for(const m of materials){validateSurfaceDetail(m.surfaceDetail);validateMaterialEmission(m.emission);}
@@ -69,7 +71,7 @@ export function validateAssetParts(value:AssetGeometry,brief:AssetBrief,layout:S
  assert(Array.isArray(value.template.parts)&&value.template.parts.length<=assetPartCapacity(layout,brief).maxParts,'资产部件超出已冻结预算');
  assert(value.template.parts.every(p=>brief.materialIds.includes(p.material)),'资产使用了未分配的材质');
  const program:GeometryProgram={version:'geometry-v1',name:brief.label,materials:layout.program.materials.filter(m=>brief.materialIds.includes(m.id)),templates:[value.template],instances:[{id:'check',label:brief.label,template:brief.id,position:[0,0,0],rotation:[0,0,0],scale:[1,1,1],requirementIds:[]}]};
- validateGeometryProgram(program);const {bounds,triangles}=compileGeometryProgram(program,textures);
+ validateGeometryProgram(program);if(layout.voxelLattice)validateVoxelTemplate(value.template,layout.voxelLattice);const {bounds,triangles}=compileGeometryProgram(program,textures);
  for(let axis=0;axis<3;axis++){const span=brief.bounds.max[axis]-brief.bounds.min[axis],tolerance=Math.max(.01,span*.05);assert(bounds.min[axis]>=brief.bounds.min[axis]-tolerance&&bounds.max[axis]<=brief.bounds.max[axis]+tolerance,'资产几何超出共享布局边界：'+brief.id);}
  return {value,bounds,triangles};
 }

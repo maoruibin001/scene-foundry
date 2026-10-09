@@ -49,7 +49,9 @@ export function spaceDraftScene(snapshot:any,ctx:any){
  const partial={...body.core,version:'scene-space-plan-v2',spatialOpenings:body.spatialOpenings??[],spatialContacts:body.spatialContacts??[]};
  const space=bindObservedSpace(validateSpace(completeObservedSpacePlan(partial,ctx.observation),ctx.plan,ctx.images.length,ctx.job.complexity),ctx.observation);
  const pose={position:[0,0,0],rotation:[0,0,0],scale:[1,1,1]};
- const scene=validateScene({...space,version:'scene-v1',spatialOpenings:body.spatialOpenings??undefined,spatialContacts:body.spatialContacts??undefined,
+ const {voxelLattice:diagnosticLattice,...rangeSpace}=space;
+ // Range cages are explicitly unscored diagnostic geometry, not voxel construction.
+ const scene=validateScene({...rangeSpace,version:'scene-v1',spatialOpenings:body.spatialOpenings??undefined,spatialContacts:body.spatialContacts??undefined,
   textures:[],textureReuse:[],assumptions:[...space.assumptions,SPACE_DRAFT_LIMITATION],
   program:{...space.program,name:space.program.name+' · 布局范围草稿',materials:[{id:'blockout',color:[.6,.6,.6,1],roughness:1,metallic:0,textureId:null}],
    templates:space.program.templates.map((t:any)=>({id:t.id,parts:[{...pose,id:'range',material:'blockout',shape:rangeCage(t.bounds)}]}))},

@@ -1,3 +1,4 @@
+import type {VoxelLattice} from '../voxel/scene-lattice';
 import {geometryProgramSchema} from './program-schema';
 import {validateAsset} from './layout';
 import {stable} from '../validated-cache';
@@ -9,7 +10,7 @@ export const GRAYBOX_PART_EDITS=24;
 const fields=['templateId','partId','position','rotation','scale'];
 const fail=(ok:any,message:string)=>{if(!ok)throw Error('灰模部件修正：'+message);};
 const vector=(v:any)=>Array.isArray(v)&&v.length===3&&v.every(Number.isFinite);
-export function grayboxPartEditSchema(options:{voxel?:boolean}={}){
+export function grayboxPartEditSchema(options:{voxel?:boolean;voxelLattice?:VoxelLattice}={}){
  const p=geometryProgramSchema(undefined,options).properties.templates.items.properties.parts.items.properties;
  const shape=compactBlockoutSchema(options).properties.templates.items.properties.parts.items.properties.shape;
  return {type:'array',maxItems:GRAYBOX_PART_EDITS,items:{type:'object',properties:{templateId:p.id,partId:p.id,position:p.position,rotation:p.rotation,scale:p.scale,shape:{anyOf:[...shape.anyOf,{type:'null'}]}},required:fields,additionalProperties:false}};

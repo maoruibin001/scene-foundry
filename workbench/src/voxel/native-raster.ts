@@ -1,3 +1,4 @@
+import {validateVoxelLattice,type VoxelLattice} from './scene-lattice';
 import {createHash} from 'node:crypto';
 import {transformPoint,type GeometryProgram,type Part,type Pose} from '../geometry/program';
 import {evaluateVoxelVolume,type VoxelVolume,type VoxelVolumeEvaluation} from '../geometry/voxel-volume';
@@ -14,7 +15,7 @@ const world=(point:V,part:Part,instance:Pose)=>transformPoint(transformPoint(poi
 const sub=(a:V,b:V)=>a.map((n,k)=>n-b[k]) as V;
 
 /** Choose a feasible common lattice with a bounded divisor search, never a decimal GCD or silent coarsening. */
-export function prepareNativeRaster(program:GeometryProgram,compiled:Compiled){
+export function prepareNativeRaster(program:GeometryProgram,compiled:Compiled,lattice?:VoxelLattice){
  const volumes:NativeRasterVolume[]=[],fallbacks:any[]=[];
  for(const instance of program.instances){
   const template=program.templates.find(t=>t.id===instance.template)!;
@@ -43,9 +44,9 @@ export function prepareNativeRaster(program:GeometryProgram,compiled:Compiled){
  }
  let unit:number|null=null,origin:V|null=null,size:V|null=null;
  if(volumes.length){
-  const minimum=Math.min(...volumes.flatMap(v=>v.spacing)),anchor=volumes[0].worldOrigin;
-  for(let divisor=1;divisor<=192;divisor++){
-   const candidate=minimum/divisor;if(candidate<.001)break;if(candidate>1)continue;
+  const minimum=Math.min(...volumes.flatMap(v=>v.spacing)),anchor=lattice?.origin??volumes[0].worldOrigin;
+  for(let divisor=1;divisor<=(lattice?1:192);divisor++){
+   const candidate=lattice?.cellSize??minimum/divisor;if(candidate<.001)break;if(candidate>1)continue;
    if(volumes.some(v=>v.spacing.some(n=>!nearInteger(n/candidate))||v.worldOrigin.some((n,k)=>!nearInteger((n-anchor[k])/candidate))))continue;
    if(volumes.some(v=>Array.from({length:8},(_,corner)=>v.worldOrigin.map((n,k)=>n+v.basis.reduce((sum,b,axis)=>sum+((corner&(1<<axis))?b[k]*v.shape.dimensions[axis]:0),0))).some(point=>point.some((n,k)=>!nearInteger((n-anchor[k])/candidate)))))continue;
    const lower=compiled.bounds.min.map((n,k)=>anchor[k]+(Math.floor((n-anchor[k])/candidate+tolerance)-1)*candidate) as V;
@@ -55,12 +56,13 @@ export function prepareNativeRaster(program:GeometryProgram,compiled:Compiled){
   }
   if(unit===null){for(const volume of volumes)fallbacks.push({meshId:volume.meshId,instanceId:volume.instanceId,partId:volume.partId,shapeSha256:sha(volume.shape),reason:'no meaningful common native lattice fits fixed 192-axis/2M-grid limits within 192 divisor candidates',occupancyPreservation:'resampled-unverified'});volumes.length=0;}
  }
+ if(lattice){validateVoxelLattice(lattice);fail(!fallbacks.length&&volumes.length===compiled.meshes.length&&unit===lattice.cellSize,'strict scene requires all meshes on the frozen lattice; no resampling fallback');}
  const evaluations=new Map<VoxelVolume,VoxelVolumeEvaluation>(),meshes=new Map<string,NativeRasterVolume>();
  for(const volume of volumes){let evaluation=evaluations.get(volume.shape);if(!evaluation){evaluation=evaluateVoxelVolume(volume.shape);evaluations.set(volume.shape,evaluation);}volume.evaluation=evaluation;meshes.set(volume.meshId,volume);}
  const total=volumes.length+fallbacks.length;
  return {unit,origin,size,meshes,provenance:{version:'native-voxel-raster-v1',mode:volumes.length?(fallbacks.length?'mixed-exact-and-resampled':'exact-native-lattice'):total?'resampled-native-fallback':'not-applicable',
   nativeMeshes:total,exactMeshes:volumes.map(v=>({meshId:v.meshId,instanceId:v.instanceId,partId:v.partId,shapeSha256:sha(v.shape),worldOrigin:v.worldOrigin,axisSpacing:v.spacing,sourceOccupiedCells:v.evaluation!.occupiedCells,orderedOperations:true,colorSource:'actual compiled opaque baseColor'})),fallbackMeshes:fallbacks,
-  globalLattice:unit===null?null:{cellSize:unit,origin,size,selection:'largest feasible divisor of transformed native spacing, at most 192 candidates; no precision coarsening'},
+  globalLattice:unit===null?null:{cellSize:unit,origin,size,selection:lattice?'frozen scene lattice; no divisor search or precision coarsening':'largest feasible divisor of transformed native spacing, at most 192 candidates; no precision coarsening'},
   limitations:'原生对齐体积直接映射有序占用格，不经三角边界膨胀；原生以外几何及显式回退体积仍使用表面采样。存在准确原生格时，普通三角仅接触格边界不会填入邻格，封闭体内部仍按绕数填充；共同场景其他实际相交几何可占据原生空隙。回退不证明挖空仍然保留。完整场景仍须独立原图验收。'}};
 }
 

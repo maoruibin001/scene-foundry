@@ -80,7 +80,7 @@ export function createAssetConstruction(options:{
    ' 最终只输出 selectedAssetSha256 和中文 reason，说明依据与残留，不输出整份几何。超时重试会收到已保存状态，检查点只在相同任务、资产与冻结输入内恢复，不自动增加模型调用、修正或预览额度。',
   outputSchema:obj({selectedAssetSha256:sha,reason:str}),
   definitions:[
-   {name:'save_asset_parts',description:'校验并原子保存当前资产的有限部件草稿。没有完整性或质量通过含义。',inputSchema:obj({expectedDraftSha256:sha,partsJson:{type:'string',description:'JSON 数组，每项为完整部件，最多 '+CHUNK_PARTS+' 项；部件契约：'+JSON.stringify(assetSchema(options.voxel).properties.template.properties.parts.items)},removePartIds:ids}),annotations},
+   {name:'save_asset_parts',description:'校验并原子保存当前资产的有限部件草稿。没有完整性或质量通过含义。',inputSchema:obj({expectedDraftSha256:sha,partsJson:{type:'string',description:'JSON 数组，每项为完整部件，最多 '+CHUNK_PARTS+' 项；部件契约：'+JSON.stringify(assetSchema(options.voxel,options.layout.voxelLattice).properties.template.properties.parts.items)},removePartIds:ids}),annotations},
    {name:'inspect_asset_parts',description:'读取本资产草稿摘要；partIds 为空返回清单，非空返回这些部件的完整数据。',inputSchema:obj({partIds:ids}),annotations:{...annotations,readOnlyHint:true}},
    {name:'check_asset',description:'检查当前草稿的全部资产结构和分配预算；不渲染、不评分、不声称完成。',inputSchema:obj({expectedDraftSha256:sha}),annotations:{...annotations,readOnlyHint:true}},
    ...(review?[{name:'preview_saved_asset',description:'按摘要预览已保存的资产；先做完整结构与预算校验，再沿正常 Engine 预览路径取图。',inputSchema:obj({expectedDraftSha256:sha}),annotations}]:[]),

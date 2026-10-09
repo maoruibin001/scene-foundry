@@ -3,7 +3,7 @@ import {COMPLEXITY_MODEL_DEFAULTS} from './model-selection';
 import {existsSync,mkdirSync,readdirSync,readFileSync,writeFileSync,renameSync,rmSync} from 'node:fs';
 import {join,dirname,resolve} from 'node:path';
 import {ROOT,DATA,read,digest} from './store';
-import {DEFAULT_POLICY,creationPolicy,batchGate,automaticGeneration} from './quality';
+import {DEFAULT_POLICY,EVIDENCE_POLICY,creationPolicy,batchGate,automaticGeneration,type QualityPolicy} from './quality';
 import {MODEL,JUDGE_MODEL,PROVIDER,budget} from './provider';
 
 const TERMINAL=['passed','failed','blocked','cancelled','needs_review'];
@@ -26,13 +26,31 @@ export function pairedResults(left:any[],right:any[]){
  const l=first(left),r=first(right);
  return [...l].filter(([k])=>r.has(k)).map(([key,a])=>{const b=r.get(key),sameSettings=modelKey(a)===modelKey(b)&&stableJson(a.policy??a.profile.policy)===stableJson(b.policy??b.profile.policy)&&(a.matchingLevel??'detailed')===(b.matchingLevel??'detailed')&&!!a.partialOutput===!!b.partialOutput&&a.profile.specSha256===b.profile.specSha256&&(a.profile.assessmentProtocolSha256??null)===(b.profile.assessmentProtocolSha256??null),comparable=sameSettings&&assessmentVersionOf(a)===versionOf(a)&&assessmentVersionOf(b)===versionOf(b);return {key,left:a.id,right:b.id,sameSettings,comparable,scoreDelta:comparable&&Number.isFinite(a.quality?.score)&&Number.isFinite(b.quality?.score)?Math.round((b.quality.score-a.quality.score)*10)/10:null};});
 }
-export function releaseReadiness(version:any,batches:any[],jobs:any[],profileId?:string){
- const candidates=batches.filter(b=>!b.stageValidation&&b.purpose!=='stage-80'&&(b.pipelineVersion?.id??b.profile.pipelineVersionId)===version.id&&(!profileId||b.profile.id===profileId)&&stableJson(b.policy)===stableJson(DEFAULT_POLICY));
+/** Named certification policies preserve all statistical and scoring thresholds. */
+export function releasePolicyOf(policy:any){
+ const supported=[
+  {name:'scene-quality-v4.1/strict',policy:DEFAULT_POLICY},
+  {name:'scene-quality-v4.1/strict',policy:{...DEFAULT_POLICY,deliveryStandard:'strict'}},
+  {name:'scene-quality-v7/strict',policy:EVIDENCE_POLICY},
+  {name:'scene-quality-v7/strict',policy:{...EVIDENCE_POLICY,deliveryStandard:'strict'}},
+  {name:'scene-quality-v7/basic70',policy:{...EVIDENCE_POLICY,deliveryStandard:'basic70'}},
+ ];
+ const selected=supported.find(p=>stableJson(p.policy)===stableJson(policy));
+ if(!selected)throw Error('未支持的固定认证策略；不能修改阈值、权重或混用评分版本');
+ return {name:selected.name,policy:structuredClone(selected.policy) as QualityPolicy,scope:selected.name.endsWith('/basic70')?'完整场景70分基础交付认证，不等于80分完整规范认证':'80分完整规范认证'};
+}
+export function releaseReadiness(version:any,batches:any[],jobs:any[],profileId?:string,targetPolicy?:QualityPolicy){
+ let certification:ReturnType<typeof releasePolicyOf>;
+ try{certification=releasePolicyOf(targetPolicy??DEFAULT_POLICY);}catch(error){return {ready:false,profileId:null,batchIds:[],missing:['simple','medium','complex'],reasons:[String(error)],policy:targetPolicy??DEFAULT_POLICY,policyName:null,certificationScope:null};}
+ const policy=certification.policy;
+ if(targetPolicy!==undefined&&stableJson(version.configuration?.policy)!==stableJson(policy))return {ready:false,profileId:null,batchIds:[],missing:['simple','medium','complex'],reasons:['目标认证策略须与版本中已冻结的配置完全一致'],policy,policyName:certification.name,certificationScope:certification.scope};
+ const eligibleJobs=targetPolicy===undefined?jobs:jobs.filter(j=>stableJson(j.policy??j.profile?.policy)===stableJson(policy)&&versionOf(j)===version.id&&assessmentVersionOf(j)===version.id);
+ const candidates=batches.filter(b=>!b.stageValidation&&b.purpose!=='stage-80'&&(b.pipelineVersion?.id??b.profile.pipelineVersionId)===version.id&&(!profileId||b.profile.id===profileId)&&stableJson(b.policy)===stableJson(policy));
  const configurations=[...new Set(candidates.map(b=>b.profile.id))];
- const options=configurations.map(id=>{const found=['simple','medium','complex'].map(level=>candidates.filter(b=>b.profile.id===id&&b.complexity===level).map(b=>({batch:b,result:batchGate(b,jobs,DEFAULT_POLICY)})).find(x=>x.result.status==='usable'));return {profileId:id,ready:found.every(Boolean),batchIds:found.filter(Boolean).map(x=>x!.batch.id),missing:['simple','medium','complex'].filter((_,i)=>!found[i])};});
+ const options=configurations.map(id=>{const found=['simple','medium','complex'].map(level=>candidates.filter(b=>b.profile.id===id&&b.complexity===level).map(b=>({batch:b,result:batchGate(b,eligibleJobs,policy)})).find(x=>x.result.status==='usable'));return {profileId:id,ready:found.every(Boolean),batchIds:found.filter(Boolean).map(x=>x!.batch.id),missing:['simple','medium','complex'].filter((_,i)=>!found[i])};});
  const best=options.find(x=>x.ready)??options.sort((a,b)=>b.batchIds.length-a.batchIds.length)[0];
  const reasons=[...(version.kind==='legacy'?['历史记录没有可核验的源码快照']:[]),...(!best?.ready?['同一模型配置下，简单、中等、复杂三档均需完成独立标定和固定评测']:[])];
- return {ready:reasons.length===0,profileId:best?.profileId??null,batchIds:best?.batchIds??[],missing:best?.missing??['simple','medium','complex'],reasons,policy:DEFAULT_POLICY};
+ return {ready:reasons.length===0,profileId:best?.profileId??null,batchIds:best?.batchIds??[],missing:best?.missing??['simple','medium','complex'],reasons,policy,policyName:certification.name,certificationScope:certification.scope};
 }
 
 export class VersionStore{
@@ -48,8 +66,8 @@ export class VersionStore{
  }
  importLegacy(jobs:any[]){for(const j of [...jobs].sort((a,b)=>a.createdAt.localeCompare(b.createdAt))){if(j.pipelineVersion||j.profile.pipelineVersionId)continue;const id=versionOf(j),path=this.path(id);if(existsSync(join(path,'manifest.json')))continue;mkdirSync(path,{recursive:true});writeFileSync(join(path,'manifest.json'),JSON.stringify({id,kind:'legacy',candidateLabel:'历史 · '+j.profile.id.slice(0,8),createdAt:j.createdAt,parentId:null,baseStableId:null,configuration:{profile:j.profile},files:{},limitations:'仅有任务与配置记录；未在生成当时冻结源码，不能追认为 v1。'},null,2)+'\n',{flag:'wx'});}}
  verify(id:string){const v=this.get(id);if(v.kind==='legacy')throw Error('历史版本没有源码快照');const files:Record<string,string>={};for(const [p,h] of Object.entries(v.files)){const s=readFileSync(join(this.path(id),'snapshot',p),'utf8');if(digest(s)!==h)throw Error('版本快照完整性失败：'+p);files[p]=s;}if(versionId({configuration:v.configuration,files})!==id)throw Error('版本清单摘要不一致');return {verified:true,files:Object.keys(files).length};}
- publish(id:string,batches:any[],jobs:any[],profileId?:string){
-  const v=this.get(id);if(v.release)throw Error('稳定版本已经冻结，不可覆盖');this.verify(id);const gate=releaseReadiness(v,batches,jobs,profileId);if(!gate.ready)throw Error('不能发布稳定版：'+gate.reasons.join('；'));
+ publish(id:string,batches:any[],jobs:any[],profileId?:string,targetPolicy?:QualityPolicy){
+  const v=this.get(id);if(v.release)throw Error('稳定版本已经冻结，不可覆盖');this.verify(id);const gate=releaseReadiness(v,batches,jobs,profileId,targetPolicy);if(!gate.ready)throw Error('不能发布稳定版：'+gate.reasons.join('；'));
   if(this.list().some(x=>x.release?.label===v.target))throw Error('该稳定版本号已存在，请创建下一版本');
   const evidence={batches:batches.filter(b=>gate.batchIds.includes(b.id)),jobs:jobs.filter(j=>gate.batchIds.includes(j.batchId))};
   const release={label:v.target,publishedAt:new Date().toISOString(),profileId:gate.profileId,gate,evidence,evidenceDigest:digest(stableJson(evidence))};

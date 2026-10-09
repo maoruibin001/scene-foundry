@@ -70,18 +70,20 @@ function prepareScene(job:any,plan:any,dir:string,value:any,textures:any,provena
 }
 export async function runGeneralScene({job,plan,dir,signal,stage,command,preview,resetPreview,evaluate}:any){
  const images=(job.images??(job.image?[job.image]:[])).map((i:any)=>({path:join(UPLOADS,i.file),mime:i.mime}));
+ if(job.sceneKind==='voxel'&&!job.voxelConstructionVersion&&!['reuseSceneFrom','reusePlanFrom','reuseCheckpoint','reuseFrom','spatialRepairSource','executionRecoveryFrom','initialSpaceRecoverySource'].some(k=>job[k]))job.voxelConstructionVersion='voxel-lattice-v1';
  const legacyVoxel=job.sceneKind==='voxel'&&job.reuseSceneFrom&&!existsSync(join(runDir(job.reuseSceneFrom),'voxel-source-scene.json'));
- job.generationMethod=job.sceneKind==='voxel'?(legacyVoxel?'voxel-scene-v1':'voxel-geometry-v3'):'general-geometry-v3';job.stageTrackingVersion='exclusive-stages-v1';job.iteration=0;
+ job.generationMethod=job.sceneKind==='voxel'?(legacyVoxel?'voxel-scene-v1':job.voxelConstructionVersion==='voxel-lattice-v1'?'voxel-geometry-v4':'voxel-geometry-v3'):'general-geometry-v3';job.stageTrackingVersion='exclusive-stages-v1';job.iteration=0;
  assertFixedDependencies();
  const finishScene=async(value:any,textures:any,provenance:any)=>{
   if(job.sceneKind==='voxel'&&!legacyVoxel){
    await stage('voxel',async()=>{
-    const source={...bindReferenceFrames(value,images),voxelizationTarget:{version:'shared-geometry-v3',resolution:128,requirements:plan.requirements}};save(join(dir,'voxel-source-scene.json'),source);
+    if(job.voxelConstructionVersion==='voxel-lattice-v1'&&!value.voxelLattice)throw Error('VOXEL_LATTICE_REQUIRED: frozen construction metadata missing before final conversion');
+    const source={...bindReferenceFrames(value,images),voxelizationTarget:{version:value.voxelLattice?'shared-lattice-v1':'shared-geometry-v3',resolution:128,requirements:plan.requirements}};save(join(dir,'voxel-source-scene.json'),source);
     save(join(dir,'voxelization-input.json'),{source,plan,referenceCount:images.length,textures,options:{resolution:128}});
     await command(['bun',join(ROOT,'src/voxel/convert.ts'),dir],240000);
     const program=read(join(dir,'voxel-program.json')),metrics=read(join(dir,'voxel-metrics.json'));
     job.voxel={...metrics,program:'voxel-program.json',editable:'scene.vox',palette:program.palette};
-    job.voxelPipelineVersion='shared-geometry-v3';value=read(join(dir,'voxelized-scene.json'));
+    job.voxelPipelineVersion=source.voxelLattice?'shared-lattice-v1':'shared-geometry-v3';value=read(join(dir,'voxelized-scene.json'));
     for(const template of value.program.templates){const folder=join(dir,'generation','voxel-assets',template.id);mkdirSync(folder,{recursive:true});save(join(folder,'geometry.json'),{version:'asset-geometry-v1',template});}
     provenance={...provenance,voxelization:{sourceSceneSha256:program.sourceSceneSha256,report:'voxelization-report.json',colorSource:'actual validated material colors and reference texture pixels',measuredColorRecovery:true}};
     event(job,'voxel-generated',`${metrics.cells} 个真实占用格；保留${metrics.entities}个实体，体素画面仍须独立原图验收`);saveJob(job);

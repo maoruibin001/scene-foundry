@@ -4,6 +4,7 @@ import {digest,read,save} from '../store';
 import {stable} from '../validated-cache';
 import type {CodexToolKit} from '../codex-tools';
 import {SPACE_PROMPT,spacePlanningSchema} from './layout-stages';
+import {validateVoxelSpace} from '../voxel/scene-lattice';
 
 export const SPACE_CONSTRUCTION='space-checkpoint-v1';
 const MAX_WRITES=12,MAX_SECTION_CHARS=262144;
@@ -18,8 +19,8 @@ function signed<T extends object>(value:T){return {...value,checksum:digest(stab
 function assertChecksum(value:any){const {checksum,...body}=value;check(hash(checksum)&&checksum===digest(stable(body)),'记录摘要已改变');}
 function planOf(state:Sections){return {...state.core,version:'scene-space-plan-v2',spatialOpenings:state.spatialOpenings??[],spatialContacts:state.spatialContacts??[]};}
 function complete(state:Sections){return state.core!==null&&state.spatialOpenings!==null&&state.spatialContacts!==null;}
-export function spaceCoreSchema(ids?:string[]){
- const schema=spacePlanningSchema(ids);schema.properties.version.enum=['scene-space-core-v1'];
+export function spaceCoreSchema(ids?:string[],options:{strictVoxel?:boolean}={}){
+ const schema=spacePlanningSchema(ids,options);schema.properties.version.enum=['scene-space-core-v1'];
  // Old perspective-only checkpoints keep their original camera declaration.
  const camera=schema.properties.cameras.items;camera.required=camera.required.filter((k:string)=>!['projection','orthographicHeight'].includes(k));
  for(const key of ['spatialOpenings','spatialContacts']){delete schema.properties[key];schema.required=schema.required.filter((k:string)=>k!==key);}
@@ -42,10 +43,10 @@ export function spaceConstructionPrompt(instructions:string){
 }
 
 /** Same-job construction only. Partial declarations never enter the accepted layout path. */
-export function createSpaceConstruction(options:{folder:string;jobId:string;rootJobId:string;inputKey:string;requirementIds:string[];signal:AbortSignal;validate:(value:any)=>any}){
+export function createSpaceConstruction(options:{folder:string;jobId:string;rootJobId:string;inputKey:string;requirementIds:string[];signal:AbortSignal;strictVoxel?:boolean;validate:(value:any)=>any}){
  const {folder,jobId,rootJobId,inputKey,signal,validate}=options;
  check(!!jobId&&!!rootJobId&&hash(inputKey),'缺少任务身份或冻结输入摘要');
- const file=join(folder,'checkpoint.json'),history=join(folder,'revisions'),coreSchema=spaceCoreSchema(options.requirementIds),properties=spacePlanningSchema(options.requirementIds).properties;
+ const file=join(folder,'checkpoint.json'),history=join(folder,'revisions'),coreSchema=spaceCoreSchema(options.requirementIds,options),properties=spacePlanningSchema(options.requirementIds,options).properties;
  mkdirSync(history,{recursive:true});
  const initial=signed({version:SPACE_CONSTRUCTION,jobId,rootJobId,inputKey,writes:0,core:null,spatialOpenings:null,spatialContacts:null});
  let state:State=existsSync(file)?read(file):initial,persisted=existsSync(file);
@@ -56,7 +57,7 @@ export function createSpaceConstruction(options:{folder:string;jobId:string;root
   assertShape(row.core,coreSchema);
   for(const key of ['spatialOpenings','spatialContacts'] as const)if(row[key]!==null)assertShape(row[key],properties[key],key);
   // Empty arrays are temporary validation scaffolding only. Null is kept on disk until explicitly declared.
-  const value=planOf(row),before=stable(value),checked=validate(value);
+  const value=planOf(row),before=stable(value);validateVoxelSpace(value,{required:options.strictVoxel});const checked=validate(value);
   check(stable(value)===before,'校验不得改写原始规划');
   check(stable({...checked,version:'scene-space-plan-v2',spatialRelations:undefined})===stable(value),'完成关系推导不得更改布局、机位或构造约束');
  };

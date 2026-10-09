@@ -1,3 +1,5 @@
+import {voxelGeometryGuidance} from '../voxel/construction-guidance';
+import {QUARTER_TURNS,type VoxelLattice} from '../voxel/scene-lattice';
 import {VOXEL_GEOMETRY_GUIDANCE} from '../voxel/construction-guidance';
 import {CROWN_RULES} from './branch-crown';
 import {compactBlockoutSchema,COMPACT_BLOCKOUT_RULES} from './blockout-contract';
@@ -25,8 +27,8 @@ const object=(properties:any)=>({type:'object',properties,required:Object.keys(p
 const subset=(properties:any,keys:string[])=>Object.fromEntries(keys.map(k=>[k,properties[k]]));
 const list=(items:any,maxItems:number)=>({type:'array',items,maxItems});
 /** Derive coordinates and brief fields from the full space contract; identities remain frozen. */
-export function grayboxSpaceRepairSchema(options:{voxel?:boolean}={}){
- const full=spaceSchema().properties,p=full.program.properties;
+export function grayboxSpaceRepairSchema(options:{voxel?:boolean;voxelLattice?:VoxelLattice}={}){
+ const full=structuredClone(spaceSchema()).properties,p=full.program.properties;if(options.voxelLattice){p.instances.items.properties.rotation.items={type:"number",enum:QUARTER_TURNS};p.instances.items.properties.scale.items={type:"number",enum:[1]};}
  return object({version:{type:'string',enum:[GRAYBOX_SPACE_REPAIR]},reason:{type:'string',minLength:20,maxLength:1800},
   instances:list(object(subset(p.instances.items.properties,['id','position','rotation','scale'])),12),
   templates:{...list(object(subset(p.templates.items.properties,['id','description','origin','bounds'])),0)},
@@ -108,16 +110,16 @@ export async function repairGrayboxSpace(space:any,ctx:any,sourceFolder:string,f
    checkpoint={sourceJobId:sourceJob.id,sourceFolder:previous,sourceAuditSha256:digest(readFileSync(audit)),originalModelCompleted:false,modelCalls:0,quality:'not-assessed'};
   }
  }
- const preview=createGrayboxSpacePreview({space,sourceScene:canonical,observation:ctx.observation,images:ctx.images,folder:join(folder,'preview'),signal:ctx.signal,voxel:ctx.job.sceneKind==='voxel',schema:grayboxSpaceRepairSchema({voxel:ctx.job.sceneKind==='voxel'}),
+ const preview=createGrayboxSpacePreview({space,sourceScene:canonical,observation:ctx.observation,images:ctx.images,folder:join(folder,'preview'),signal:ctx.signal,voxel:ctx.job.sceneKind==='voxel',schema:grayboxSpaceRepairSchema({voxel:ctx.job.sceneKind==='voxel',voxelLattice:space.voxelLattice}),
   apply:patch=>applyGrayboxSpaceRepair(space,patch,validate),
   buildScene});
  const saved=checkpoint?preview.onlyReviewedCheckpoint():null;
  if(checkpoint&&!saved)throw Error('GRAYBOX_CHECKPOINT_REJECTED：需要唯一已核验的实拍候选；多个或未完成候选不能自动选择');
  if(saved){save(join(folder,'timeout-checkpoint-recovery.json'),{...checkpoint,preview:saved.preview,scope:saved.scope});event(ctx.job,'graybox-checkpoint-reused','模型最终选择超时；唯一合法实拍候选已核验，复用检查点继续独立空间评分，不重新制作或标记模型完成');}
- const result=saved?{value:saved.patch,receipt:{kind:'verified-graybox-timeout-checkpoint',...checkpoint}}:await callValidated({role:'scene-space',modelSettings:ctx.job.modelSettings,signal:ctx.signal,maxTokens:6500,schemaContext:{grayboxRepair:true,voxel:ctx.job.sceneKind==='voxel'},
+ const result=saved?{value:saved.patch,receipt:{kind:'verified-graybox-timeout-checkpoint',...checkpoint}}:await callValidated({role:'scene-space',modelSettings:ctx.job.modelSettings,signal:ctx.signal,maxTokens:6500,schemaContext:{grayboxRepair:true,voxel:ctx.job.sceneKind==='voxel',voxelLattice:space.voxelLattice},
   tools:preview.kit,
   images:[...ctx.images,...frameNames.map(f=>({path:join(sourceFolder,'runtime',f),mime:'image/png'})),...rejected.images,...evidence.images],
-  system:GRAYBOX_REPAIR_PROMPT+(ctx.job.sceneKind==='voxel'?'\n'+VOXEL_GEOMETRY_GUIDANCE:'')+'\n'+COMPACT_BLOCKOUT_RULES+'\n'+VISIBILITY_PROMPT+'\n'+preview.kit.instructions+'\n若输入有rejectedCandidates，额外图片在来源Engine画面之后、编号图之前，按rejectedEngineFrames排列。它们是已独立失败的改动和实拍，不是来源或新参考目标；比较其具体退步与当前较好来源，避免重复那些几何。只在当前来源上修正，不能累积失败候选或采信它的成功宣称。完全相同的失败几何和机位将在测量/渲染前拒绝。',
+  system:GRAYBOX_REPAIR_PROMPT+(ctx.job.sceneKind==='voxel'?'\n'+voxelGeometryGuidance(space.voxelLattice):'')+'\n'+COMPACT_BLOCKOUT_RULES+'\n'+VISIBILITY_PROMPT+'\n'+preview.kit.instructions+'\n若输入有rejectedCandidates，额外图片在来源Engine画面之后、编号图之前，按rejectedEngineFrames排列。它们是已独立失败的改动和实拍，不是来源或新参考目标；比较其具体退步与当前较好来源，避免重复那些几何。只在当前来源上修正，不能累积失败候选或采信它的成功宣称。完全相同的失败几何和机位将在测量/渲染前拒绝。',
   text:JSON.stringify({input:ctx.job.prompt,plan:ctx.plan,previousSpace:space,actualGraybox:source.program,observation:ctx.observation,referenceComposition:composition,feedback,rejectedCandidates:rejected.context,visibility:evidence.context,
    diagnosedStrategy:ctx.job.spatialDiagnosis?.reason??null,imageOrder:{references:ctx.images.length,engineFrames:runtime.referenceFrames,rejectedEngineFrames:rejected.attempts.flatMap(a=>a.frames.map(f=>({jobId:a.jobId,round:a.round,file:f.file,referenceIndex:f.referenceIndex,sha256:f.sha256}))),diagnosticMaps:evidence.context.diagnosticImages},
    source:{spaceSha256:digest(JSON.stringify(space)),renderSceneSha256:digest(readFileSync(join(sourceFolder,'render-scene.json'))),runtimeDigest:runtime.distManifestDigest}})},folder,patch=>{applyGrayboxSpaceRepair(space,patch,validate);preview.assertReviewed(patch);return patch;});

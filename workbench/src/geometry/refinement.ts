@@ -1,3 +1,5 @@
+import {voxelGeometryGuidance} from '../voxel/construction-guidance';
+import type {VoxelLattice} from '../voxel/scene-lattice';
 import {sourceSceneFile} from './source-scene';
 import {scoreControlEvidence} from './score-controls';
 import {restoreRepairAttempt} from './repair-attempt-recovery';
@@ -39,11 +41,11 @@ import {CAMERA_CHANGE_PROMPT} from './camera-change';
 const obj=(properties:any)=>({type:'object',properties,required:Object.keys(properties),additionalProperties:false});
 const arr=(items:any,maxItems=64)=>({type:'array',items,maxItems});
 const str={type:'string'};
-export function refinementSchema(level:keyof typeof COMPLEXITIES='simple'){
+export function refinementSchema(level:keyof typeof COMPLEXITIES='simple',voxelLattice?:VoxelLattice){
  const budget=repairBudget(level);
- const s=sceneSchema().properties,p=s.program.properties;
+ const s=sceneSchema(undefined,{voxel:!!voxelLattice,voxelLattice}).properties,p=s.program.properties;
  return obj({version:{type:'string',enum:['scene-refinement-v5']},reason:str,
-  screenTargets:arr(obj({instanceId:str,reason:str,views:{type:'array',minItems:2,maxItems:6,items:obj({referenceIndex:{type:'integer',minimum:1},rect:{type:'array',minItems:4,maxItems:4,items:{type:'number',minimum:0,maximum:1}}})}}),8),
+  screenTargets:arr(obj({instanceId:str,reason:str,views:{type:'array',minItems:2,maxItems:6,items:obj({referenceIndex:{type:'integer',minimum:1},rect:{type:'array',minItems:4,maxItems:4,items:{type:'number',minimum:0,maximum:1}}})}}),voxelLattice?0:8),
   instances:arr(p.instances.items),cameras:arr(s.cameras.items,6),materials:arr(p.materials.items,24),
   removeInstances:arr(obj({instanceId:str,reason:str}),16),
   parts:arr(obj({templateId:str,part:p.templates.items.properties.parts.items}),budget.parts),
@@ -86,6 +88,7 @@ export function applyRefinement(source:SceneInput,patch:any,plan:any,references:
  unique(surfaceUpdates,x=>x.templateId+'/'+x.partId,'表面补丁');
  for(const u of surfaceUpdates)require(!patch.parts.some(x=>x.templateId===u.templateId&&x.part.id===u.partId)&&!patch.removeParts.some(x=>x.templateId===u.templateId&&x.partId===u.partId),'同一部件不能同时表面修改与替换或删除');
  const targets=patch.version==='scene-refinement-v5'?patch.screenTargets:[];
+ require(!source.voxelLattice||!targets?.length,'VOXEL_LATTICE: strict repair uses explicit grid poses; continuous screenTargets scaling is unsupported');
  require(patch.version==='scene-refinement-v5'||patch.screenTargets===undefined,'历史修正协议不支持图像位置约束');
  require(Array.isArray(targets),'缺少图像位置约束数组');
  for(const t of targets){const i=source.program.instances.find(i=>i.id===t.instanceId);require(i&&!patch.instances.some(x=>x.id===t.instanceId)&&!removals.some(x=>x.instanceId===t.instanceId),'图像位置约束与显式位姿或删除冲突');}
@@ -187,7 +190,7 @@ export async function refineScene(job:any,plan:any,images:{path:string;mime:stri
  event(job,'refinement','将 '+repairGoals.goals.length+' 个修复目标分为 '+batches.length+' 个独立调用；仅传入选中部件，复用其余场景');
  const responses=await Promise.allSettled(batches.map(async batch=>{
   const batchFolder=join(folder,batch.id);mkdirSync(batchFolder,{recursive:true});
-  const request:any={role:'scene-refine',schemaContext:{repairComplexity:job.complexity},modelSettings:job.modelSettings,signal,maxTokens:16000,reservedCalls:1,images:inputImages,system:REFINEMENT_PROMPT+'\n本轮必须落实repairGoals所选目标，只改其中允许的已有模板、实例、材质、机位或光照；每个目标必须有对应的真实数据变化。保留未选对象。目标范围不等于已经修好，最终由独立画面验收判断。\n'+FOCUSED_REFINEMENT_PROMPT,text:JSON.stringify(repairExecutionContext({requirementFeedback,surfaceBindings:surfaceBindings(source),repairReflection:reflection,textureEvidence:textureEvidence.context,textureEvidenceRule:goalInput.textureEvidenceRule,repairBudget:editBudget,geometryBudget,originalPrompt:job.prompt,deliveryStandard:job.policy?.deliveryStandard??'strict',scoring:scoringGuidance(job.policy),previousRepairs,repairGoals:batch,repairFocus:focus,frozenPlan:plan,referenceImages:images.length,actualFrameNames:frameNames,geometryVisibility:visibility.context,cameraChangeFeedback,review,openingDiagnostics,budget:complexityPolicy(job.complexity,images.length>0&&Array.isArray((source as any).observedBindings)),sourceScene:repairSourceContext(source,anchors,batch),reusableTextures:reusableTextureEvidence.context}))};
+  const request:any={role:'scene-refine',schemaContext:{repairComplexity:job.complexity,voxelLattice:source.voxelLattice},modelSettings:job.modelSettings,signal,maxTokens:16000,reservedCalls:1,images:inputImages,system:REFINEMENT_PROMPT+(source.voxelLattice?'\n'+voxelGeometryGuidance(source.voxelLattice):'')+'\n本轮必须落实repairGoals所选目标，只改其中允许的已有模板、实例、材质、机位或光照；每个目标必须有对应的真实数据变化。保留未选对象。目标范围不等于已经修好，最终由独立画面验收判断。\n'+FOCUSED_REFINEMENT_PROMPT,text:JSON.stringify(repairExecutionContext({requirementFeedback,surfaceBindings:surfaceBindings(source),repairReflection:reflection,textureEvidence:textureEvidence.context,textureEvidenceRule:goalInput.textureEvidenceRule,repairBudget:editBudget,geometryBudget,originalPrompt:job.prompt,deliveryStandard:job.policy?.deliveryStandard??'strict',scoring:scoringGuidance(job.policy),previousRepairs,repairGoals:batch,repairFocus:focus,frozenPlan:plan,referenceImages:images.length,actualFrameNames:frameNames,geometryVisibility:visibility.context,cameraChangeFeedback,review,openingDiagnostics,budget:complexityPolicy(job.complexity,images.length>0&&Array.isArray((source as any).observedBindings)),sourceScene:repairSourceContext(source,anchors,batch),reusableTextures:reusableTextureEvidence.context}))};
   const validateBase=(v:any)=>{if(batch.goals.every(g=>['surface','lighting'].includes(g.kind))&&(v.parts.length||v.removeParts.length||v.addTemplates.length||v.instances.length||v.screenTargets?.length||v.removeInstances.length||v.cameras.length))throw Error('表面修复只允许surfaceUpdates、材质、纹理和光照，不得重写几何或机位');const next=applyRefinement(source,v,plan,images.length,job.complexity);resolveTextureReuse(next,refs);assertPlannedRepair(source,next,batch);if(focus)assertRefinementFocus(source,next,focus);
    // 新裁切片段在后续提取步骤检查像素；此处只编译几何，避免用伪造纹理预填充。
    const compiled=compileGeometryProgram({...next.program,materials:next.program.materials.map(m=>({...m,textureId:null,surfaceDetail:null}))});assertCameraPreflight(next,compiled);return v;};

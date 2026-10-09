@@ -1,3 +1,4 @@
+import type {VoxelLattice} from '../voxel/scene-lattice';
 import {validateCrown,CROWN_RULES} from './branch-crown';
 import {geometryProgramSchema} from './program-schema';
 import {shapeTriangles} from './program';
@@ -5,10 +6,10 @@ import {shapeTriangles} from './program';
 export const BLOCKOUT_PART_LIMIT=8;
 export const BLOCKOUT_GRID_AXIS=9;
 /** Local geometry depends on its brief and openings, not on world placement or camera. */
-export function blockoutTemplateInput(space:any,brief:any){const ids=new Set(space.program.instances.filter(i=>i.template===brief.id).map(i=>i.id));return {contract:'local-graybox-v1',brief:{...brief,maxParts:Math.min(32,brief.maxParts),materialIds:['blockout']},spatialOpenings:(space.spatialOpenings??[]).filter(o=>ids.has(o.instanceId))};}
+export function blockoutTemplateInput(space:any,brief:any){const ids=new Set(space.program.instances.filter(i=>i.template===brief.id).map(i=>i.id));return {contract:'local-graybox-v1',...(space.voxelLattice?{voxelLattice:space.voxelLattice}:{}),brief:{...brief,maxParts:Math.min(32,brief.maxParts),materialIds:['blockout']},spatialOpenings:(space.spatialOpenings??[]).filter(o=>ids.has(o.instanceId))};}
 const types=new Set(['box','tube','lathe','extrusion','cushion','branchCrown','grid','voxelVolume']);
 /** Wire contract for composition only. Finished assets keep the full geometry contract. */
-export function compactBlockoutSchema(options:{voxel?:boolean}={}){
+export function compactBlockoutSchema(options:{voxel?:boolean;voxelLattice?:VoxelLattice}={}){
  const schema:any=structuredClone(geometryProgramSchema(undefined,options).properties.templates),part=schema.items.properties.parts.items;
  schema.items.properties.parts.minItems=1;schema.items.properties.parts.maxItems=BLOCKOUT_PART_LIMIT;
  for(const k of ['material','uvProjection','uvTransform','smoothAngle','uvScale'])delete part.properties[k];

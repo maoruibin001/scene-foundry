@@ -1,3 +1,4 @@
+import {voxelGeometryGuidance} from '../voxel/construction-guidance';
 import {VOXEL_GEOMETRY_GUIDANCE} from '../voxel/construction-guidance';
 import {spatialInstances} from './spatial-order';
 import {mkdirSync,existsSync} from 'node:fs';
@@ -42,7 +43,7 @@ export async function generateBlockoutTemplates(space:any,ctx:any,folder:string,
  const persist=()=>{save(join(folder,'template-progress.json'),progress);job.blockout.templateProgress=structuredClone(progress);saveJob(job);};persist();
  const results=await assetWorkers(space.program.templates,limit,signal,async(brief:any,index,childSignal)=>{
   const dir=join(folder,'templates',brief.id);mkdirSync(dir,{recursive:true});const step=progress.steps[index];step.status='running';step.startedAt=Date.now();progress.active++;progress.peak=Math.max(progress.peak,progress.active);persist();
-  try{const result=await request({role:'scene-blockout',schemaContext:{voxel:job.sceneKind==='voxel'},modelSettings:roleSettings(job.modelSettings,'scene-blockout',job.optimizationPolicy),signal:childSignal,maxTokens:6000,images,system:BLOCKOUT_TEMPLATE_PROMPT+(job.sceneKind==='voxel'?'\n'+VOXEL_GEOMETRY_GUIDANCE:''),text:JSON.stringify(blockoutGenerationInput(space,brief))},dir,v=>validateBlockoutTemplate(assertBlockoutGeneration(v),space,brief));
+  try{const result=await request({role:'scene-blockout',schemaContext:{voxel:job.sceneKind==='voxel',voxelLattice:space.voxelLattice},modelSettings:roleSettings(job.modelSettings,'scene-blockout',job.optimizationPolicy),signal:childSignal,maxTokens:6000,images,system:BLOCKOUT_TEMPLATE_PROMPT+(job.sceneKind==='voxel'?'\n'+voxelGeometryGuidance(space.voxelLattice):''),text:JSON.stringify(blockoutGenerationInput(space,brief))},dir,v=>validateBlockoutTemplate(assertBlockoutGeneration(v),space,brief));
    save(join(dir,'geometry.json'),result.value);step.status=result.reuse?'reused':'passed';step.reusedFrom=result.reuse??null;step.modelSettings=result.receipt?.modelSettings??roleSettings(job.modelSettings,'scene-blockout',job.optimizationPolicy);progress.completed++;if(result.reuse)progress.reused++;return result.value.templates[0];
   }catch(error){step.status=childSignal.aborted?'cancelled':'failed';step.error=String(error);throw error;}finally{step.endedAt=Date.now();step.durationMs=step.endedAt-step.startedAt;progress.active--;persist();}
  });return {value:{templates:results}};
@@ -63,7 +64,7 @@ export async function generateBlockoutBatches(space:any,ctx:any,folder:string,re
   const dir=join(folder,'batches',String(index));mkdirSync(dir,{recursive:true});
   for(const b of batch)Object.assign(progress.steps.find(s=>s.id===b.id),{status:'running',startedAt:Date.now()});progress.active++;progress.peak=Math.max(progress.peak,progress.active);persist();
   try{
-   const result=await request({role:'scene-blockout',schemaContext:{voxel:job.sceneKind==='voxel'},modelSettings:roleSettings(job.modelSettings,'scene-blockout',job.optimizationPolicy),signal:childSignal,maxTokens:10000,images,system:BLOCKOUT_TEMPLATE_PROMPT.replace('一个三维灰模模板，只输出 templates 数组且恰好包含指定 id','一组独立三维灰模模板，只输出 templates 数组且恰好包含本批全部指定 id')+'\n每项通常1–8个部件；各自保留原点、轮廓及通透开口，不生成细节。'+(job.sceneKind==='voxel'?'\n'+VOXEL_GEOMETRY_GUIDANCE:''),text:JSON.stringify({contract:'batch-local-graybox-v1',items:batch.map(b=>blockoutGenerationInput(space,b))})},dir,v=>{
+   const result=await request({role:'scene-blockout',schemaContext:{voxel:job.sceneKind==='voxel',voxelLattice:space.voxelLattice},modelSettings:roleSettings(job.modelSettings,'scene-blockout',job.optimizationPolicy),signal:childSignal,maxTokens:10000,images,system:BLOCKOUT_TEMPLATE_PROMPT.replace('一个三维灰模模板，只输出 templates 数组且恰好包含指定 id','一组独立三维灰模模板，只输出 templates 数组且恰好包含本批全部指定 id')+'\n每项通常1–8个部件；各自保留原点、轮廓及通透开口，不生成细节。'+(job.sceneKind==='voxel'?'\n'+voxelGeometryGuidance(space.voxelLattice):''),text:JSON.stringify({contract:'batch-local-graybox-v1',items:batch.map(b=>blockoutGenerationInput(space,b))})},dir,v=>{
     assertBlockoutGeneration(v);
     if(v?.templates?.length!==batch.length||new Set(v.templates.map(t=>t.id)).size!==batch.length||v.templates.some(t=>!batch.some(b=>b.id===t.id)))throw Error('批量灰模必须与本批模板逐一对应');
     return {templates:batch.map(b=>checkedBlockoutTemplate({templates:[v.templates.find(t=>t.id===b.id)]},space,b,dir).templates[0])};

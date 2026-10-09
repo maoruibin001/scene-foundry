@@ -1,3 +1,4 @@
+import {assertLatticePose,validateVoxelLattice} from './scene-lattice';
 import {createHash} from 'node:crypto';
 
 type Vector=[number,number,number];
@@ -69,6 +70,7 @@ export function fitVoxelLattice(options:VoxelLatticeFitOptions){
  fail(finite(options.step)&&options.step>=.001&&options.step<=1,'整数步长须为0.001至1米');
  fail(Number.isInteger(maxEvaluations)&&maxEvaluations>=1&&maxEvaluations<=24,'测量次数须为1至24，包含来源测量');
  fail(typeof measure==='function','缺少同步测量回调');
+ if(options.space.voxelLattice){const lattice=validateVoxelLattice(options.space.voxelLattice);fail(options.step===lattice.cellSize,'strict fit step must equal frozen cellSize');for(const row of options.space.program.instances)assertLatticePose(row,lattice,'fit source '+row.id);}
  const source=options.space?.program?.instances;
  fail(Array.isArray(source)&&source.length>0&&new Set(source.map(i=>i.id)).size===source.length,'来源实例身份无效');
  const originals=new Map(source.map(i=>[i.id,i]));

@@ -1,4 +1,4 @@
-import {compileGeometryProgram,type Texture} from '../geometry/program';
+import {compileGeometryProgram,transformPoint,type Texture} from '../geometry/program';
 import {validateScene,type SceneInput} from '../geometry/scene-contract';
 import {digest} from '../store';
 import {VOXEL_GRID_VERSION,VOXEL_LIMITS,compileVoxelScene,type VoxelProgram} from './program';
@@ -45,7 +45,7 @@ export function voxelizeScene(source:SceneInput,plan:any,referenceCount:number,t
  if(source.entities.length>VOXEL_LIMITS.entities)fail('实体数量超过体素上限，不能删除主体来适配');
  const compiled=compileGeometryProgram(source.program,textures),extent=sub(compiled.bounds.max,compiled.bounds.min),resolution=options.resolution??128;
  if(!Number.isInteger(resolution)||resolution<16||resolution>190)fail('目标分辨率须为16–190');
- const native=prepareNativeRaster(source.program,compiled);
+ const native=prepareNativeRaster(source.program,compiled,source.voxelLattice);
  let unit=native.unit??Math.max(.001,Math.max(...extent)/(resolution-2));
  const dimensions=()=>extent.map(n=>Math.ceil(n/unit)+2) as V;let size=native.size??dimensions();
  while(size.reduce((a,b)=>a*b,1)>VOXEL_LIMITS.gridCells||Math.max(...size)>192){unit*=1.02;size=dimensions();}
@@ -121,6 +121,12 @@ export function voxelizeScene(source:SceneInput,plan:any,referenceCount:number,t
   cameras:source.cameras.map(c=>({...c,position:c.position as V,target:c.target as V,projection:c.projection??'perspective',orthographicHeight:c.orthographicHeight??null})),lighting:source.lighting,assumptions:source.assumptions};
  const result=compileVoxelScene(program,plan,referenceCount);
  for(const key of ['observedBindings','spatialRelations','spatialOpenings','spatialContacts'])if((source as any)[key])(result.scene as any)[key]=structuredClone((source as any)[key]);
- const report={version:'geometry-voxelization-v1',sourceSceneSha256:program.sourceSceneSha256,sourceTriangles:compiled.triangles,requestedResolution:resolution,gridSize:size,cellSize:unit,origin,filled,measuredSourceColors:histogram.size,paletteSize:colors.length,rasterTests,overlapCandidates:overlaps,entities:entities.map((e,i)=>({id:e.id,cells:counts[i+1]})),geometryErrorBoundMeters:Math.sqrt(3)*unit,...(native.provenance.nativeMeshes?{nativeLattice:native.provenance}:{}),scope:'实际验证几何与材质采样后的整数占用格；图片还原仍须独立验收'};
+ if(source.voxelLattice){
+  const instance=(id:string)=>source.program.instances.find(i=>i.id===id)!;
+  const direction=(v:V,id:string)=>{const pose={...instance(id),position:[0,0,0] as V};return transformPoint(v,pose);};
+  if(source.spatialOpenings)result.scene.spatialOpenings=source.spatialOpenings.map(o=>({...structuredClone(o),center:transformPoint(o.center,instance(o.instanceId)),normal:direction(o.normal,o.instanceId),up:direction(o.up,o.instanceId)}));
+  if(source.spatialContacts)result.scene.spatialContacts=source.spatialContacts.map(c=>({...structuredClone(c),points:c.points.map(point=>transformPoint(point,instance(c.aId)))}));
+ }
+ const report={...(source.voxelLattice?{spatialConstraintTransform:'frozen-isometric-world-bake-v1'}:{}),version:'geometry-voxelization-v1',sourceSceneSha256:program.sourceSceneSha256,sourceTriangles:compiled.triangles,requestedResolution:resolution,gridSize:size,cellSize:unit,origin,filled,measuredSourceColors:histogram.size,paletteSize:colors.length,rasterTests,overlapCandidates:overlaps,entities:entities.map((e,i)=>({id:e.id,cells:counts[i+1]})),geometryErrorBoundMeters:Math.sqrt(3)*unit,...(native.provenance.nativeMeshes?{nativeLattice:native.provenance}:{}),scope:'实际验证几何与材质采样后的整数占用格；图片还原仍须独立验收'};
  return {program,...result,report};
 }

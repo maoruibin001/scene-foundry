@@ -1,3 +1,5 @@
+import {type VoxelLattice} from '../voxel/scene-lattice';
+import {validateVoxelGeometry} from '../voxel/geometry-lattice';
 import {lightingSchema,validateLighting,LIGHTING_RULES,type SceneLighting} from './lighting';
 import {geometryProgramSchema,GEOMETRY_RULES} from './program-schema';
 import {validateGeometryProgram,type GeometryProgram} from './program';
@@ -14,13 +16,13 @@ export function semanticCounts(entities:{category:string}[]):Record<string,numbe
  for(const e of entities)counts[e.category]=(counts[e.category]??0)+1;
  return counts;
 }
-export type SceneInput={spatialContacts?:SpatialContact[];spatialOpenings?:SpatialOpening[];textureReuse?:{textureId:string;assetId:string;reason:string}[];version:'scene-v1';program:GeometryProgram;entities:{instanceId:string;role:'subject'|'context'|'ground';category:string}[];cameras:{projection?:'perspective'|'orthographic';orthographicHeight?:number|null;frame?:{width:number;height:number};name:string;referenceIndex:number|null;position:number[];target:number[];fov:number}[];textures:{id:string;referenceIndex:number;quad:number[][];size:number;description:string}[];lighting:SceneLighting;assumptions:string[]};
-export function sceneSchema(ids?:string[]){return obj({spatialContacts:contactsSchema(),spatialOpenings:openingsSchema(),textureReuse:arr(obj({textureId:str,assetId:str,reason:str})),version:{type:'string',enum:['scene-v1']},program:geometryProgramSchema(ids),entities:arr(obj({instanceId:str,role:{type:'string',enum:['subject','context','ground']},category:categorySchema})),cameras:arr(obj({name:str,referenceIndex:{type:['integer','null']},position:coordinateVectorSchema(),target:coordinateVectorSchema(),fov:{type:'number',minimum:CAMERA_FOV.min,maximum:CAMERA_FOV.max},projection:{type:'string',enum:['perspective','orthographic']},orthographicHeight:{type:['number','null']}})),textures:arr(obj({id:str,referenceIndex:{type:'integer'},quad:{type:'array',minItems:4,maxItems:4,items:{type:'array',minItems:2,maxItems:2,items:num}},size:{type:'integer',enum:[256,512]},description:str})),lighting:lightingSchema(),assumptions:arr(str)});}
+export type SceneInput={voxelLattice?:VoxelLattice;spatialContacts?:SpatialContact[];spatialOpenings?:SpatialOpening[];textureReuse?:{textureId:string;assetId:string;reason:string}[];version:'scene-v1';program:GeometryProgram;entities:{instanceId:string;role:'subject'|'context'|'ground';category:string}[];cameras:{projection?:'perspective'|'orthographic';orthographicHeight?:number|null;frame?:{width:number;height:number};name:string;referenceIndex:number|null;position:number[];target:number[];fov:number}[];textures:{id:string;referenceIndex:number;quad:number[][];size:number;description:string}[];lighting:SceneLighting;assumptions:string[]};
+export function sceneSchema(ids?:string[],options:{voxel?:boolean;voxelLattice?:VoxelLattice}={}){return obj({spatialContacts:contactsSchema(),spatialOpenings:openingsSchema(),textureReuse:arr(obj({textureId:str,assetId:str,reason:str})),version:{type:'string',enum:['scene-v1']},program:geometryProgramSchema(ids,options),entities:arr(obj({instanceId:str,role:{type:'string',enum:['subject','context','ground']},category:categorySchema})),cameras:arr(obj({name:str,referenceIndex:{type:['integer','null']},position:coordinateVectorSchema(),target:coordinateVectorSchema(),fov:{type:'number',minimum:CAMERA_FOV.min,maximum:CAMERA_FOV.max},projection:{type:'string',enum:['perspective','orthographic']},orthographicHeight:{type:['number','null']}})),textures:arr(obj({id:str,referenceIndex:{type:'integer'},quad:{type:'array',minItems:4,maxItems:4,items:{type:'array',minItems:2,maxItems:2,items:num}},size:{type:'integer',enum:[256,512]},description:str})),lighting:lightingSchema(),assumptions:arr(str)});}
 const assert=(ok:any,message:string)=>{if(!ok)throw Error(message)};
 const finite=(n:any,min:number,max:number)=>typeof n==='number'&&Number.isFinite(n)&&n>=min&&n<=max;
 export function validateScene(s:SceneInput,plan:any,referenceCount:number){
  assert(s?.version==='scene-v1','场景数据版本无效');validateGeometryProgram(s.program,plan.requirements.map((r:any)=>r.id));
- validateSceneContext(s,plan,referenceCount);return s;
+ validateSceneContext(s,plan,referenceCount);if(s.voxelLattice)validateVoxelGeometry(s);return s;
 }
 /** 共享布局和最终几何使用同一份机位、材质来源与需求绑定检查。 */
 export function validateSceneContext(s:Omit<SceneInput,'version'|'program'>&{program:Pick<GeometryProgram,'instances'|'materials'>},plan:any,referenceCount:number){
