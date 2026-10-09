@@ -8,9 +8,10 @@ import {distributedPoses,type Distribution} from './distribution';
 import {textureSurface,validTextureBundle,type TextureBundle} from './texture-bundle';
 import {validateSurfaceDetail,detailedSurface,type SurfaceDetail} from './surface-detail';
 import {validateMaterialEmission,emissionSurface,type MaterialEmission} from './material-emission';
+import {drawVoxelVolume,voxelVolumeFaces,validateVoxelVolume,VOXEL_VOLUME_LIMITS,type VoxelVolume} from './voxel-volume';
 
 // 数据契约只描述构造操作，不枚举家具、建筑或其他物体类别。
-export type PrimitiveShape = CurvedShape | BezierPatch | BranchCrown
+export type PrimitiveShape = CurvedShape | BezierPatch | BranchCrown | VoxelVolume
  | {type:'indexedMesh';positions:V[];triangles:[number,number,number][]}
  | {type:'box';size:V;radius:number}
  | {type:'lathe';profile:number[][];segments:number;arc?:number|null;start?:number|null}
@@ -51,6 +52,7 @@ function outline(points:number[][]){
 }
 export function shapeTriangles(s:Shape){
  switch(s?.type){
+  case 'voxelVolume':return voxelVolumeFaces(s).length*2;
   case 'indexedMesh':{
    assert(Array.isArray(s.positions)&&s.positions.length>=3&&s.positions.length<=750000&&s.positions.every(p=>vector(p,-1000,1000)),'内部网格坐标无效或超限');
    assert(Array.isArray(s.triangles)&&s.triangles.length>0&&s.triangles.length<=GEOMETRY_LIMITS.triangles&&s.triangles.every(t=>Array.isArray(t)&&t.length===3&&t.every(i=>Number.isSafeInteger(i)&&i>=0&&i<s.positions.length)&&hasTriangleArea(cross(sub(s.positions[t[1]],s.positions[t[0]]),sub(s.positions[t[2]],s.positions[t[0]])))),'内部网格三角形无效、退化或超限');
@@ -103,6 +105,12 @@ export function validateGeometryProgram(program:GeometryProgram,requirementIds?:
  const materials=unique(p.materials,'材质'),templates=unique(p.templates,'模板');unique(p.instances,'实例');
  for(const m of p.materials){assert(Array.isArray(m.color)&&m.color.length===4&&m.color.every(n=>finite(n,0,1))&&finite(m.roughness,0,1)&&finite(m.metallic,0,1)&&(m.textureId===null||id(m.textureId)),'PBR 材质无效');validateSurfaceDetail(m.surfaceDetail);validateMaterialEmission(m.emission);}
  const estimates=new Map<string,number>();
+ let voxelCells=0,voxelWrites=0;
+ // Admit all declared voxel work before allocating any grid, including unused templates.
+ for(const t of p.templates)if(Array.isArray(t.parts))for(const part of t.parts)if(part.shape?.type==='voxelVolume'){
+  try{const plan=validateVoxelVolume(part.shape);voxelCells+=plan.cells;voxelWrites+=plan.writes;}catch(error){throw Error('模板 '+t.id+' / 部件 '+part.id+'：'+(error instanceof Error?error.message:String(error)));}
+  assert(voxelCells<=VOXEL_VOLUME_LIMITS.programCells&&voxelWrites<=VOXEL_VOLUME_LIMITS.programWrites,'整数体素构造超过全程序格数或写入预算：'+voxelCells+'/'+VOXEL_VOLUME_LIMITS.programCells+' 格；'+voxelWrites+'/'+VOXEL_VOLUME_LIMITS.programWrites+' 次写入');
+ }
  for(const t of p.templates){
   assert(Array.isArray(t.parts)&&t.parts.length>0&&t.parts.length<=GEOMETRY_LIMITS.partsPerTemplate,'模板部件数量无效');unique(t.parts,'部件');let estimate=0;
   for(const part of t.parts){pose(part);validateSurfaceMapping(part);assert(materials.has(part.material),'部件引用不存在的材质');if(part.uvScale!==undefined)assert(Array.isArray(part.uvScale)&&part.uvScale.length===2&&part.uvScale.every(n=>finite(n,.01,100)),'贴图比例无效');try{estimate+=shapeTriangles(part.shape);}catch(error){throw Error('模板 '+t.id+' / 部件 '+part.id+'：'+(error instanceof Error?error.message:String(error)));}}estimates.set(t.id,estimate);
@@ -134,6 +142,7 @@ function transformNormal(v:V,p:Pose):V{return norm(rotate(v.map((n,k)=>n/p.scale
 function draw(g:MeshBuilder,part:Part){
  const m=part.material,s=part.shape;
  switch(s.type){
+  case 'voxelVolume':drawVoxelVolume(g,m,s);break;
   case 'indexedMesh':for(const face of s.triangles)g.triangle(m,face.map(i=>s.positions[i]));break;
   case 'branchCrown':drawCrown(g,m,s);break;
   case 'bezierPatch':drawPatch(g,m,s);break;

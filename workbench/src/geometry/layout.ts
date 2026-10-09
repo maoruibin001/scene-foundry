@@ -16,7 +16,7 @@ export type AssetGeometry={version:'asset-geometry-v1';template:GeometryProgram[
 const str={type:'string'};
 const obj=(properties:any)=>({type:'object',properties,required:Object.keys(properties),additionalProperties:false});
 export function layoutSchema(ids?:string[]){const s=sceneSchema(ids);s.properties.version.enum=['scene-layout-v1'];s.properties.program.properties.templates.items=obj({id:str,label:str,description:str,origin:str,bounds:obj({min:coordinateVectorSchema(),max:coordinateVectorSchema()}),materialIds:{type:'array',items:str},maxParts:{type:'integer',minimum:1,maximum:ASSET_STEP_LIMITS.parts}});return s;}
-export function assetSchema(){return obj({version:{type:'string',enum:['asset-geometry-v1']},template:geometryProgramSchema().properties.templates.items});}
+export function assetSchema(voxel=false){return obj({version:{type:'string',enum:['asset-geometry-v1']},template:geometryProgramSchema(undefined,{voxel}).properties.templates.items});}
 const assert=(v:any,message:string)=>{if(!v)throw Error(message);};
 const id=(v:any)=>typeof v==='string'&&/^[a-zA-Z][a-zA-Z0-9_-]{0,55}$/.test(v);
 export const LAYOUT_COORDINATE_RULES=`空间坐标契约：模板 bounds.min/max、实例 position、相机 position/target 的每一轴必须在 ${-RANGE.max}..${RANGE.max} 米内；bounds 每轴 max-min 必须严格大于 ${RANGE.positiveMin} 米。实例 rotation 每轴在 -2π..2π 弧度内，scale 每轴在 ${RANGE.positiveMin}..${RANGE.max} 内。为当前图片选择一致的合理尺度和局部原点；不得超范围后把单个坐标改为0或钳制，这会破坏空间关系。需要调整时须共同核对尺寸、位置、机位和连接点。`;

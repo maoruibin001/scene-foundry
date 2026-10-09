@@ -6,15 +6,16 @@ export const BLOCKOUT_PART_LIMIT=8;
 export const BLOCKOUT_GRID_AXIS=9;
 /** Local geometry depends on its brief and openings, not on world placement or camera. */
 export function blockoutTemplateInput(space:any,brief:any){const ids=new Set(space.program.instances.filter(i=>i.template===brief.id).map(i=>i.id));return {contract:'local-graybox-v1',brief:{...brief,maxParts:Math.min(32,brief.maxParts),materialIds:['blockout']},spatialOpenings:(space.spatialOpenings??[]).filter(o=>ids.has(o.instanceId))};}
-const types=new Set(['box','tube','lathe','extrusion','cushion','branchCrown','grid']);
+const types=new Set(['box','tube','lathe','extrusion','cushion','branchCrown','grid','voxelVolume']);
 /** Wire contract for composition only. Finished assets keep the full geometry contract. */
-export function compactBlockoutSchema(){
- const schema:any=structuredClone(geometryProgramSchema().properties.templates),part=schema.items.properties.parts.items;
+export function compactBlockoutSchema(options:{voxel?:boolean}={}){
+ const schema:any=structuredClone(geometryProgramSchema(undefined,options).properties.templates),part=schema.items.properties.parts.items;
  schema.items.properties.parts.minItems=1;schema.items.properties.parts.maxItems=BLOCKOUT_PART_LIMIT;
  for(const k of ['material','uvProjection','uvTransform','smoothAngle','uvScale'])delete part.properties[k];
  part.required=Object.keys(part.properties);
  part.properties.shape.anyOf=part.properties.shape.anyOf.filter((s:any)=>types.has(s.properties.type.enum[0]));
  for(const s of part.properties.shape.anyOf){
+  if(s.properties.type.enum[0]==='voxelVolume'){s.properties.dimensions.items.maximum=64;s.properties.operations.maxItems=48;}
   if(s.properties.type.enum[0]==='grid'){
    s.properties.rows.maximum=BLOCKOUT_GRID_AXIS;s.properties.columns.maximum=BLOCKOUT_GRID_AXIS;
    s.properties.points.maxItems=BLOCKOUT_GRID_AXIS**2;
@@ -32,7 +33,11 @@ export function assertBlockoutGeneration(value:any){
   if(!Array.isArray(t.parts)||!t.parts.length||t.parts.length>BLOCKOUT_PART_LIMIT)throw Error(`灰模每模板仅允许1–${BLOCKOUT_PART_LIMIT}个轮廓部件；不制作逐叶或逐花细节`);
   for(const p of t.parts){
    const s=p.shape;
-   if(!s||!types.has(s.type))throw Error('灰模仅允许box、tube、lathe、extrusion、cushion、branchCrown和有界grid构造；详细资产阶段保留完整几何能力');
+   if(!s||!types.has(s.type))throw Error('灰模仅允许box、tube、lathe、extrusion、cushion、branchCrown、有界grid及voxelVolume构造；详细资产阶段保留完整几何能力');
+   if(s.type==='voxelVolume'){
+    if(s.dimensions?.some(n=>n>64)||s.dimensions?.reduce((a,b)=>a*b,1)>131072||s.operations?.length>48)throw Error('灰模体素构造每轴最多64格、最多131072格及48操作，只制作主要结构');
+    shapeTriangles(s);continue;
+   }
    if(s.type==='grid'){
     if(s.rows>BLOCKOUT_GRID_AXIS||s.columns>BLOCKOUT_GRID_AXIS||(s.points?.length??0)>BLOCKOUT_GRID_AXIS**2)throw Error('灰模grid每轴最多9点、总计81点；只表达主体曲面，不制作细节');
     if(shapeTriangles(s)===0)throw Error('灰模grid不能全部退化为零面积');

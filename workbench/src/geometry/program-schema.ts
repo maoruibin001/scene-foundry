@@ -2,6 +2,7 @@ import {CROWN_RULES} from './branch-crown';
 import {RANGE} from './constraints';
 import {surfaceDetailSchema,SURFACE_DETAIL_GUIDANCE} from './surface-detail';
 import {materialEmissionSchema,MATERIAL_EMISSION_GUIDANCE} from './material-emission';
+import {voxelVolumeSchema} from './voxel-volume';
 const num={type:'number'},str={type:'string'},positive={type:'number',minimum:RANGE.positiveMin,maximum:RANGE.max},unit={type:'number',minimum:0,maximum:1},nonnegative={type:'number',minimum:0,maximum:RANGE.max},segments={type:'integer',minimum:RANGE.segmentsMin,maximum:RANGE.segmentsMax};
 const arr=(items:any)=>({type:'array',items});
 const obj=(properties:any)=>({type:'object',properties,required:Object.keys(properties),additionalProperties:false});
@@ -24,10 +25,10 @@ const primitives=()=>[
   obj({type:tag('tube'),from:vector,to:vector,radius:positive,endRadius:nonnegative,segments}),
   obj({type:tag('grid'),points:{...arr(vector),maxItems:RANGE.gridMax},rows:{type:'integer',minimum:2,maximum:512},columns:{type:'integer',minimum:2,maximum:512},doubleSided:{type:'boolean'}}),
  ];
-export function geometryProgramSchema(requirementIds?:string[]){return obj({
+export function geometryProgramSchema(requirementIds?:string[],options:{voxel?:boolean}={}){return obj({
  version:tag('geometry-v1'),name:str,
  materials:arr(obj({id:str,color:{type:'array',items:unit,minItems:4,maxItems:4},roughness:unit,metallic:unit,textureId:{type:['string','null']},surfaceDetail:surfaceDetailSchema(),emission:materialEmissionSchema()})),
- templates:arr(obj({id:str,parts:arr(obj({id:str,material:str,...pose,uvProjection:{anyOf:[{type:'null'},uvProjectionSchema()]},uvTransform:{anyOf:[{type:'null'},uvTransformSchema()]},smoothAngle:{type:['number','null'],minimum:0,maximum:180},uvScale:{type:'array',items:{type:'number',minimum:RANGE.uvMin,maximum:RANGE.max},minItems:2,maxItems:2},shape:{anyOf:[...primitives(),
+ templates:arr(obj({id:str,parts:arr(obj({id:str,material:str,...pose,uvProjection:{anyOf:[{type:'null'},uvProjectionSchema()]},uvTransform:{anyOf:[{type:'null'},uvTransformSchema()]},smoothAngle:{type:['number','null'],minimum:0,maximum:180},uvScale:{type:'array',items:{type:'number',minimum:RANGE.uvMin,maximum:RANGE.max},minItems:2,maxItems:2},shape:{anyOf:[...primitives(),...(options.voxel?[voxelVolumeSchema()]:[]),
   obj({type:tag('scatter'),element:{anyOf:primitives().filter(s=>s.properties.type.enum[0]!=='branchCrown')},count:{type:'integer',minimum:1,maximum:RANGE.scatterMax},seed:{type:'integer',minimum:0,maximum:4294967295},volume:{type:'string',enum:['box','ellipsoid']},size:positiveVector,rotationRange:{...vector,items:{type:'number',minimum:0,maximum:Math.PI*2}},scaleRange:{type:'array',items:positive,minItems:2,maxItems:2}}),
  ]}}))})),
  instances:arr(obj({id:str,label:str,template:str,...pose,surfaceOverrides:surfaceOverridesSchema(),requirementIds:arr(requirementIds?.length?{type:'string',enum:requirementIds}:str)})),

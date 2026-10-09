@@ -77,6 +77,39 @@ test('仅带实际灰模工具的空间修正增加渲染时间，初始规划�
  expect(modelTimeoutPolicy('high','scene-space').timeoutMs).toBe(300000);expect(modelTimeoutPolicy('high','scene-surface').timeoutMs).toBe(300000);expect(modelTimeoutPolicy('high','scene-space',1,90000,GRAYBOX_SPACE_PREVIEW).maxTimeoutMs).toBe(90000);
 });
 
+test('体素网格拟合只在新版体素工具开放，跨角色与历史工具不能获得能力',async()=>{
+ const f=fixture();try{
+  const current=createGrayboxSpacePreview({...f.options,contractVersion:GRAYBOX_SPACE_PREVIEW});
+  expect(current.kit.definitions.map(t=>t.name)).not.toContain('fit_graybox_lattice');
+  const voxel=createGrayboxSpacePreview({...f.options,folder:join(f.folder,'voxel'),contractVersion:GRAYBOX_SPACE_PREVIEW,voxel:true});
+  expect(voxel.kit.definitions.map(t=>t.name)).toContain('fit_graybox_lattice');
+  expect(()=>assertRoleTools('scene-space',voxel.kit)).not.toThrow();
+  expect(()=>assertRoleTools('geometry-asset',voxel.kit)).toThrow('PROVIDER_TOOLS_INVALID');
+  const legacy=createGrayboxSpacePreview({...f.options,folder:join(f.folder,'legacy'),contractVersion:'graybox-space-preview-v11',voxel:true});
+  expect(legacy.kit.definitions.map(t=>t.name)).not.toContain('fit_graybox_lattice');
+ }finally{f.close();}
+});
+test('未测目标的体素拟合不虚构改善，有限额度恢复不重置，预测摘要不能冒充实际预览',async()=>{
+ const f=fixture();try{
+  const options={...f.options,contractVersion:GRAYBOX_SPACE_PREVIEW,voxel:true};
+  let t=createGrayboxSpacePreview(options);
+  const args={basePatch:f.patch(),instanceIds:['front'],step:.1,axes:[0]};
+  const first=await t.kit.call('fit_graybox_lattice',args),result=JSON.parse((first.content[0] as any).text);
+  expect(result.report).toMatchObject({improved:false,requiresActualPreview:true,requiresIndependentAcceptance:true,termination:'no-measurable-targets',evaluations:1});
+  expect(result.patch).toEqual(args.basePatch);expect(f.renders()).toBe(0);
+  expect(()=>t.kit.resolveOutput!({selectedPatchSha256:result.report.selectedPatchSha256,reason:'这个摘要只是程序预测，还没有真实Engine预览'})).toThrow('PREVIEW_REQUIRED');
+  t=createGrayboxSpacePreview(options);await t.kit.call('fit_graybox_lattice',args);
+  expect(read(join(options.folder,'graybox-preview-audit.json')).latticeMeasured).toBe(1);
+  await t.kit.call('fit_graybox_lattice',{...args,basePatch:f.patch(.4)});
+  await t.kit.call('fit_graybox_lattice',{...args,basePatch:f.patch(.3)});
+  t=createGrayboxSpacePreview(options);
+  await expect(t.kit.call('fit_graybox_lattice',{...args,basePatch:f.patch(.2)})).rejects.toThrow('预测额度');
+  expect(read(join(options.folder,'graybox-preview-audit.json'))).toMatchObject({latticeMeasured:3,used:0,measured:0});
+  const audit=read(join(options.folder,'graybox-preview-audit.json'));audit.latticeFits[0].result.report.evaluations=0;save(join(options.folder,'graybox-preview-audit.json'),audit);
+  expect(()=>createGrayboxSpacePreview(options)).toThrow('拟合恢复额度');
+ }finally{f.close();}
+});
+
 test('正常候选回传同机位构图残差，恢复和最终选择验证测量文件，篡改不能放行',async()=>{
  const f=fixture();try{
   f.options.space.cameras[0].referenceIndex=1;f.options.sourceScene.cameras[0].referenceIndex=1;

@@ -15,7 +15,7 @@ function fixture(){
 const accepts=(f:ReturnType<typeof fixture>)=>sameSpatialRecovery(f.target,f.source,f.scene,f.savedScene,f.plan,f.savedPlan,f.grayScene,f.gate);
 test('同一技术恢复根的确切灰模空间证据可复用，不制造新评分',()=>expect(accepts(fixture())).toBe(true));
 test('编译与灰模呈现源码变化或缺失时，旧空间证据不得自动复用',()=>{
- const names=['program.ts','branch-crown.ts','prepare.ts','curved-surfaces.ts','surface-mapping.ts','mesh.ts','constraints.ts','distribution.ts','texture-bundle.ts','surface-detail.ts','material-emission.ts','camera-tour.ts','lighting.ts','blockout-presentation.ts','reference-framing.ts','reference-frame.mjs','spatial-order.ts'];
+ const names=['program.ts','voxel-volume.ts','branch-crown.ts','prepare.ts','curved-surfaces.ts','surface-mapping.ts','mesh.ts','constraints.ts','distribution.ts','texture-bundle.ts','surface-detail.ts','material-emission.ts','camera-tour.ts','lighting.ts','blockout-presentation.ts','reference-framing.ts','reference-frame.mjs','spatial-order.ts'];
  const files=Object.fromEntries(names.map(file=>[file,digest(readFileSync(join(import.meta.dirname,file)))]));
  expect(sameSpatialCompiler(files,files)).toBe(true);expect(sameSpatialCompiler({...files,'program.ts':'changed'},files)).toBe(false);expect(sameSpatialCompiler({},files)).toBe(false);expect(sameSpatialCompiler({...files,'material-emission.ts':'changed'},files)).toBe(false);
 });

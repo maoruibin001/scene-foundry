@@ -22,7 +22,7 @@ const arr=(items:any)=>({type:'array',items});
 const obj=(properties:any)=>({type:'object',properties,required:Object.keys(properties),additionalProperties:false});
 const choice=(...values:string[])=>({type:'string',enum:values});
 const nullableNum={type:['number','null']};
-export type ModelSchemaContext={requirementIds?:string[];referenceCount?:number;repairReferences?:RepairGoalReferences;repairComplexity?:Complexity;qualityVersion?:string;imageGoal?:boolean;grayboxRepair?:boolean;derivedSpatialRelations?:boolean};
+export type ModelSchemaContext={requirementIds?:string[];referenceCount?:number;repairReferences?:RepairGoalReferences;repairComplexity?:Complexity;qualityVersion?:string;imageGoal?:boolean;grayboxRepair?:boolean;derivedSpatialRelations?:boolean;voxel?:boolean};
 export function modelSchema(role:string,context?:ModelSchemaContext):any {
  if(role==='voxel-scene')return voxelSchema(context?.requirementIds);
  if(role==='scene-repair-plan')return repairGoalsSchema(context?.repairReferences,context?.repairComplexity?repairBudget(context.repairComplexity):LEGACY_REPAIR_BUDGET);
@@ -31,14 +31,14 @@ export function modelSchema(role:string,context?:ModelSchemaContext):any {
  if(role==='scene-alignment')return alignmentSchema();
  if(role==='scene-refine')return refinementSchema(context?.repairComplexity);
  if(role==='scene-observation')return observationSchema(context?.referenceCount);
- if(role==='scene-blockout')return blockoutSchema();
+ if(role==='scene-blockout')return blockoutSchema({voxel:context?.voxel});
  if(role==='scene-space-judge')return spaceJudgeSchema();
- if(role==='scene-space')return context?.grayboxRepair?grayboxSpaceRepairSchema():context?.derivedSpatialRelations?spacePlanningSchema(context.requirementIds):spaceSchema(context?.requirementIds);
- if(role==='scene-surface')return surfaceSchema();
+ if(role==='scene-space')return context?.grayboxRepair?grayboxSpaceRepairSchema({voxel:context?.voxel}):context?.derivedSpatialRelations?spacePlanningSchema(context.requirementIds):spaceSchema(context?.requirementIds);
+ if(role==='scene-surface')return surfaceSchema({voxel:context?.voxel});
  if(role==='scene-layout')return layoutSchema(context?.requirementIds);
- if(role==='geometry-asset')return assetSchema();
+ if(role==='geometry-asset')return assetSchema(context?.voxel);
  if(role==='scene-generation')return sceneSchema(context?.requirementIds);
- if(role==='geometry')return geometryProgramSchema(context?.requirementIds);
+ if(role==='geometry')return geometryProgramSchema(context?.requirementIds,{voxel:context?.voxel});
  if(role==='reference-layout')return RECONSTRUCTION_SCHEMA;
  if(role==='reference-observations')return OBSERVATION_SCHEMA;
  const frames=arr(str);

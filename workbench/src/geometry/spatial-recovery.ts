@@ -7,7 +7,7 @@ import {assertSpatialAccepted,spatialInstances} from './spatial-order';
 import {spatialGate} from './blockout';
 
 const same=(a:any,b:any)=>JSON.stringify(a)===JSON.stringify(b);
-const SPATIAL_SOURCES=['program.ts','branch-crown.ts','prepare.ts','curved-surfaces.ts','surface-mapping.ts','mesh.ts','constraints.ts','distribution.ts','texture-bundle.ts','surface-detail.ts','material-emission.ts','camera-tour.ts','lighting.ts','blockout-presentation.ts','reference-framing.ts','reference-frame.mjs','spatial-order.ts'];
+const SPATIAL_SOURCES=['program.ts','voxel-volume.ts','branch-crown.ts','prepare.ts','curved-surfaces.ts','surface-mapping.ts','mesh.ts','constraints.ts','distribution.ts','texture-bundle.ts','surface-detail.ts','material-emission.ts','camera-tour.ts','lighting.ts','blockout-presentation.ts','reference-framing.ts','reference-frame.mjs','spatial-order.ts'];
 export function sameSpatialCompiler(recorded:Record<string,string>,current:Record<string,string>){return SPATIAL_SOURCES.every(file=>recorded[file]&&recorded[file]===current[file]);}
 /** Reuse only a completed spatial check of this exact scene in this execution recovery chain. */
 export function sameSpatialRecovery(target:any,source:any,scene:any,savedScene:any,plan:any,savedPlan:any,grayScene:any,gate:any){
