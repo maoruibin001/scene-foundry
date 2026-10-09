@@ -97,3 +97,10 @@ test('界面和诊断网页更新不冒充新空间机制，真实生成或投�
  expect(()=>assertSpatialMechanismChanged(before,{...ui,'workbench/src/voxel/projection.ts':'new'})).not.toThrow();
  expect(()=>assertSpatialMechanismChanged({},ui)).toThrow('无法核实');
 });
+
+test('超时检查点与只读恢复保护变化不能重开已停止的几何策略',()=>{
+ const before={'workbench/src/geometry/generate.ts':'same','workbench/src/geometry/graybox-timeout-checkpoint.ts':'a','workbench/src/geometry/graybox-reviewed-geometry.ts':'a','workbench/src/geometry/spatial-recovery.ts':'a'};
+ const after={...before,'workbench/src/geometry/graybox-timeout-checkpoint.ts':'b','workbench/src/geometry/graybox-reviewed-geometry.ts':'b','workbench/src/geometry/spatial-recovery.ts':'b','workbench/public/voxel/app.js':'new'};
+ expect(()=>assertSpatialMechanismChanged(before,after)).toThrow('机制没有变化');
+ expect(()=>assertSpatialMechanismChanged(before,{...after,'workbench/src/geometry/generate.ts':'actual-new-producer'})).not.toThrow();
+});

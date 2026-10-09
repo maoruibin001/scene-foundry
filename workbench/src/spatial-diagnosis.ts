@@ -8,7 +8,8 @@ import type {ImprovementLedger} from './improvement-governance';
 const HARD=['framing','cameraMotion','nonFlat','multipleViews','entitiesLoaded','frameRate','runtime','noErrors','hudToggle','video','cameraStopped'];
 /** A viewer/doc update alone cannot reopen a stopped generation strategy. */
 export function assertSpatialMechanismChanged(before:Record<string,string>,after:Record<string,string>){
- const producer=(key:string)=>/^workbench\/src\/geometry\/.*\.(ts|mjs)$/.test(key)&&!key.endsWith('.test.ts')&&!key.endsWith('/visibility-evidence.ts')||key==='workbench/src/voxel/projection.ts';
+ const recoveryOnly=['visibility-evidence.ts','graybox-timeout-checkpoint.ts','graybox-reviewed-geometry.ts','spatial-recovery.ts'];
+ const producer=(key:string)=>/^workbench\/src\/geometry\/.*\.(ts|mjs)$/.test(key)&&!key.endsWith('.test.ts')&&!recoveryOnly.some(name=>key.endsWith('/'+name))||key==='workbench/src/voxel/projection.ts';
  const old=Object.keys(before??{}).filter(producer),current=Object.keys(after??{}).filter(producer);
  if(!old.length||!current.length)throw Error('无法核实冻结的空间生成机制，不能新增重跑机会');
  if([...new Set([...old,...current])].every(key=>before[key]===after[key]))throw Error('空间生成机制没有变化；界面、过程展示或文档更新不能重跑已停止策略');
