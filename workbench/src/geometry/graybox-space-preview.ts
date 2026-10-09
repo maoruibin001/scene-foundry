@@ -97,5 +97,5 @@ export function createGrayboxSpacePreview(options:{space:any;sourceScene:any;obs
    catch(e){row.status='failed';row.error=String(e);if(signal.aborted)throw e;return {isError:true,content:[text({error:row.error,used:audit.used,limit:2,quality:'未通过实际预览，不可选择此候选'})]};}
    finally{busy=false;row.endedAt=Date.now();row.durationMs=row.endedAt-row.startedAt;persist();}
   }};
- return {kit,assertReviewed};
+ return {kit,assertReviewed,onlyReviewedCheckpoint(){const rows=audit.attempts.filter(r=>r.status==='rendered');if(rows.length!==1)return null;const row=rows[0],v=verify(row);return {patch:v.patch,preview:assertReviewed(v.patch),scope:'唯一已实拍候选的执行恢复检查点；模型最终选择未完成，仍须独立空间与成品评分'};}};
 }

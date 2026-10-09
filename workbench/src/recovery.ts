@@ -11,6 +11,7 @@ import {generationInput} from './reference-input';
 import {isDeepStrictEqual} from 'node:util';
 import {spatialRepairBasis} from './spatial-diagnosis';
 export const activeJob=(j:any)=>['running','queued'].includes(j.status);
+const SPATIAL_RECOVERY_CONTRACTS=new Set(['graybox-space-repair-v2','graybox-space-repair-v3','graybox-space-repair-v4','graybox-space-repair-v5','graybox-space-repair-v6','graybox-space-repair-v7','graybox-space-repair-v8']);
 /** Preserve the typed spatial repair across its recorded recovery chain, never reinterpret a selection as a full layout. */
 export function spatialRecoveryOptions(job:any,all:any[]){
  const seen=new Set<string>(),chain:any[]=[];let source=job;
@@ -18,7 +19,7 @@ export function spatialRecoveryOptions(job:any,all:any[]){
   if(seen.has(source.id)||seen.size>=32)return null;seen.add(source.id);chain.push(source);
   if(source.spatialRepairSource){
    const basis=source.spatialRepairSource,diagnosis=source.spatialDiagnosis,seed=all.find(j=>j.id===basis.jobId);
-   if(!seed||!diagnosis||!['graybox-space-repair-v2','graybox-space-repair-v3'].includes(diagnosis.contract)||diagnosis.sourceJobId!==basis.jobId||diagnosis.sourceRound!==basis.round||typeof diagnosis.reason!=='string'||diagnosis.reason.length<40||!/^[a-f0-9]{64}$/.test(diagnosis.revisionId??''))throw Error('局部空间恢复缺少匹配的来源与诊断');
+   if(!seed||!diagnosis||!SPATIAL_RECOVERY_CONTRACTS.has(diagnosis.contract)||diagnosis.sourceJobId!==basis.jobId||diagnosis.sourceRound!==basis.round||typeof diagnosis.reason!=='string'||diagnosis.reason.length<40||!/^[a-f0-9]{64}$/.test(diagnosis.revisionId??''))throw Error('局部空间恢复缺少匹配的来源与诊断');
    spatialRepairBasis(seed,basis.round);
    for(const record of [...chain,seed]){
     if(!isDeepStrictEqual(generationInput(job),generationInput(record))||!isDeepStrictEqual(job.policy,record.policy)||!isDeepStrictEqual(job.modelSettings,record.modelSettings)||(job.executionRecoveryRoot??job.id)!==(record.executionRecoveryRoot??record.id)||job.improvementId!==record.improvementId)throw Error('局部空间恢复不能跨输入、政策、模型或执行根');

@@ -323,3 +323,14 @@ test('粗曲面经正常工具预览和摘要选择保存，越界及超点数�
   expect(read(join(f.options.folder,'1/scene.json')).program.templates[0].parts[0].shape).toEqual(p.parts[0].shape);
  }finally{f.close();}
 });
+
+test('超时检查点只复用唯一核验实拍，不选择预测、多候选或损坏图像，不增加额度',async()=>{
+ const f=fixture();try{
+  const t=createGrayboxSpacePreview(f.options);expect(t.onlyReviewedCheckpoint()).toBeNull();
+  await t.kit.call('preview_graybox_space',{patchJson:JSON.stringify(f.patch(.5))});
+  const before=readFileSync(join(f.options.folder,'graybox-preview-audit.json'),'utf8');
+  expect(t.onlyReviewedCheckpoint()?.patch).toEqual(f.patch(.5));expect(readFileSync(join(f.options.folder,'graybox-preview-audit.json'),'utf8')).toBe(before);
+  writeFileSync(join(f.options.folder,'1/capture/candidate-1.png'),'tampered');expect(()=>t.onlyReviewedCheckpoint()).toThrow('摘要');
+ }finally{f.close();}
+ const f2=fixture();try{const t=createGrayboxSpacePreview(f2.options);for(const x of [.5,.4])await t.kit.call('preview_graybox_space',{patchJson:JSON.stringify(f2.patch(x))});expect(t.onlyReviewedCheckpoint()).toBeNull();expect(f2.renders()).toBe(2);}finally{f2.close();}
+});

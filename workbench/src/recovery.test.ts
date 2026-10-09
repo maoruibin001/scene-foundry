@@ -1,7 +1,7 @@
 import {test,expect} from 'bun:test';
 import {rmSync,mkdirSync,readFileSync} from 'node:fs';
 import {join} from 'node:path';
-import {recoveryInfo,registerRecovery,dispatchRecovery,continuationSceneSource} from './recovery';
+import {recoveryInfo,registerRecovery,dispatchRecovery,continuationSceneSource,spatialRecoveryOptions} from './recovery';
 import {checkpointFixture} from './geometry/checkpoint-fixture';
 import {read,save} from './store';
 import {executionSettings} from './execution-settings';
@@ -60,3 +60,45 @@ test('待修正和部分场景不借祖先完整场景跳过尚未完成的工�
  expect(recoveryInfo({...j,refineScene:true},[],f.store,f.root,()=>f.root).mode).toBe('refinement');
  expect(recoveryInfo({...j,partialOutput:{missing:['asset']}},[],f.store,f.root,()=>f.root).mode).toBe('generation');
  }finally{rmSync(f.root,{recursive:true,force:true})}});
+
+function spatialContinuationFixture(){
+ const seed:any={id:'11111111-1111-4111-8111-111111111111',prompt:'保留原图的贯通门洞、板桥空域及水道可见宽度',images:[{id:'a'.repeat(64)},{id:'b'.repeat(64)}],complexity:'complex',matchingLevel:'standard',sceneKind:'voxel',generationMode:'qualified',status:'failed',stage:'graybox',executionRecoveryRoot:'fixed-execution-root',improvementId:'d'.repeat(64),
+  policy:{version:'scene-quality-v7',deliveryStandard:'basic70',score:80},modelSettings:{model:'gpt-6-astra',reasoningEffort:'xhigh'},profile:{engineSha:'fixed-engine',generatorSha:'fixed-generator',provider:'codex-cli',model:'gpt-6-astra',judgeModel:'gpt-6-astra',executionRoute:{providerId:'local',launcherSha256:'same-launcher'},assessmentProtocolSha256:'same-assessment'},
+  blockout:{status:'stopped',rounds:[{round:0,passed:false,endedAt:100,review:{score:3.3}}]}};
+ const current:any={...structuredClone(seed),id:'22222222-2222-4222-8222-222222222222',stage:'space',blockout:{status:'repairing',rounds:[]},spatialRepairSource:{jobId:seed.id,round:0},
+  spatialDiagnosis:{contract:'graybox-space-repair-v8',sourceJobId:seed.id,sourceRound:0,reason:'新原生体素构造已实拍验证贯通门洞及板缝，恢复仅保留原输入、真实预览和累计修正记录，不降低验收标准。',revisionId:'c'.repeat(64)}};
+ return {seed,current,all:[seed,current]};
+}
+test('已发布v4至v8灰模契约可保留同输入和执行根恢复，诊断返回克隆且未知版本不自动放行',()=>{
+ for(const contract of ['graybox-space-repair-v4','graybox-space-repair-v5','graybox-space-repair-v6','graybox-space-repair-v7','graybox-space-repair-v8']){
+  const f=spatialContinuationFixture();f.current.spatialDiagnosis.contract=contract;
+  const before=JSON.stringify(f.all),options=spatialRecoveryOptions(f.current,f.all);
+  expect(options).toEqual({spatialRepairSource:{jobId:f.seed.id,round:0},spatialDiagnosis:f.current.spatialDiagnosis,reusePlanFrom:f.seed.id,executionRecoveryRoot:'fixed-execution-root'});
+  options!.spatialDiagnosis.reason='changed local result';expect(JSON.stringify(f.all)).toBe(before);
+ }
+ for(const contract of ['graybox-space-repair-v9','graybox-space-repair-v999','graybox-space-repair-v0','future-spatial-contract']){
+  const f=spatialContinuationFixture();f.current.spatialDiagnosis.contract=contract;expect(()=>spatialRecoveryOptions(f.current,f.all)).toThrow('缺少匹配的来源与诊断');
+ }
+});
+test('v8经过普通恢复派发保留局部诊断，不把已实拍补丁当作完整空间或新增检查点',async()=>{
+ const disk=setup();try{
+  const f=spatialContinuationFixture(),before=JSON.stringify(f.current);let creates=0,registrations=0;
+  const info=recoveryInfo(f.current,f.all,disk.store,disk.root);expect(info).toMatchObject({available:true,mode:'spatial-repair'});
+  const next=await dispatchRecovery(f.current.id,{getJob:id=>f.all.find(j=>j.id===id),listJobs:()=>f.all,isExecuting:()=>false,
+   inspect:(job,all)=>recoveryInfo(job,all,disk.store,disk.root),resolveSettings:async job=>job.modelSettings,
+   register:()=>{registrations++;return 'unexpected-checkpoint';},create:(job,recovery,settings,checkpoint)=>{creates++;expect(recovery.mode).toBe('spatial-repair');expect(checkpoint).toBeNull();return {...structuredClone(job),...spatialRecoveryOptions(job,f.all),id:'33333333-3333-4333-8333-333333333333',modelSettings:settings,recoverySourceJobId:job.id,status:'queued'};}});
+  expect(creates).toBe(1);expect(registrations).toBe(0);expect(next.spatialDiagnosis.contract).toBe('graybox-space-repair-v8');expect(next.spatialRepairSource).toEqual(f.current.spatialRepairSource);expect(next.executionRecoveryRoot).toBe(f.current.executionRecoveryRoot);expect(next.modelSettings).toEqual(f.current.modelSettings);expect(next.policy).toEqual(f.current.policy);expect(JSON.stringify(f.current)).toBe(before);
+  const twice={...structuredClone(next),status:'failed',spatialRepairSource:undefined,spatialDiagnosis:undefined};
+  expect(spatialRecoveryOptions(twice,[...f.all,twice])?.spatialDiagnosis.contract).toBe('graybox-space-repair-v8');
+ }finally{rmSync(disk.root,{recursive:true,force:true})}
+});
+test('v8的已知来源、原图顺序、模型、政策、评审或执行根改变均拒绝恢复',()=>{
+ const mutations=[
+  (f:any)=>f.seed.prompt+='改动目标',(f:any)=>f.seed.images.reverse(),(f:any)=>f.seed.sceneKind='scene',
+  (f:any)=>f.seed.policy.deliveryStandard='weaker',(f:any)=>f.seed.modelSettings.model='different-model',
+  (f:any)=>f.seed.executionRecoveryRoot='different-root',(f:any)=>f.seed.improvementId='e'.repeat(64),
+  (f:any)=>f.seed.profile.engineSha='different-engine',(f:any)=>f.seed.profile.executionRoute.launcherSha256='changed-launcher',
+  (f:any)=>f.seed.profile.assessmentProtocolSha256='different-assessment',(f:any)=>f.current.spatialDiagnosis.sourceJobId='unrelated-source',
+ ];
+ for(const mutate of mutations){const f=spatialContinuationFixture();mutate(f);expect(()=>spatialRecoveryOptions(f.current,f.all)).toThrow();}
+});
