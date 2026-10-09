@@ -1,3 +1,4 @@
+import {sourceSceneFile} from './source-scene';
 import {referenceComposition,COMPOSITION_PROMPT} from './reference-composition';
 import {sceneVisibility} from './visibility';
 import {repairPartContext} from './repair-part-context';
@@ -31,7 +32,7 @@ export function editableSceneContext(source:any){
 /** 同一个具备看图与实际预览能力的模型完成诊断、目标选择及关联修改。 */
 export async function refineWithEvidence(job:any,plan:any,images:any[],dir:string,signal:AbortSignal){
  const sourceDir=runDir(job.reuseSceneFrom),sourceJob=read(join(sourceDir,'job.json'));
- const originalSource=read(join(sourceDir,'generated-scene.json')),sourceDigest=digest(JSON.stringify(originalSource)),source=bindReferenceFrames(originalSource,images),runtime=read(join(sourceDir,'runtime/runtime.json')),textures=read(join(sourceDir,'materials/texture-registry.json'));
+ const originalSource=read(sourceSceneFile(job,sourceDir)),sourceDigest=digest(JSON.stringify(originalSource)),source=bindReferenceFrames(originalSource,images),runtime=read(join(sourceDir,'runtime/runtime.json')),textures=read(join(sourceDir,'materials/texture-registry.json'));
  const refs=images.map(i=>digest(readFileSync(i.path))),frames=runtime.images.filter((f:string)=>/^reference-/.test(f));
  if(JSON.stringify(refs)!==JSON.stringify(job.images.map((i:any)=>i.id))||!frames.length)throw Error('参考输入或机位证据不完整');
  for(const f of frames)if(digest(readFileSync(join(sourceDir,'runtime',f)))!==runtime.hashes[runtime.images.indexOf(f)])throw Error('运行画面摘要不符');
@@ -81,7 +82,7 @@ export async function refineWithEvidence(job:any,plan:any,images:any[],dir:strin
  const system=REFINEMENT_PROMPT.replace('不删除或缩小sourceScene.spatialOpenings约束。','保留开口身份；推断尺寸可按本轮openingUpdates协议纠正。').replace('必须绑定到repairGoals已选materialIds或已获准新增几何的新材质。共享纹理的所有引用材质都必须在范围内，否则给已选材质建立独立声明，不改变其他表面；','必须绑定到本轮实际修改的材质。共享纹理的引用表面须一起核对，不适配时建立独立声明；')+'\n'+OPENING_REFINEMENT_PROMPT+'\n本轮采用证据驱动整体修正，不存在另一个模型预先锁定的repairGoals范围。你必须自行从画面与本轮假设选择最有价值的关联缺陷并实施可见改变；可以调整所有必要的已有模板与材质，但遵守相同最终场景预算。避免泛泛改色、缩放或堆小物体。采集、投影和预览现已沿用参考图画幅。先核对画面主结构占比、透视和垂直支承；不要把旧横图的占比照搬到竖图。surfaceAudit列出真实材质绑定和UV异常：颜色、alpha、roughness和metallic已进入Engine，不能假定未导出；结合纹理证据检查不合适的照片裁切、拉伸、透明表面后方遮挡及支承阴影。几何拼接需修改实际端点、交接面与轮廓，不能用改色掩盖缝隙。第一版先完成一个有明显视觉差异的完整候选，尽早真实预览；第二次仅纠正从预览确认的问题，不要求用完。不能把已经用过的失败策略重新包装。若本轮假设被原图否定，明确说明并选择有证据的替代改动。最终reason列明：问题归因、实际改动、预览观察及仍未解决项。如果关键需求缺少背侧或遮挡区域的观察证据，区分真实缺失和未取证；保留参考机位对齐，针对缺证据补充检查机位或调整已有检查机位，保持已覆盖区域的证据，在真实预览中核对，不再次只写暂缓。不要预测得分。\n'+REPAIR_TOOL_PROMPT;
  const result=await callValidated({role:'scene-refine',schemaContext:{repairComplexity:job.complexity},modelSettings:job.modelSettings,signal,maxTokens:16000,reservedCalls:2,images:[...images,...currentFrames,...used.images,...reusable.images],system,text:JSON.stringify(text),tools:feedback.kit},folder,v=>{validate(v);feedback.assertReviewed(v);return v;});
  const scene=apply(result.value);
- if(digest(JSON.stringify(read(join(sourceDir,'generated-scene.json'))))!==sourceDigest)throw Error('来源场景在修改期间变化');
+ if(digest(JSON.stringify(read(sourceSceneFile(job,sourceDir))))!==sourceDigest)throw Error('来源场景在修改期间变化');
  const unchanged=source.program.templates.filter((t:any)=>stable(t)===stable(scene.program.templates.find((x:any)=>x.id===t.id))).length;
  save(join(folder,'patch.json'),result.value);save(join(folder,'scene.json'),scene);save(join(folder,'receipt.json'),{method:'evidence-led-v1',sourceJobId:sourceJob.id,sourceDigest,sceneDigest:digest(JSON.stringify(scene)),unchangedTemplates:unchanged,changedTemplates:source.program.templates.length-unchanged,modelReceipt:result.receipt,quality:'not-assessed'});
  job.visualRefinement={method:'evidence-led-v1',sourceJobId:sourceJob.id,sourceScore:baseline.quality.score,originalSourceScore:sourceJob.quality.score,unchangedTemplates:unchanged,changedTemplates:source.program.templates.length-unchanged,addedTemplates:scene.program.templates.length-source.program.templates.length};return scene;

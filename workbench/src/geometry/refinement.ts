@@ -1,3 +1,4 @@
+import {sourceSceneFile} from './source-scene';
 import {scoreControlEvidence} from './score-controls';
 import {restoreRepairAttempt} from './repair-attempt-recovery';
 import {createRepairTools,REPAIR_TOOL_PROMPT} from './repair-tools';
@@ -145,7 +146,7 @@ ${CAMERA_CHANGE_PROMPT}
 ${GEOMETRY_RULES}`;
 
 export async function refineScene(job:any,plan:any,images:{path:string;mime:string}[],dir:string,signal:AbortSignal,from?:{dir:string;jobId:string;version:any;iteration:number}){
- const sourceDir=from?.dir??runDir(job.reuseSceneFrom),sourceId=from?.jobId??job.reuseSceneFrom,original=read(join(sourceDir,'generated-scene.json')) as SceneInput,textures=read(join(sourceDir,'materials/texture-registry.json'));
+ const sourceDir=from?.dir??runDir(job.reuseSceneFrom),sourceId=from?.jobId??job.reuseSceneFrom,original=read(sourceSceneFile(job,sourceDir)) as SceneInput,textures=read(join(sourceDir,'materials/texture-registry.json'));
  const sourceDigest=digest(JSON.stringify(original)),refs=images.map(i=>digest(readFileSync(i.path))),folder=join(dir,'refinement');mkdirSync(folder,{recursive:true});
  require(JSON.stringify(refs)===JSON.stringify((job.images??[]).map((i:any)=>i.id)),'参考图片内容与来源不一致');
  const runtime=read(join(sourceDir,'runtime/runtime.json')),frameNames=runtime.images.filter((x:string)=>/^reference-|^inspection-/.test(x));require(frameNames.length>0,'缺少用于修正的实际画面');
@@ -210,7 +211,7 @@ export async function refineScene(job:any,plan:any,images:{path:string;mime:stri
  // 单批次有效不代表组合有效：原三角形、部件、范围和目标约束再统一检查。
  const merged=applyRefinement(source,result.value,plan,images.length,job.complexity);assertPlannedRepair(source,merged,repairGoals);save(join(folder,'camera-preflight.json'),assertCameraPreflight(merged));
 
- signal.throwIfAborted();require(digest(JSON.stringify(read(join(sourceDir,'generated-scene.json'))))===sourceDigest,'修正期间原场景发生变化');
+ signal.throwIfAborted();require(digest(JSON.stringify(read(sourceSceneFile(job,sourceDir))))===sourceDigest,'修正期间原场景发生变化');
  const scene=applyRefinement(source,result.value,plan,images.length,job.complexity),unchanged=source.program.templates.filter(t=>JSON.stringify(t)===JSON.stringify(scene.program.templates.find(x=>x.id===t.id))).length;
  if(focus)save(join(folder,'focus-result.json'),{focus,after:assertRefinementFocus(source,scene,focus),quality:'not-assessed'});
  save(join(folder,'repair-goals-result.json'),assertPlannedRepair(source,scene,repairGoals));

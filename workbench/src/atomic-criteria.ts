@@ -19,6 +19,7 @@ export function validateCriteria(plan:any){
  if(!Array.isArray(rows)||rows.length<5||rows.length>100||new Set(rows.map(r=>r.id)).size!==rows.length)throw Error('原子验收标准数量或身份无效');
  const texts=new Set<string>();
  for(const r of rows){const req=reqs.get(r.requirementId),key=r.description?.replace(/\s/g,'');
+  if(req&&r.source!==req.source)throw Error('原子标准引用、维度、权重或依据无效：'+r.id+'；requirementId='+r.requirementId+' 的 source 必须沿用 '+req.source+'，当前为 '+r.source+'。保留原需求及原始依据；图像事实应引用具有图像依据的原需求，不能改写来源或降低关键性。');
   if(!/^[A-Za-z][A-Za-z0-9_-]{0,55}$/.test(r.id)||!req||!CRITERION_DIMENSIONS.includes(r.dimension)||!key||texts.has(key)||!Number.isFinite(r.weight)||r.weight<1||r.weight>5||typeof r.critical!=='boolean'||r.source!==req.source||!Array.isArray(r.evidence)||!r.evidence.length||r.evidence.some((s:any)=>typeof s!=='string'||!s.trim()))throw Error('原子标准引用、维度、权重或依据无效：'+r.id);
   if(r.source==='inferred'&&r.critical)throw Error('推断标准不可设为关键');texts.add(key);
  }

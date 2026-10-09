@@ -25,7 +25,7 @@ test('uploaded voxel goal freezes real hashes without fabricating manual confirm
  try{writeFileSync(join(root,id+'.png'),bytes);writeFileSync(join(root,id+'.json'),JSON.stringify({id,file:id+'.png'}));const refs=new ReferenceBaselines(join(root,'references'),root);
   const input=voxelInput({imageIds:[id],prompt:'还原原图'},refs),baseline=refs.assert(input);expect(baseline.approval.method).toBe('uploaded-image-goal');expect(baseline.origin).toBe('uploaded');expect(input.sceneKind).toBe('voxel');expect(()=>refs.assert({...input,prompt:'改变目标'})).toThrow();expect(()=>voxelInput({prompt:'没有原图'},refs)).toThrow();
   const regular=refs.create({imageIds:[id]});expect(()=>refs.approve(regular.id,'uploaded-image-goal')).toThrow();expect(refs.approve(regular.id).approval.method).toBe('explicit-ui-confirmation');
-  expect(generationInput({...input,images:[{id}]}).sceneKind).toBe('voxel');expect(freshSceneReservation({...input,matchingLevel:'standard'},{}).calls).toBe(8);expect(freshSceneReservation(input,{reuseSceneFrom:'saved'})).toBeNull();
+  expect(generationInput({...input,images:[{id}]}).sceneKind).toBe('voxel');expect(freshSceneReservation({...input,matchingLevel:'standard'},{})).toEqual(freshSceneReservation({matchingLevel:'standard'},{}));expect(freshSceneReservation(input,{reuseSceneFrom:'saved'})).toBeNull();
  }finally{rmSync(root,{recursive:true,force:true});}
 });
 test('native export authors real orthographic camera bounds and switches projection; regular templates unchanged',()=>{

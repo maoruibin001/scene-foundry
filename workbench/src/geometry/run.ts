@@ -69,17 +69,34 @@ function prepareScene(job:any,plan:any,dir:string,value:any,textures:any,provena
 }
 export async function runGeneralScene({job,plan,dir,signal,stage,command,preview,resetPreview,evaluate}:any){
  const images=(job.images??(job.image?[job.image]:[])).map((i:any)=>({path:join(UPLOADS,i.file),mime:i.mime}));
- job.generationMethod=job.sceneKind==='voxel'?'voxel-scene-v1':'general-geometry-v3';job.stageTrackingVersion='exclusive-stages-v1';job.iteration=0;
+ const legacyVoxel=job.sceneKind==='voxel'&&job.reuseSceneFrom&&!existsSync(join(runDir(job.reuseSceneFrom),'voxel-source-scene.json'));
+ job.generationMethod=job.sceneKind==='voxel'?(legacyVoxel?'voxel-scene-v1':'voxel-geometry-v2'):'general-geometry-v3';job.stageTrackingVersion='exclusive-stages-v1';job.iteration=0;
  assertFixedDependencies();
+ const finishScene=async(value:any,textures:any,provenance:any)=>{
+  if(job.sceneKind==='voxel'&&!legacyVoxel){
+   await stage('voxel',async()=>{
+    const source={...bindReferenceFrames(value,images),voxelizationTarget:{version:'shared-geometry-v2',resolution:128,requirements:plan.requirements}};save(join(dir,'voxel-source-scene.json'),source);
+    save(join(dir,'voxelization-input.json'),{source,plan,referenceCount:images.length,textures,options:{resolution:128}});
+    await command(['bun',join(ROOT,'src/voxel/convert.ts'),dir],240000);
+    const program=read(join(dir,'voxel-program.json')),metrics=read(join(dir,'voxel-metrics.json'));
+    job.voxel={...metrics,program:'voxel-program.json',editable:'scene.vox',palette:program.palette};
+    job.voxelPipelineVersion='shared-geometry-v2';value=read(join(dir,'voxelized-scene.json'));
+    for(const template of value.program.templates){const folder=join(dir,'generation','voxel-assets',template.id);mkdirSync(folder,{recursive:true});save(join(folder,'geometry.json'),{version:'asset-geometry-v1',template});}
+    provenance={...provenance,voxelization:{sourceSceneSha256:program.sourceSceneSha256,report:'voxelization-report.json',colorSource:'actual validated material colors and reference texture pixels',measuredColorRecovery:true}};
+    event(job,'voxel-generated',`${metrics.cells} 个真实占用格；保留${metrics.entities}个实体，体素画面仍须独立原图验收`);saveJob(job);
+   });
+  }
+  return stage('assembly',async()=>prepareScene(job,plan,dir,value,textures,provenance));
+ };
  const scene=await (async()=>{
-  if(job.sceneKind==='voxel'){
+  if(legacyVoxel){
    const produced=await stage('voxel',()=>generateVoxelScene({job,plan,images,root:dir,dir:join(dir,'generation/voxel'),signal}));
    return stage('assembly',async()=>prepareScene(job,plan,dir,produced.scene,{},produced.provenance));
   }
   const validate=(value:any)=>{const s=validateScene(value,plan,images.length),parts=s.program.instances.reduce((n,i)=>n+s.program.templates.find(t=>t.id===i.template)!.parts.length,0),c=sceneComplexity(s,job.complexity,parts);if(!c.passed)throw Error('所选复杂度未满足：'+JSON.stringify(c.checks));return s;};
   const source=job.reuseSceneFrom?join(runDir(job.reuseSceneFrom),'generated-scene.json'):null;
   // 在任何模型调用前校验保存场景和关系，完整场景仍须重新通过真实灰模验收。
-  const sourceScene=source?validate(read(source)):null,baseline=source?reusedSpatialBaseline(read(join(runDir(job.reuseSceneFrom),'job.json')),sourceScene):null;
+  const sourceScene=source?validate(read(job.sceneKind==='voxel'?join(runDir(job.reuseSceneFrom),'voxel-source-scene.json'):source)):null,baseline=source?reusedSpatialBaseline(read(join(runDir(job.reuseSceneFrom),'job.json')),sourceScene):null;
   if(baseline)save(join(dir,'spatial-reuse.json'),baseline.provenance);
   const progress=(phase:string,completed:number,total:number,current:string|null)=>{generationPhase(job,phase);job.generationProgress={phase,completed,total,current};event(job,'generation-progress',phase+(total?' '+completed+'/'+total:'')+(current?' · '+current:''));};
   const generationDir=join(dir,'generation'),ctx:any={job,plan,images,dir:generationDir,signal,stage,onProgress:(phase:string)=>progress(phase,0,0,null)};
@@ -145,9 +162,9 @@ export async function runGeneralScene({job,plan,dir,signal,stage,command,preview
    if(assets.length<layout.program.templates.length){job.partialOutput={completed:assets.length,total:layout.program.templates.length,missing:layout.program.templates.filter(t=>!assets.some(a=>a.template.id===t.id)).map(t=>({id:t.id,label:t.label})),reason:generated.fatal??(generated.timedOut?'制作时间窗已到，保留成功资产并进入草稿评分':null)??'独立资产在有界修正后仍未完成；保留成功资产并交付明确标记的草稿'};event(job,'partial-output','详细资产未齐，交付本次已生成几何组成的草稿，缺失详情公开，继续细化需恢复未完成资产。');}
    return assets;});
    for(const asset of assets)assertProceduralHandoff(asset,ctx.acceptedScene);
-   progress(job.partialOutput?'组装已完成资产与灰模草稿':'组装并检查完整场景',assets.length,steps.length,null);return await stage('assembly',async()=>{assertSpatialAccepted(job,layout);if(job.partialOutput){value=provisionalScene(layout,assets,read(join(generationDir,'blockout',String(job.blockout.currentRound??0),'scene.json')),plan,images.length).scene;}else{const raw={...layout,version:'scene-v1',program:{...layout.program,templates:layout.program.templates.map(t=>assets.find(a=>a.template.id===t.id)!.template)}};const fitted=fitAssemblyBudget(raw.program);save(join(dir,'assembly-budget.json'),fitted.report);if(fitted.report.changes.length){job.assemblyOptimization=fitted.report;event(job,'assembly-budget','旧资产总量超预算，已保留所有实例和结构，仅降低散布密度；原始资产保留，质量待验收。');}value=validate({...raw,program:fitted.program});}return prepareScene(job,plan,dir,value!,textures,provenance);});
+   progress(job.partialOutput?'组装已完成资产与灰模草稿':'组装并检查完整场景',assets.length,steps.length,null);assertSpatialAccepted(job,layout);if(job.partialOutput){value=provisionalScene(layout,assets,read(join(generationDir,'blockout',String(job.blockout.currentRound??0),'scene.json')),plan,images.length).scene;}else{const raw={...layout,version:'scene-v1',program:{...layout.program,templates:layout.program.templates.map(t=>assets.find(a=>a.template.id===t.id)!.template)}};const fitted=fitAssemblyBudget(raw.program);save(join(dir,'assembly-budget.json'),fitted.report);if(fitted.report.changes.length){job.assemblyOptimization=fitted.report;event(job,'assembly-budget','旧资产总量超预算，已保留所有实例和结构，仅降低散布密度；原始资产保留，质量待验收。');}value=validate({...raw,program:fitted.program});}return await finishScene(value!,textures,provenance);
   }
-  return await stage('assembly',async()=>{assertSpatialAccepted(job,value);return prepareScene(job,plan,dir,value!,textures,provenance);});
+  assertSpatialAccepted(job,value);return await finishScene(value!,textures,provenance);
   }finally{finishGeneration(job,job.structure?.passed?'passed':signal.aborted?'cancelled':'failed');if(layout&&existsSync(join(dir,'materials/texture-registry.json'))){try{const cp=checkpoints.register({job,planFile:join(dir,'plan.json'),generationDir,textureFile:join(dir,'materials/texture-registry.json'),provenance:{kind:job.reuseCheckpoint?'continuation':'job',pipelineVersion:job.pipelineVersion,parentCheckpoint:job.reuseCheckpoint??null}});job.checkpointId=cp.id;event(job,'checkpoint','已保存可续跑检查点：'+cp.assets.length+'/'+cp.total+' 类资产');}catch(error){event(job,'checkpoint-error','检查点未保存：'+String(error));}}}
  })();
  const proto=join(ROOT,'../prototype/bin/pipeline.ts'),maxRepairs=job.iterationPolicy?.maxVisualRepairs===null&&improvement.remaining(job.improvementId)>0?null:Math.min(job.iterationPolicy?.maxVisualRepairs??0,improvement.remaining(job.improvementId));
@@ -183,7 +200,7 @@ export async function runGeneralScene({job,plan,dir,signal,stage,command,preview
  refine:async(sourceIndex,index)=>{job.status='running';await stage('repair',async()=>{
   improvement.reserveRepair(job.improvementId,'final',job.review?.summary??'依据本轮真实画面的具体失败项修正');
    event(job,'visual-repair','自动视觉修正 '+index+(maxRepairs===null?'':'/'+maxRepairs)+'；复用第 '+sourceIndex+' 轮的最佳候选');
-   if(job.sceneKind==='voxel'){
+   if(legacyVoxel){
     const source=join(dir,'iterations',String(sourceIndex));
     const produced=await generateVoxelScene({job,plan,images,root:dir,dir:join(dir,'generation','iteration-'+index,'voxel'),signal},{folder:source,runtime:read(join(source,'runtime/runtime.json')),review:read(join(source,'review.json')),source:read(join(source,'voxel-program.json'))});
     resetPreview(job.id);job.previewUrl=null;prepareScene(job,plan,dir,produced.scene,{},produced.provenance);return;
@@ -195,7 +212,7 @@ export async function runGeneralScene({job,plan,dir,signal,stage,command,preview
   const materials=join(dir,'materials');mkdirSync(materials,{recursive:true});save(join(materials,'texture-request.json'),{references:images,textures:next.textures,reused:jobTextureReuse(job,next,images.map(i=>digest(readFileSync(i.path))))});
   await command([join(DATA,'reconstruction-env/bin/python'),join(ROOT,'src/geometry/textures.py'),materials]);
   resetPreview(job.id);job.previewUrl=null;
-  prepareScene(job,plan,dir,next,read(join(materials,'texture-registry.json')),read(join(materials,'texture-provenance.json')));
+  await finishScene(next,read(join(materials,'texture-registry.json')),read(join(materials,'texture-provenance.json')));
  });}
  });
  job.visualIterations={...result,maxRepairs,status:'completed'};

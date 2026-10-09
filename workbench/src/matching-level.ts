@@ -8,7 +8,7 @@ export const STANDARD_MATCHING={version:'standard-quality-v3',level:'standard',t
 export function matchingPolicy(level:MatchingLevel){return level==='standard'?{...STANDARD_MATCHING}:{version:'detailed-v1',level:'detailed'};}
 export function standardJob(job:any){return ['standard-hour-v1','standard-score-v2',STANDARD_MATCHING.version].includes(job?.matchingPolicy?.version);}
 export const STANDARD_GUIDANCE='本任务为标准还原档：优先保留可见主体、前后高低、遮挡、开口、参考机位、主要轮廓、材质类别与整体光照。允许细小比例、裂纹、锈迹和零碎装饰差异；未明确要求的小道具可用组合模板表达，但不可删除关键主体或凭空添加内容。优先用少量高表现力的几何部件，重复构件使用参数化复用。约80%的还原意图不是像素相似度或80分保证。不要把图中每个微小细节都提炼为独立强制需求；用户明确要求仍必须保留。';
-export function matchingGuidance(job:any){return [standardJob(job)?STANDARD_GUIDANCE:'',job.reconstructionGoal?IMAGE_GOAL_GUIDANCE:''].filter(Boolean).join('\n');}
+export function matchingGuidance(job:any){return [standardJob(job)?STANDARD_GUIDANCE:'',job.reconstructionGoal?IMAGE_GOAL_GUIDANCE:'',job.sceneKind==='voxel'?'目标是原图的体素风格：完整保留可见主体、建筑层次、真实开口及颜色分布。继续执行逐图观察、共享空间灰模验收、逐资产细化；不要把体素理解为几个大盒子或简化掉主要构造。使用不透明材质，细部几何随后由程序统一离散为方格。颜色和灯光按参考图，不要求照片级纹理；不能把体素作品水印或标题作为场景资产。':''].filter(Boolean).join('\n');}
 /** Deadline follows the original submission through technical continuations. */
 export function productionWindow(job:any,source?:any,extension=false,now=Date.now()){
  if(!standardJob(job))return null;

@@ -2,12 +2,14 @@ import { validateScene, type SceneInput } from "../geometry/scene-contract";
 import { compileGeometryProgram, type Part } from "../geometry/program";
 
 export const VOXEL_VERSION = "voxel-scene-v1";
+export const VOXEL_GRID_VERSION = "voxel-grid-v2";
 export const VOXEL_LIMITS = { dimension: 192, gridCells: 2_000_000, filledCells: 500_000, operationCells: 8_000_000, entities: 64, palette: 64, operations: 512, boxesPerEntity: 128, boxes: 2048 };
 type V = [number, number, number];
 export type VoxelOperation = { action: "fill" | "erase" | "paint"; shape: "box" | "ellipsoid" | "ramp"; min: V; size: V; palette: string | null; slopeAxis: "x" | "y"; reverse: boolean; overlap?:'reject'|'keep-existing'|'replace' };
 export type VoxelEntity = { id: string; label: string; category: string; role: "subject" | "context" | "ground"; requirementIds: string[]; operations: VoxelOperation[] };
 export type VoxelProgram = {
-  version: typeof VOXEL_VERSION; name: string; size: V; cellSize: number;
+  version: typeof VOXEL_VERSION | typeof VOXEL_GRID_VERSION; name: string; size: V; cellSize: number;
+  origin?: V; runs?: [number, number, number, number][]; sourceSceneSha256?: string;
   palette: { id: string; color: string }[]; entities: VoxelEntity[];
   cameras: { name: string; referenceIndex: number | null; position: V; target: V; projection: "perspective" | "orthographic"; fov: number; orthographicHeight: number | null }[];
   lighting: SceneInput["lighting"]; assumptions: string[];
@@ -24,6 +26,7 @@ export function paletteColor(hex: string): [number, number, number, number] {
 
 /** Execute integer-grid solids. Cross-entity composition must be explicitly authored. */
 export function voxelGrid(program: VoxelProgram): VoxelGrid {
+  if(program?.version===VOXEL_GRID_VERSION)return decodedVoxelGrid(program);
   assert(program?.version === VOXEL_VERSION, "体素数据版本无效");
   assert(typeof program.name === "string" && program.name.trim(), "场景名称缺失");
   assert(vector(program.size, 1, VOXEL_LIMITS.dimension), "网格尺寸须为 1–192 的整数");
@@ -79,6 +82,25 @@ export function voxelGrid(program: VoxelProgram): VoxelGrid {
   return { size: program.size, cellSize: program.cellSize, colors, owners, filled, operations,composition };
 }
 
+/** Explicit occupied cells from validated geometry; never infer occupancy from entity labels. */
+export function decodedVoxelGrid(program:VoxelProgram):VoxelGrid {
+ assert(program.version===VOXEL_GRID_VERSION&&vector(program.size,1,VOXEL_LIMITS.dimension),'体素网格版本或尺寸无效');
+ const cells=program.size.reduce((a,b)=>a*b,1);
+ assert(cells<=VOXEL_LIMITS.gridCells&&Number.isFinite(program.cellSize)&&program.cellSize>0&&program.cellSize<=1,'体素网格范围或格尺寸超限');
+ assert(program.origin?.length===3&&program.origin.every(n=>Number.isFinite(n)&&Math.abs(n)<=1000),'体素网格原点无效');
+ assert(/^[a-f0-9]{64}$/.test(program.sourceSceneSha256??''),'体素化缺少冻结几何来源');
+ assert(program.palette.length>0&&program.palette.length<=VOXEL_LIMITS.palette&&new Set(program.palette.map(p=>p.id)).size===program.palette.length&&program.palette.every(p=>id(p.id)&&/^#[a-fA-F0-9]{6}$/.test(p.color)),'体素颜色表无效');
+ assert(program.entities.length>0&&program.entities.length<=VOXEL_LIMITS.entities&&new Set(program.entities.map(e=>e.id)).size===program.entities.length&&program.entities.every(e=>/^[A-Za-z][A-Za-z0-9_-]{0,55}$/.test(e.id)&&['subject','context','ground'].includes(e.role)),'体素实体身份无效');
+ assert(Array.isArray(program.runs)&&program.runs.length>0&&program.runs.length<=VOXEL_LIMITS.filledCells,'体素格记录为空或超限');
+ const colors=new Uint8Array(cells),owners=new Uint8Array(cells),counts=new Uint32Array(program.entities.length+1);let filled=0,end=0;
+ for(const run of program.runs){assert(Array.isArray(run)&&run.length===4,'体素格编码无效');const [start,length,owner,color]=run;
+  assert(integer(start,end,cells-1)&&integer(length,1,cells-start)&&integer(owner,1,program.entities.length)&&integer(color,1,program.palette.length),'体素格越界、重叠或引用无效');
+  filled+=length;assert(filled<=VOXEL_LIMITS.filledCells,'占用格超过50万');end=start+length;owners.fill(owner,start,end);colors.fill(color,start,end);counts[owner]+=length;
+ }
+ assert(program.entities.every((_,i)=>counts[i+1]>0),'体素化丢失了实体；不能交付只保留标签的场景');
+ return {size:program.size,cellSize:program.cellSize,colors,owners,filled,operations:program.runs.length,composition:{keptCells:0,replacedCells:0}};
+}
+
 /** Merge only equal-color, equal-owner cells; the result exactly preserves occupied volume. */
 export function voxelBoxes(grid: VoxelGrid) {
   const [width, depth, height] = grid.size, visited = new Uint8Array(grid.colors.length);
@@ -104,11 +126,12 @@ export function voxelBoxes(grid: VoxelGrid) {
 
 export function compileVoxelScene(program: VoxelProgram, plan: any, referenceCount: number) {
   const grid = voxelGrid(program), surfaces = voxelSurfaces(grid), unit = program.cellSize;
+  const origin=program.version===VOXEL_GRID_VERSION?program.origin!:[0,0,0];
   const materials = program.palette.map(p => ({ id: p.id, color: paletteColor(p.color), roughness: 1, metallic: 0, textureId: null }));
   const templates = program.entities.map((entity, index) => ({ id: "tpl_" + entity.id, parts: surfaces.filter(surface => surface.owner === index + 1).map((surface): Part => ({
     id: "color_" + surface.color, material: program.palette[surface.color - 1].id,
     position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1],
-    shape: { type: "indexedMesh", positions: surface.positions.map(p => p.map(n => n * unit) as V), triangles: surface.triangles }, smoothAngle: 0,
+    shape: { type: "indexedMesh", positions: surface.positions.map(p => p.map((n,k) => origin[k]+n * unit) as V), triangles: surface.triangles }, smoothAngle: 0,
   })) }));
   const scene: SceneInput = {
     version: "scene-v1", program: { version: "geometry-v1", name: program.name, materials, templates,
@@ -117,7 +140,7 @@ export function compileVoxelScene(program: VoxelProgram, plan: any, referenceCou
     cameras: program.cameras.map(c => {
       assert(["perspective", "orthographic"].includes(c.projection), "相机投影类型无效");
       assert(c.projection !== "orthographic" || Number.isFinite(c.orthographicHeight) && c.orthographicHeight! > 0 && c.orthographicHeight! <= 500, "正交相机须有有效的垂直覆盖格数");
-      return { ...c, position: c.position.map(n => n * unit), target: c.target.map(n => n * unit), orthographicHeight: c.orthographicHeight === null ? null : c.orthographicHeight * unit };
+      return program.version===VOXEL_GRID_VERSION?{...c}:{ ...c, position: c.position.map(n => n * unit), target: c.target.map(n => n * unit), orthographicHeight: c.orthographicHeight === null ? null : c.orthographicHeight * unit };
     }),
     lighting: program.lighting, textures: [], textureReuse: [], assumptions: program.assumptions,
   };
