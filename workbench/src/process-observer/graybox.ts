@@ -13,6 +13,8 @@ export function grayboxSnapshot(job: any, base: string, reader: Reader, session:
   const blockout = job.blockout, basis = blockout?.repairBasis;
   const round = basis ? basis.round : blockout?.currentRound;
   if (!blockout || !roundId(round)) return { value: null, warnings: [] };
+  // A diagnosed continuation retains a foreign source as its basis, not as this job's own output.
+  if(basis?.jobId!==undefined&&basis.jobId!==job.id&&job.spatialRepairSource?.jobId===basis.jobId&&job.spatialRepairSource?.round===round&&job.spatialDiagnosis?.sourceJobId===basis.jobId&&job.spatialDiagnosis?.sourceRound===round)return {value:null,warnings:[]};
   const folder = `generation/blockout/${round}`, prefix = `${base}/${folder}`;
   try {
     if (basis && (basis.jobId !== job.id || typeof basis.folder !== "string" ||

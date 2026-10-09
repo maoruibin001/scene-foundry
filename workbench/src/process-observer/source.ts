@@ -185,7 +185,10 @@ export class Source {
       const value = r.json(`${base}/${name}`);
       if (value) files[name] = value;
     }
-    for (const folder of ["", "generation/", "generation/voxel/", "generation/iteration-1/voxel/", "generation/iteration-2/voxel/", "generation/refinement/", "generation/blockout/0/", "generation/blockout/1/", "generation/blockout/2/", "generation/space-repair-1/", "generation/space-repair-2/", "generation/iteration-1/refinement/", "generation/iteration-2/refinement/"])
+    const numericFolders=(basePath:string,pattern:RegExp)=>this.reader.list(basePath,256).filter(name=>pattern.test(name)).sort((a,b)=>Number(b.match(/\d+$/)?.[0])-Number(a.match(/\d+$/)?.[0])).slice(0,64);
+    const repairs=numericFolders(`${base}/generation`,/^space-repair-\d{1,4}$/).map(name=>`generation/${name}/`);
+    const blockouts=numericFolders(`${base}/generation/blockout`,/^\d{1,4}$/).map(name=>`generation/blockout/${name}/`);
+    for (const folder of ["", "generation/", ...repairs, ...blockouts, "generation/voxel/", "generation/iteration-1/voxel/", "generation/iteration-2/voxel/", "generation/refinement/", "generation/iteration-1/refinement/", "generation/iteration-2/refinement/"])
       for (const f of this.reader.list(`${base}/${folder}`, 96)) {
         if (FILE.test(f)) {
           const rel = folder + f,

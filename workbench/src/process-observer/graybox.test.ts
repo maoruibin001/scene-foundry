@@ -124,3 +124,15 @@ test("ambiguous reference bindings stay unknown and producer text is escaped", (
   const d = f.source.detail(f.key); expect(referenceFrame(displayFrames(d), 0)).toBeNull();
   expect(grayboxSummary({ ...d.graybox, limitation: "<script>bad</script>" })).not.toContain("<script>");
 });
+
+test('explicit diagnosed foreign basis stays source evidence and never becomes current output or a false corruption warning',()=>{
+ const f=fixture(),child='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',base=`runs/${child}`;
+ mkdirSync(join(f.root,base),{recursive:true});
+ const job={...f.job,id:child,status:'running',stage:'space',spatialRepairSource:{jobId:id,round:1},spatialDiagnosis:{sourceJobId:id,sourceRound:1},blockout:{...f.job.blockout,rounds:[]}};
+ writeFileSync(join(f.root,base,'job.json'),JSON.stringify(job));
+ const source=new Source(f.root),detail=source.detail('run:'+child);
+ expect(detail.graybox).toBeNull();expect(detail.artifacts).toHaveLength(0);expect(detail.warnings.join()).not.toContain('选优来源不属于');
+ expect(detail.milestones.grayboxGenerated).toBe(false);expect(detail.milestones.visual).toBe(false);
+ expect(()=>source.media(`${f.base}/generation/blockout/1/runtime/reference-1.png`)).toThrow();
+ job.spatialDiagnosis.sourceRound=0;writeFileSync(join(f.root,base,'job.json'),JSON.stringify(job));source.detailCache.clear();expect(source.detail('run:'+child).warnings.join()).toContain('选优来源不属于');
+});

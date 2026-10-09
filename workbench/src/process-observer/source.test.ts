@@ -163,3 +163,16 @@ test("目标选择工件随原始与自动修正轮次读取，过程页可查�
  }
  const d=new Source(root).detail("run:"+id);expect(Object.keys(d.files).filter(k=>k.endsWith("repair-goals.json"))).toHaveLength(3);expect(Object.keys(d.files).filter(k=>k.endsWith("repair-history.json"))).toHaveLength(3);expect(d.children.find(s=>s.id==="scene-repair-plan").status).toBe("passed");
 });
+
+test('diagnosed round0 and later repair rounds expose record-scoped live output without scanning unrelated folders',()=>{
+ const root=temp(),id='00000000-0000-0000-0000-000000000012',base=`runs/${id}`;
+ save(root,`${base}/job.json`,{id,status:'running',stage:'space',stages:{space:{status:'running',startedAt:Date.now()}},events:[]});
+ for(const folder of ['space-repair-0','space-repair-7','space-repair-unrelated']){
+  save(root,`${base}/generation/${folder}/scene-space-execution.json`,{status:'running',role:'scene-space',startedAt:new Date().toISOString(),model:'fixture'});
+  writeFileSync(join(root,base,'generation',folder,'scene-space-stdout.log'),'actual append-only CLI output');
+ }
+ const source=new Source(root),detail=source.detail('run:'+id),names=detail.calls.map((c:any)=>c.id);
+ expect(names).toContain('generation/space-repair-0/scene-space');expect(names).toContain('generation/space-repair-7/scene-space');expect(names).not.toContain('generation/space-repair-unrelated/scene-space');
+ expect(source.call('run:'+id,'generation/space-repair-0/scene-space','stdout').text).toBe('actual append-only CLI output');
+ expect(()=>source.call('run:'+id,'generation/space-repair-unrelated/scene-space','stdout')).toThrow('当前记录');
+});
