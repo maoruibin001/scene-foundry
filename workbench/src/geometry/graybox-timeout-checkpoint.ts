@@ -38,6 +38,7 @@ export function canRecoverGrayboxPreview(input:GrayboxTimeoutCheckpointInput):bo
   if(!object(target)||!object(source)||!object(expectedBasis)||!object(execution)||!object(recovery))return false;
   if(!uuid(source.id)||target.recoverySourceJobId!==source.id||source.status!=='blocked'||cancelled(source)||cancelled(target)||!validFolder(sourceFolder,source.id))return false;
   if(!exhausted(source.error)||!['failed','blocked'].includes(source.stages?.space?.status))return false;
+  if(source.blockout?.currentRound!==undefined&&source.blockout.currentRound!==0)return false;
   const root=source.executionRecoveryRoot??source.id;
   if(!nonempty(root)||target.executionRecoveryRoot!==root||!nonempty(source.reuseMode)||target.reuseMode!==source.reuseMode)return false;
   for(const key of ['prompt','modelSettings','policy'])if(!nonempty(source.prompt)||!same(target[key],source[key]))return false;

@@ -32,6 +32,8 @@ test('供应商认证、余额、调用预算、存储错误及真实用户取�
  for(const change of changes){const f=fixture();change(f);expect(canRecoverGrayboxPreview(f)).toBe(false);}
 });
 test('恢复目录必须是该来源的直接space-repair-0路径，不能访问其他轮或跨任务',()=>{
+ const later=fixture();later.source.blockout={currentRound:1};expect(canRecoverGrayboxPreview(later)).toBe(false);
+ const initial=fixture();initial.source.blockout={currentRound:0};expect(canRecoverGrayboxPreview(initial)).toBe(true);
  for(const folder of ['space-repair-0','generation/space-repair-1','/owned/data/runs/11111111-1111-4111-8111-111111111111/generation/space-repair-0','/owned/data/runs/dd15f78b-6bd2-4eea-9443-fbb397d76ca4/generation/../generation/space-repair-0','/owned/data/runs/dd15f78b-6bd2-4eea-9443-fbb397d76ca4/generation/space-repair-0/preview','generation\\space-repair-0','/owned/%2e%2e/data/runs/dd15f78b-6bd2-4eea-9443-fbb397d76ca4/generation/space-repair-0']){const f=fixture();f.sourceFolder=folder;expect(canRecoverGrayboxPreview(f)).toBe(false);}
 });
 test('异常或非JSON参数返回false，不抛出或执行操作',()=>{
