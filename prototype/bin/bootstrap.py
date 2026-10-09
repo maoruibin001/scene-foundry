@@ -1,5 +1,5 @@
 """Prepare exact local source dependencies without switching an existing checkout."""
-import json,os,pathlib,subprocess
+import json,os,pathlib,subprocess,sys
 root=pathlib.Path(__file__).resolve().parents[1];brief=json.loads((root/'brief.json').read_text())
 def run(args,cwd,env=None):
  print('+', ' '.join(args),flush=True);subprocess.run(args,cwd=cwd,env=env,check=True)
@@ -13,6 +13,10 @@ for name,url,key in [('engine','https://github.com/ForgeaXGame/forgeax-engine.gi
  if actual!=brief[key]:raise SystemExit(f'{name}: wrong HEAD; existing checkout was not changed')
  run(['git','diff','--quiet','HEAD'],path)
  if name=='engine':
+  native=path/'packages/dawn-node/scripts/prepare-native.mjs'
+  sdk=pathlib.Path('/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk')
+  if sys.platform=='darwin' and native.exists() and '/Applications/Xcode.app/' in native.read_text() and not sdk.exists():
+   raise SystemExit('Engine native preparation requires complete Xcode at /Applications/Xcode.app; CommandLineTools alone is insufficient. No Engine install/build was started. See docs/engine-upgrade-20261009.md.')
   env={**os.environ,'FORGEAX_SKIP_HARNESS_SYNC':'1','FORGEAX_PACKAGE_BUILD_CONCURRENCY':'2'}
   run(['corepack','pnpm','install','--frozen-lockfile'],path,env)
   run(['corepack','pnpm','build:engine'],path,env)

@@ -9,7 +9,7 @@
   "args": [{"segments": 16, "seed": 23}],
   "packageId": "61b8d6f1-150f-41c7-a2be-b7890d1c7618",
   "sourceKey": "scene/micro-garden",
-  "engineSha": "f2eb6c0893f1df2310514b95e76dad24c6d2fc0d",
+  "engineSha": "2d6b522660d4e4bdea6bc660e00fdf4a47f506e7",
   "generatorSha": "c3943a5026fc5f32f1b4993d542e1f372656049c",
   "budget": {"maxTriangles": 20000, "maxMaterials": 16, "consumerBuildMs": 15000},
   "externalAssets": {"required": false, "status": "not-requested"}
