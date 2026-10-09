@@ -28,6 +28,18 @@ test('机位编号与接触身份保留，接缝采样不能删除',()=>{
  const n=applyGrayboxSpaceRepair(s,p,v=>v).value;expect(n.cameras[0].referenceIndex).toBe(1);expect(n.spatialContacts[0].kind).toBe('seam');
  expect(()=>applyGrayboxSpaceRepair(s,{...p,contacts:[{id:'seam',points:[[0,.1,0]]}]},v=>v)).toThrow('采样数');
 });
+
+test('正交修正实际覆盖高度，保持投影与画幅；透视、超界或旧契约不能借新字段改变投影',()=>{
+ const s:any=space();s.cameras[0]={...s.cameras[0],projection:'orthographic',orthographicHeight:4,frame:{width:1000,height:1000}};
+ const camera={name:'参考',position:[0,-2,1.5],target:[0,5,1.5],fov:1,orthographicHeight:5};
+ const p={...patch(),instances:[],cameras:[camera]},before=JSON.stringify(s),next=applyGrayboxSpaceRepair(s,p,v=>v).value;
+ expect(next.cameras[0]).toEqual({...s.cameras[0],orthographicHeight:5});expect(JSON.stringify(s)).toBe(before);
+ expect(grayboxSpaceRepairSchema().properties.cameras.items.properties.orthographicHeight).toBeDefined();
+ for(const height of [null,0,9,NaN])expect(()=>applyGrayboxSpaceRepair(s,{...p,cameras:[{...camera,orthographicHeight:height}]},v=>v)).toThrow('覆盖高度');
+ expect(()=>applyGrayboxSpaceRepair(space(),p,v=>v)).toThrow('投影类型');
+ expect(()=>applyGrayboxSpaceRepair(s,{...p,version:'graybox-space-repair-v6'},v=>v)).toThrow('字段不符');
+ expect(applyGrayboxSpaceRepair(s,{...p,version:'graybox-space-repair-v6',cameras:[{name:camera.name,position:[0,-2,1.6],target:camera.target,fov:1}]},v=>v).value.cameras[0].orthographicHeight).toBe(4);
+});
 test('空补丁、只有原因或只改未知关系不触发原画面重跑，完整布局校验仍执行',()=>{
  const p={...patch(),instances:[]};expect(()=>applyGrayboxSpaceRepair(space(),p,v=>v)).toThrow('NO_ACTIONABLE_CHANGE');
  expect(()=>applyGrayboxSpaceRepair(space(),{...patch(),checks:[{...patch().checks[0],relationIds:['unknown']}]},v=>v)).toThrow('冻结关系');

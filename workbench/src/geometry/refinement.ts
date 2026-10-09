@@ -31,6 +31,7 @@ import {resolveTextureReuse} from './texture-library';
 import {CATALOG_GUIDANCE} from './material-catalog';
 import {repairHistory} from './repair-history';
 import {prepareVisibilityEvidence} from './visibility-evidence';
+import {ensureProjectionEvidence} from './projection-evidence';
 import {VISIBILITY_PROMPT} from './visibility';
 import {cameraChangeHistory} from './camera-change-history';
 import {CAMERA_CHANGE_PROMPT} from './camera-change';
@@ -158,7 +159,8 @@ export async function refineScene(job:any,plan:any,images:{path:string;mime:stri
  const reflection={...repairReflection(baseline.quality,previousRepairs),scoreControls:scoreControlEvidence(job,sourceDigest)};save(join(folder,'repair-reflection.json'),reflection);event(job,'repair-reflection','已读取 '+reflection.verifiedAttempts+' 份同契约修复证据；最大差距：'+reflection.dimensions.slice(0,2).map(d=>d.id+' 缺 '+d.pointsLost+' 分').join('、'));
  const cameraChangeFeedback=cameraChangeHistory(sourceDir,original,textures);
  if(cameraChangeFeedback){save(join(folder,'camera-change.json'),cameraChangeFeedback);event(job,'camera-change','已核对历史来源，对比 '+cameraChangeFeedback.views.length+' 个调整机位的同几何遮挡变化；仅辅助修正，不改写评分');}
- const visibility=prepareVisibilityEvidence(source,textures,folder,sourceDir,runtime,frameNames);
+ const projection=await ensureProjectionEvidence(source,images,refs,sourceDir,runtime,folder,signal);
+ const visibility=prepareVisibilityEvidence(source,textures,folder,projection.sourceFolder,projection.runtime,frameNames);
  const [textureEvidence,reusableTextureEvidence]=await Promise.all([repairTextureEvidence(source,textures,folder,signal,images),repairReusableTextureEvidence(refs,folder,signal)]);
  const requirementFeedback=repairRequirementFeedback(plan,review,source,visibility.context,previousRepairs);save(join(folder,'requirement-feedback.json'),requirementFeedback);
  const inputImages=[...images,...frameNames.map((name:string)=>({path:join(sourceDir,'runtime',name),mime:'image/png'})),...visibility.images,...textureEvidence.images,...reusableTextureEvidence.images];
