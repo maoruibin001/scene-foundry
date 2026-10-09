@@ -42,6 +42,18 @@ test('上下文位置、相机或缺少模板拒绝；灯光和选图依据改�
  const reviewOnly=structuredClone(context);reviewOnly.review.relations[0].reason='新的文字说明';
  expect(assetContextContract(layout,reviewOnly)).toBe(original);
 });
+test('上下文机位优先具体模板证据；共享全图不能挤掉可用局部机位',()=>{
+ const l=structuredClone(layout),c=structuredClone(context);
+ l.observedBindings.push({landmarkId:'global',instanceIds:['near','back']});
+ c.observation.landmarks.push({id:'global',views:[{referenceIndex:1,box:[0,0,1,1]}]});
+ const before=stable([l,c]),h=assetSpatialHandoff(brief,l,c);
+ expect(h.referenceCamera).toEqual(layout.cameras[1]);expect(h.referenceCameraEvidence).toMatchObject({scope:'template-group',landmarkIds:['observed']});
+ expect(h.relations).toHaveLength(1);expect(stable([l,c])).toBe(before);
+ c.observation.landmarks=c.observation.landmarks.filter((v:any)=>v.id==='global');
+ const fallback=assetSpatialHandoff(brief,l,c);expect(fallback.referenceCamera).toEqual(layout.cameras[0]);
+ expect(fallback.referenceCameraEvidence).toMatchObject({scope:'shared-context-only',landmarkIds:['global']});
+ c.observation.landmarks=[];expect(assetSpatialHandoff(brief,l,c).referenceCameraEvidence.scope).toBe('unverified');
+});
 test('两个候选额度不变；局部与上下文收据同时通过才可选择，篡改拒绝',async()=>{
  const folder=mkdtempSync(join(tmpdir(),'asset-context-')),ref=join(folder,'ref.png');writeFileSync(ref,'fixture reference');
  const renders:any[]=[];let failContext=false;

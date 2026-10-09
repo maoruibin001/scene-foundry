@@ -1,7 +1,7 @@
 import {test,expect} from 'bun:test';
 import {validateLayout,validateAsset,assembleScene,layoutSchema,assetSchema,LAYOUT_PROMPT,ASSET_PROMPT,type SceneLayout,type AssetGeometry} from './layout';
 import {compileGeometryProgram} from './program';
-import {validateSpace,applySurface,spaceSchema,surfaceSchema,type SpaceLayout,type SurfacePlan} from './layout-stages';
+import {validateSpace,applySurface,spaceSchema,surfaceSchema,SPACE_PROMPT,type SpaceLayout,type SurfacePlan} from './layout-stages';
 const pose={position:[0,0,0] as [number,number,number],rotation:[0,0,0] as [number,number,number],scale:[1,1,1] as [number,number,number]};
 const plan={requirements:[{id:'required_shape',critical:true,count:2}]};
 function layout():SceneLayout{return {version:'scene-layout-v1',program:{version:'geometry-v1',name:'双凹形构造',materials:[{id:'mat',color:[.5,.4,.3,1],roughness:.8,metallic:0,textureId:null}],templates:[{id:'novel',label:'凹形支架',origin:'底面左下角，Z向上',description:'两个正交臂与真实缺口',bounds:{min:[0,0,0],max:[3,3,.4]},materialIds:['mat'],maxParts:8}],instances:[{...pose,id:'one',label:'第一支架',template:'novel',requirementIds:['required_shape']},{...pose,id:'two',label:'第二支架',template:'novel',position:[5,0,0],requirementIds:['required_shape']}]},entities:[{instanceId:'one',role:'subject',category:'new_shape'},{instanceId:'two',role:'subject',category:'new_shape'}],cameras:[{name:'参考视角',referenceIndex:1,position:[8,-6,4],target:[4,1,0],fov:1},{name:'另一参考视角',referenceIndex:2,position:[-4,6,3],target:[4,1,0],fov:1}],textures:[],lighting:{direction:[0,.5,-1],color:[1,1,1],intensity:1,ambientColor:[1,1,1],ambientIntensity:.5,points:[]},assumptions:['背面形状为推断']};}
@@ -45,4 +45,50 @@ test('分开空间与表面规划，不注入虚构材质，不允许表面步�
  expect(()=>applySurface(space,{...surface,bindings:[{templateId:'another',materialIds:['mat']}]},plan,2,'simple')).toThrow('每个冻结模板');
  expect(()=>applySurface(space,{...surface,materials:[]},plan,2,'simple')).toThrow('材质');
  const missing=structuredClone(space);missing.cameras[0].referenceIndex=null;expect(()=>validateSpace(missing,plan,2,'simple')).toThrow('参考图');
+});
+
+test('布局及空间生成契约提前公开既有数值边界，避免运行时才发现非法坐标',()=>{
+ for(const schema of [layoutSchema(),spaceSchema()]){
+  const brief=schema.properties.program.properties.templates.items.properties;
+  expect(brief.bounds.properties.min.items).toEqual({type:'number',minimum:-100,maximum:100});
+  expect(brief.bounds.properties.max.items).toEqual({type:'number',minimum:-100,maximum:100});
+  expect(brief.maxParts).toEqual({type:'integer',minimum:1,maximum:64});
+  const camera=schema.properties.cameras.items.properties;
+  expect(camera.position.items).toEqual({type:'number',minimum:-100,maximum:100});
+  expect(camera.target.items).toEqual({type:'number',minimum:-100,maximum:100});
+  expect(camera.fov).toEqual({type:'number',minimum:.3,maximum:2.2});
+ }
+ expect(SPACE_PROMPT).toContain('-100..100');expect(LAYOUT_PROMPT).toContain('严格大于 0.001');
+});
+test('一次错误列出全部非法边界的对象、轴和值，不钳制或改写输入',()=>{
+ const l=layout();l.program.templates[0].bounds.max=[3,145,.4];
+ l.program.templates.push({...structuredClone(l.program.templates[0]),id:'other',bounds:{min:[-600,0,0],max:[600,3,4]}});
+ const before=JSON.stringify(l);let message='';try{validateLayout(l,plan,2,'simple')}catch(e){message=String(e)}
+ for(const value of ['novel.bounds.max[1]=145','other.bounds.min[0]=-600','other.bounds.max[0]=600','-100..100'])expect(message).toContain(value);
+ expect(JSON.stringify(l)).toBe(before);
+});
+test('合法边界端点仍接受，退化跨度仍拒绝并指明对应轴',()=>{
+ const l=layout();l.program.templates[0].bounds={min:[-100,-100,-100],max:[100,100,100]};
+ expect(validateLayout(l,plan,2,'simple')).toBe(l);
+ l.program.templates[0].bounds={min:[0,0,0],max:[3,3,.001]};
+ expect(()=>validateLayout(l,plan,2,'simple')).toThrow('novel.bounds 第2轴跨度=0.001');
+});
+test('缺维、字符串与非有限边界保留非法原值并拒绝',()=>{
+ for(const value of [[1,2],[1,2,'3'],[1,2,NaN],[1,2,Infinity]]){
+  const l=layout();l.program.templates[0].bounds.max=value as number[];
+  expect(()=>validateLayout(l,plan,2,'simple')).toThrow('novel.bounds.max');
+  expect(l.program.templates[0].bounds.max).toBe(value);
+ }
+});
+test('实例超范围反馈字段与身份，原来的尺度和弧度限制不放宽',()=>{
+ for(const [field,value] of [['position',[0,101,0]],['rotation',[0,0,7]],['scale',[1,0,1]]] as const){
+  const l=layout();l.program.instances[0][field]=[...value];
+  expect(()=>validateLayout(l,plan,2,'simple')).toThrow('实例 one.'+field);
+ }
+});
+test('相机错误指出具体机位及范围，不把非法目标换成原点',()=>{
+ const l=layout();l.cameras[0].target=[0,101,0];l.cameras[0].fov=9;const before=JSON.stringify(l);
+ let message='';try{validateLayout(l,plan,2,'simple')}catch(e){message=String(e)}
+ expect(message).toContain('参考视角.target[1]=101');expect(message).toContain('参考视角.fov=9');expect(message).toContain('0.3..2.2');
+ expect(JSON.stringify(l)).toBe(before);
 });

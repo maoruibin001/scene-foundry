@@ -1,3 +1,4 @@
+import {preserveInitialSpaceDraft} from './space-draft';
 import {assetGeometryBasis,assetGeometryBasisMatches} from './asset-geometry-basis';
 import {VOXEL_LIMITS} from '../voxel/program';
 import {generateVoxelScene} from '../voxel/generate';
@@ -24,7 +25,7 @@ import {assertSpatialAccepted} from './spatial-order';
 import {checkpointSpatialInput,assertCheckpointSpace} from './checkpoint-space';
 import {reusedSpatialBaseline} from './reused-space';
 import {recoverSpatialAcceptance} from './spatial-recovery';
-import {acceptSpatialLayout} from './blockout';
+import {acceptSpatialLayout,renderBlockout} from './blockout';
 import {improvement} from '../improvement-governance';
 import {restoreSavedRefinement} from './refinement-recovery';
 import {inspectOpenings,openingSummary} from './openings';
@@ -105,6 +106,7 @@ export async function runGeneralScene({job,plan,dir,signal,stage,command,preview
   let layout:any=null;
   try{
   ctx.acceptSpace=(space:any)=>acceptSpatialLayout(space,ctx,command,stage);
+  ctx.preserveSpaceDraft=async(snapshot:any,error:unknown)=>{const result=await preserveInitialSpaceDraft(ctx,snapshot,error,renderBlockout,command);job.spaceDraft=result;saveJob(job);if(result.status==='available')event(job,'layout-draft','已保存当前规划的范围线框草稿；原执行失败保留，空间与成品均未验收。');return result;};
   layout=source?null:restored?.layout??await generateLayout(ctx);saveJob(job);const reused=source?validate(job.reuseRefinementOutput?restoreSavedRefinement(job,plan,images,generationDir,signal):job.refineScene?await stage('repair',()=> (job.refinementMode==='evidence-led'?refineWithEvidence:job.refinementMode==='camera-alignment'?alignCameras:refineScene)(job,plan,images,generationDir,signal)):sourceScene):null;
   if(restored){
    const localObservation=join(generationDir,'reference-observations.json'),sourceObservation=join(runDir(restored.manifest.sourceJobId),'generation/reference-observations.json');

@@ -3,7 +3,8 @@ import {geometryProgramSchema,GEOMETRY_RULES} from './program-schema';
 import {validateGeometryProgram,type GeometryProgram} from './program';
 import {openingsSchema,validateOpenings,OPENINGS_PROMPT,type SpatialOpening} from './openings';
 import {contactsSchema,validateContacts,CONTACTS_PROMPT,type SpatialContact} from './contacts';
-const num={type:'number'},str={type:'string'},vector={type:'array',items:num,minItems:3,maxItems:3};
+import {CAMERA_FOV,coordinateVectorSchema,vectorErrors} from './constraints';
+const num={type:'number'},str={type:'string'};
 const arr=(items:any)=>({type:'array',items}),obj=(properties:any)=>({type:'object',properties,required:Object.keys(properties),additionalProperties:false});
 // 语义类别是显示和计数用的文本，不是资产 ID、文件名或路径。
 const categoryPattern='^[^\\s\\u0000-\\u001f\\u007f-\\u009f](?:[^\\u0000-\\u001f\\u007f-\\u009f]{0,54}[^\\s\\u0000-\\u001f\\u007f-\\u009f])?$';
@@ -14,10 +15,9 @@ export function semanticCounts(entities:{category:string}[]):Record<string,numbe
  return counts;
 }
 export type SceneInput={spatialContacts?:SpatialContact[];spatialOpenings?:SpatialOpening[];textureReuse?:{textureId:string;assetId:string;reason:string}[];version:'scene-v1';program:GeometryProgram;entities:{instanceId:string;role:'subject'|'context'|'ground';category:string}[];cameras:{projection?:'perspective'|'orthographic';orthographicHeight?:number|null;frame?:{width:number;height:number};name:string;referenceIndex:number|null;position:number[];target:number[];fov:number}[];textures:{id:string;referenceIndex:number;quad:number[][];size:number;description:string}[];lighting:SceneLighting;assumptions:string[]};
-export function sceneSchema(ids?:string[]){return obj({spatialContacts:contactsSchema(),spatialOpenings:openingsSchema(),textureReuse:arr(obj({textureId:str,assetId:str,reason:str})),version:{type:'string',enum:['scene-v1']},program:geometryProgramSchema(ids),entities:arr(obj({instanceId:str,role:{type:'string',enum:['subject','context','ground']},category:categorySchema})),cameras:arr(obj({name:str,referenceIndex:{type:['integer','null']},position:vector,target:vector,fov:num,projection:{type:'string',enum:['perspective','orthographic']},orthographicHeight:{type:['number','null']}})),textures:arr(obj({id:str,referenceIndex:{type:'integer'},quad:{type:'array',minItems:4,maxItems:4,items:{type:'array',minItems:2,maxItems:2,items:num}},size:{type:'integer',enum:[256,512]},description:str})),lighting:lightingSchema(),assumptions:arr(str)});}
+export function sceneSchema(ids?:string[]){return obj({spatialContacts:contactsSchema(),spatialOpenings:openingsSchema(),textureReuse:arr(obj({textureId:str,assetId:str,reason:str})),version:{type:'string',enum:['scene-v1']},program:geometryProgramSchema(ids),entities:arr(obj({instanceId:str,role:{type:'string',enum:['subject','context','ground']},category:categorySchema})),cameras:arr(obj({name:str,referenceIndex:{type:['integer','null']},position:coordinateVectorSchema(),target:coordinateVectorSchema(),fov:{type:'number',minimum:CAMERA_FOV.min,maximum:CAMERA_FOV.max},projection:{type:'string',enum:['perspective','orthographic']},orthographicHeight:{type:['number','null']}})),textures:arr(obj({id:str,referenceIndex:{type:'integer'},quad:{type:'array',minItems:4,maxItems:4,items:{type:'array',minItems:2,maxItems:2,items:num}},size:{type:'integer',enum:[256,512]},description:str})),lighting:lightingSchema(),assumptions:arr(str)});}
 const assert=(ok:any,message:string)=>{if(!ok)throw Error(message)};
 const finite=(n:any,min:number,max:number)=>typeof n==='number'&&Number.isFinite(n)&&n>=min&&n<=max;
-const vec=(v:any,min=-100,max=100)=>Array.isArray(v)&&v.length===3&&v.every(n=>finite(n,min,max));
 export function validateScene(s:SceneInput,plan:any,referenceCount:number){
  assert(s?.version==='scene-v1','场景数据版本无效');validateGeometryProgram(s.program,plan.requirements.map((r:any)=>r.id));
  validateSceneContext(s,plan,referenceCount);return s;
@@ -51,7 +51,12 @@ export function validateSceneTopology(s:Pick<SceneInput,'entities'|'cameras'|'as
  for(const r of plan.requirements){const matching=s.program.instances.filter(i=>i.requirementIds.includes(r.id));if(r.critical)assert(matching.length>0,'关键需求未绑定任何几何：'+r.id);if(r.count!=null)assert(matching.length===r.count,'明确数量与实例不符：'+r.id);}
  assert(Array.isArray(s.cameras)&&s.cameras.length>=Math.max(2,referenceCount)&&s.cameras.length<=6,'需要全部参考机位及至少两个不同观察位置，最多六个');
  for(const c of s.cameras){if(c.projection!==undefined)assert(['perspective','orthographic'].includes(c.projection),'相机投影类型无效');if(c.projection==='orthographic')assert(finite(c.orthographicHeight,.001,1000),'正交相机必须提供有效覆盖高度');}
- for(const c of s.cameras)assert(typeof c.name==='string'&&c.name.trim()&&vec(c.position)&&vec(c.target)&&Math.hypot(...c.position.map((v,i)=>v-c.target[i]))>.1&&finite(c.fov,.3,2.2)&&(c.referenceIndex===null||Number.isInteger(c.referenceIndex)&&c.referenceIndex>=1&&c.referenceIndex<=referenceCount),'相机位置、视角或引用无效');
+ for(const [index,c] of s.cameras.entries()){
+  const errors=[...vectorErrors(c.position,`相机 ${index} ${c.name}.position`),...vectorErrors(c.target,`相机 ${index} ${c.name}.target`)];
+  if(!finite(c.fov,CAMERA_FOV.min,CAMERA_FOV.max))errors.push(`相机 ${index} ${c.name}.fov=${c.fov}：须为 ${CAMERA_FOV.min}..${CAMERA_FOV.max} 弧度`);
+  assert(!errors.length,'相机位置、视角或引用无效：'+errors.join('；'));
+  assert(typeof c.name==='string'&&c.name.trim()&&Math.hypot(...c.position.map((v,i)=>v-c.target[i]))>.1&&(c.referenceIndex===null||Number.isInteger(c.referenceIndex)&&c.referenceIndex>=1&&c.referenceIndex<=referenceCount),'相机位置、视角或引用无效：'+c.name);
+ }
  for(let i=1;i<=referenceCount;i++)assert(s.cameras.filter(c=>c.referenceIndex===i).length===1,'每张参考图必须有且只有一个对应机位');
  assert(Math.max(...s.cameras.map(c=>Math.hypot(...c.position.map((v,i)=>v-s.cameras[0].position[i]))))>.2,'不同机位必须有真实平移');
  assert(Array.isArray(s.assumptions)&&s.assumptions.every(x=>typeof x==='string'),'推断说明无效');return s;

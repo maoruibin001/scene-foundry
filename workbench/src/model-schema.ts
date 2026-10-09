@@ -1,5 +1,5 @@
-import {imageMatchSchema} from './image-reconstruction';
 import {voxelSchema} from './voxel/schema';
+import {imageMatchSchema} from './image-reconstruction';
 import {grayboxSpaceRepairSchema} from './geometry/graybox-space-repair';
 import {expandBlockoutGeometry} from './geometry/blockout-contract';
 import {observationSchema} from './geometry/reference-observations';
@@ -16,13 +16,13 @@ import {RECONSTRUCTION_SCHEMA,OBSERVATION_SCHEMA} from './native/reconstruction-
 import {geometryProgramSchema} from './geometry/program-schema';
 import {sceneSchema} from './geometry/scene-contract';
 import {layoutSchema,assetSchema} from './geometry/layout';
-import {spaceSchema,surfaceSchema} from './geometry/layout-stages';
+import {spaceSchema,spacePlanningSchema,surfaceSchema} from './geometry/layout-stages';
 const str={type:'string'},num={type:'number'},bool={type:'boolean'};
 const arr=(items:any)=>({type:'array',items});
 const obj=(properties:any)=>({type:'object',properties,required:Object.keys(properties),additionalProperties:false});
 const choice=(...values:string[])=>({type:'string',enum:values});
 const nullableNum={type:['number','null']};
-export type ModelSchemaContext={requirementIds?:string[];referenceCount?:number;repairReferences?:RepairGoalReferences;repairComplexity?:Complexity;qualityVersion?:string;imageGoal?:boolean;grayboxRepair?:boolean};
+export type ModelSchemaContext={requirementIds?:string[];referenceCount?:number;repairReferences?:RepairGoalReferences;repairComplexity?:Complexity;qualityVersion?:string;imageGoal?:boolean;grayboxRepair?:boolean;derivedSpatialRelations?:boolean};
 export function modelSchema(role:string,context?:ModelSchemaContext):any {
  if(role==='voxel-scene')return voxelSchema(context?.requirementIds);
  if(role==='scene-repair-plan')return repairGoalsSchema(context?.repairReferences,context?.repairComplexity?repairBudget(context.repairComplexity):LEGACY_REPAIR_BUDGET);
@@ -33,7 +33,7 @@ export function modelSchema(role:string,context?:ModelSchemaContext):any {
  if(role==='scene-observation')return observationSchema(context?.referenceCount);
  if(role==='scene-blockout')return blockoutSchema();
  if(role==='scene-space-judge')return spaceJudgeSchema();
- if(role==='scene-space')return context?.grayboxRepair?grayboxSpaceRepairSchema():spaceSchema(context?.requirementIds);
+ if(role==='scene-space')return context?.grayboxRepair?grayboxSpaceRepairSchema():context?.derivedSpatialRelations?spacePlanningSchema(context.requirementIds):spaceSchema(context?.requirementIds);
  if(role==='scene-surface')return surfaceSchema();
  if(role==='scene-layout')return layoutSchema(context?.requirementIds);
  if(role==='geometry-asset')return assetSchema();

@@ -5,16 +5,18 @@ export type ToolContent={type:'text';text:string}|{type:'image';data:string;mime
 export type CodexToolKit={version:string;instructions:string;definitions:any[];call:(name:string,args:any)=>Promise<{content:ToolContent[];isError?:boolean}>;outputSchema?:any;resolveOutput?:(value:any)=>any;continuation?:()=>{text:string;images:{path:string;mime:string}[]}};
 const REPAIR_TOOLS=['inspect_visual_region','inspect_scene_parts','check_scene_patch','render_scene_patch'];
 const ASSET_TOOLS=['preview_asset'];
+const ASSET_CHECKPOINT_TOOLS=['save_asset_parts','inspect_asset_parts','check_asset'];
 const SPACE_TOOLS=['preview_graybox_space','measure_graybox_space'];
+const SPACE_CHECKPOINT_TOOLS=['save_space_core','save_space_constraints','inspect_space_draft'];
 function toolNames(kit:CodexToolKit){
  const names=kit.definitions.map(t=>t.name);
- if(!names.length||new Set(names).size!==names.length||names.some(n=>![...REPAIR_TOOLS,...ASSET_TOOLS,...SPACE_TOOLS].includes(n)))throw Error('PROVIDER_TOOLS_INVALID：未审核或重复的本地工具');
+ if(!names.length||new Set(names).size!==names.length||names.some(n=>![...REPAIR_TOOLS,...ASSET_TOOLS,...ASSET_CHECKPOINT_TOOLS,'preview_saved_asset',...SPACE_TOOLS,...SPACE_CHECKPOINT_TOOLS].includes(n)))throw Error('PROVIDER_TOOLS_INVALID：未审核或重复的本地工具');
  return names;
 }
 /** Validate role capability before temporary files, model budgeting or subprocess launch. */
 export function assertRoleTools(role:string,kit?:CodexToolKit){
  if(!kit)return;const names=toolNames(kit);
- const allowed=role==='scene-refine'?REPAIR_TOOLS:role==='geometry-asset'&&['asset-preview-v1','asset-preview-context-v2'].includes(kit.version)?ASSET_TOOLS:role==='scene-space'&&['graybox-space-preview-v3','graybox-space-preview-v4','graybox-space-preview-v5','graybox-space-preview-v6','graybox-space-preview-v7','graybox-space-preview-v8'].includes(kit.version)?SPACE_TOOLS:role==='scene-space'&&kit.version==='graybox-space-preview-v2'?['preview_graybox_space']:[];
+ const allowed=role==='scene-refine'?REPAIR_TOOLS:role==='geometry-asset'&&kit.version==='asset-checkpoint-v1'?ASSET_CHECKPOINT_TOOLS:role==='geometry-asset'&&kit.version==='asset-checkpoint-preview-v1'?[...ASSET_CHECKPOINT_TOOLS,'preview_saved_asset']:role==='geometry-asset'&&['asset-preview-v1','asset-preview-context-v2'].includes(kit.version)?ASSET_TOOLS:role==='scene-space'&&kit.version==='space-checkpoint-v1'?SPACE_CHECKPOINT_TOOLS:role==='scene-space'&&['graybox-space-preview-v3','graybox-space-preview-v4','graybox-space-preview-v5','graybox-space-preview-v6','graybox-space-preview-v7','graybox-space-preview-v8','graybox-space-preview-v9','graybox-space-preview-v10'].includes(kit.version)?SPACE_TOOLS:role==='scene-space'&&kit.version==='graybox-space-preview-v2'?['preview_graybox_space']:[];
  if(names.some(n=>!allowed.includes(n)))throw Error('PROVIDER_TOOLS_INVALID：角色 '+role+' 不允许这组反馈工具');
 }
 /** Fresh CLI attempts must receive retained tool state; limits never reset on retry. */

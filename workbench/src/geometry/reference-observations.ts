@@ -16,3 +16,24 @@ export async function observeReferences(ctx:any){mkdirSync(ctx.dir,{recursive:tr
 
  const r=await callValidated({role:'scene-observation',modelSettings:ctx.job.modelSettings,signal:ctx.signal,maxTokens:9000,images:ctx.images,schemaContext:{referenceCount:ctx.images.length},system:matchingGuidance(ctx.job)+'\n先观察参考图，不设计或生成场景。逐张图记录可见地标与遮挡，再确认跨视角对应。同一物体的不同视角共用地标 ID；只看到一部分就只陈述可见部分，不能凭题材添加未见家具、房间或通道。landmarks 包含 id、中文 label、critical 和各 views，view 另含 extent=complete/occluded/partial（只在可见完整轮廓时标 complete），view 包含 referenceIndex（从 1 开始，第一张是 1、第二张是 2，禁止使用 0）、box=[左,上,右,下]（完整输入图归一化坐标，排除黑边与水印）、具体 evidence。覆盖建筑大结构、主要物体及地面；细小同类零散物可按有证据的组记录。relations 只包含图片能支持的前后左右、尺度比例、遮挡、开口与纵深；绑定 landmarkIds，关键构图关系设 critical。cameras 每张一项，记录观察方向、透视线与高度的可见依据和 uncertainty、contentRect=[左,上,右,下]（完整原图归一化，去掉黑边与水印后的实际场景内容区；无边框为[0,0,1,1]），暂不编造绝对坐标。看不见的背面与尺度猜测只记 assumptions。全部使用中文，只输出 JSON。',text:JSON.stringify({prompt:ctx.job.prompt,referenceCount:ctx.images.length,requirements:ctx.plan.requirements})},ctx.dir,v=>validateObservations(v,ctx.images.length));save(join(ctx.dir,'reference-observations.json'),r.value);return r.value;}
 export function bindObservedSpace(space:any,observation:any){const bindings=space.observedBindings;if(!Array.isArray(bindings)||bindings.length!==observation.landmarks.length||new Set(bindings.map(b=>b.landmarkId)).size!==bindings.length)throw Error('每个已观察地标都必须绑定空间实例');for(const l of observation.landmarks){const b=bindings.find(b=>b.landmarkId===l.id);if(!b?.instanceIds?.length||b.instanceIds.some(id=>!space.program.instances.some(i=>i.id===id)))throw Error('地标缺少真实实例绑定：'+l.id);}for(const i of space.program.instances)if(!bindings.some(b=>b.instanceIds.includes(i.id)))throw Error('实例没有原图地标依据，禁止凭空添加：'+i.id);if(space.spatialRelations?.length!==observation.relations.length)throw Error('不能删除或新增已冻结的空间关系');for(const r of observation.relations){const x=space.spatialRelations.find(x=>x.id===r.id);if(!x||x.critical!==r.critical||x.description!==r.description)throw Error('不得更改观察关系或降低关键性：'+r.id);const expected=[...new Set(r.landmarkIds.flatMap(id=>bindings.find(b=>b.landmarkId===id).instanceIds))];if(JSON.stringify([...x.instanceIds].sort())!==JSON.stringify(expected.sort()))throw Error('关系实例必须对应原地标：'+r.id);}return space;}
+
+/** Materialize immutable observed constraints without asking the model to copy them. */
+export function completeObservedSpacePlan(value:any,observation:any){
+ // Saved v1 outputs still have to prove their original relations. Never repair
+ // a changed critical flag or missing historical relation during recovery.
+ if(value?.version==='scene-space-v1')return bindObservedSpace(value,observation);
+ if(value?.version!=='scene-space-plan-v2')throw Error('空间规划输出版本无效');
+ if(Object.hasOwn(value,'spatialRelations'))throw Error('新空间规划不能覆盖已冻结关系');
+ if(!Array.isArray(value.observedBindings))throw Error('每个已观察地标都必须绑定空间实例');
+ if(!Array.isArray(observation?.relations)||!observation.relations.length)throw Error('缺少已冻结的空间关系');
+ const spatialRelations=observation.relations.map((relation:any)=>{
+  if(typeof relation.critical!=='boolean'||!relation.description?.trim()||!Array.isArray(relation.landmarkIds)||!relation.landmarkIds.length)throw Error('已冻结空间关系无效：'+relation.id);
+  const instanceIds=[...new Set(relation.landmarkIds.flatMap((id:string)=>{
+   const binding=value.observedBindings.find((b:any)=>b.landmarkId===id);
+   if(!Array.isArray(binding?.instanceIds)||!binding.instanceIds.length)throw Error('地标缺少真实实例绑定：'+id);
+   return binding.instanceIds;
+  }))];
+  return {id:relation.id,description:relation.description,critical:relation.critical,instanceIds};
+ });
+ return bindObservedSpace({...value,version:'scene-space-v1',spatialRelations},observation);
+}

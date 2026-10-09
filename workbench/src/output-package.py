@@ -10,11 +10,11 @@ with zipfile.ZipFile(tmp,'w',zipfile.ZIP_DEFLATED,compresslevel=3) as z:
         if not folder.is_dir():continue
         for f in folder.rglob('*'):
             if f.is_file() and not f.is_symlink() and f.resolve().is_relative_to(source):z.write(f,str(f.relative_to(source)))
-    for name in ['voxel-source-scene.json','voxelization-report.json','voxel-program.json','voxel-metrics.json','scene.vox','project/game/forge.json','project/game/package.json','project/brief.json','generated-scene.json','quality.json','review.json','spec-report.json','delivery-assessment.json','assessment-evidence.json','reconstruction-goal.json','image-reconstruction.json','output.json']:
+    for name in ['voxel-source-scene.json','voxelization-report.json','voxel-program.json','voxel-metrics.json','layout-draft.json','checkpoint-source.json','scene.json','render-scene.json','scene.vox','project/game/forge.json','project/game/package.json','project/brief.json','generated-scene.json','quality.json','review.json','spec-report.json','delivery-assessment.json','assessment-evidence.json','reconstruction-goal.json','image-reconstruction.json','output.json']:
         f=source/name
         if f.is_file() and not f.is_symlink():z.write(f,name)
     z.writestr('delivery.json',json.dumps(descriptor,ensure_ascii=False,indent=2))
-    z.writestr('使用说明.txt','这是保存的 ForgeaX 场景输出，输出种类：'+best['kind']+'。质量状态：'+best['qualityStatus']+'。\n灰模和部分草稿未完成成品验收；请查看 delivery.json，不得把可运行当作达标。\n使用任务固定的 Engine CLI 运行 project preview --root project/game --port 19779 --json。必要时先执行 project engine use-local <engine目录> --root project/game --json。\n')
+    z.writestr('使用说明.txt','这是保存的 ForgeaX 场景输出，输出种类：'+best['kind']+'。质量状态：'+best['qualityStatus']+'。\n'+(best.get('layoutDraft') or {}).get('limitations','')+'\n灰模和部分草稿未完成成品验收；请查看 delivery.json，不得把可运行当作达标。\n使用任务固定的 Engine CLI 运行 project preview --root project/game --port 19779 --json。必要时先执行 project engine use-local <engine目录> --root project/game --json。\n')
     checks={i.filename:hashlib.sha256(z.read(i.filename)).hexdigest() for i in z.infolist()}
     z.writestr('manifest.sha256.json',json.dumps(checks,indent=2))
 os.replace(tmp,output)

@@ -1,5 +1,5 @@
 import {test,expect} from 'bun:test';
-import {referenceComposition,compositionContext} from './reference-composition';
+import {referenceComposition,compositionContext,LEGACY_REFERENCE_COMPOSITION,REFERENCE_COMPOSITION} from './reference-composition';
 import {sceneVisibility} from './visibility';
 import {stable} from '../validated-cache';
 
@@ -48,4 +48,51 @@ test('真实编译几何被前景遮住时只统计露出表面，透明几何�
  const without=structuredClone(f.scene);without.program.instances.pop();expect(visible.pixels).toBeLessThan(referenceComposition(without,f.observation).rows[0].pixels);
  f.scene.program.instances[1].scale=[2,1,2];expect(referenceComposition(f.scene,f.observation).rows[0].pixels).toBe(0);
  f.scene.program.materials[0].color[3]=.1;const transparent=referenceComposition(f.scene,f.observation).rows[0];expect(transparent.pixels).toBe(0);expect(transparent.edgeResidual).toBeNull();
+});
+
+test('整物体和局部部件共用实例时不把全物体轮廓冒充各部件偏差',()=>{
+ const f=fixture();f.scene.observedBindings.push({landmarkId:'edge',instanceIds:['a']});
+ f.observation.landmarks.push({id:'edge',label:'主体边线',critical:true,views:[{referenceIndex:1,box:[.25,.25,.3,.75],extent:'partial',evidence:'边线仅为主体局部'}]});
+ const before=stable(f),report=referenceComposition(f.scene,f.observation,f.report);
+ expect(report.version).toBe(REFERENCE_COMPOSITION);expect(report.unverified).toHaveLength(2);
+ for(const row of report.rows){expect(row.comparisonScope).toBe('unverified-binding-scope');expect(row.status).toBe('unverified');
+  for(const key of ['visible','pixels','delta','edgeResidual','centreDelta','spanRatio','outsideTargetFraction'])expect(row[key]).toBeNull();
+  expect(row.boundInstanceEvidence).toEqual({visible:[.25,.25,.75,.75],pixels:16,contentExcludedPixels:0});
+ }
+ expect(compositionContext(report,report).rows.every((r:any)=>r.sourceDelta===null)).toBe(true);expect(stable(f)).toBe(before);
+ // Historical proof stays historical, never silently rewritten as v2 evidence.
+ const old=referenceComposition(f.scene,f.observation,f.report,{version:LEGACY_REFERENCE_COMPOSITION});expect(old.rows[1].edgeResidual).toBeGreaterThan(0);expect(old.rows[1].targetId).toBeUndefined();expect(old.unverified).toEqual([]);
+});
+test('部分重合的实例组也不能确定部件范围，另一个机位的独立目标不受影响',()=>{
+ const f=fixture();f.scene.observedBindings.push({landmarkId:'group',instanceIds:['a','b']});
+ f.observation.landmarks.push({id:'group',views:[{referenceIndex:1,box:[.1,.1,.9,.9]}]});
+ expect(referenceComposition(f.scene,f.observation,f.report).rows[0].edgeResidual).toBeNull();
+ f.observation.landmarks[1].views[0].referenceIndex=2;
+ expect(referenceComposition(f.scene,f.observation,f.report).rows[0].edgeResidual).toBe(0);
+});
+test('同地标同机位多框没有逐框绑定时保留两个未验证目标，不能复用同一整物体残差',()=>{
+ const f=fixture();f.observation.landmarks[0].views.push({referenceIndex:1,box:[.1,.1,.2,.2],extent:'partial'});
+ const report=referenceComposition(f.scene,f.observation,f.report);expect(report.rows).toHaveLength(2);
+ expect(new Set(report.rows.map((r:any)=>r.targetId)).size).toBe(2);
+ expect(report.rows.every((r:any)=>r.edgeResidual===null&&r.warnings.join().includes('逐框'))).toBe(true);
+});
+test('来源按同一目标框而不是同地标第一个框匹配，重复身份或新绑定不比较',()=>{
+ const f=fixture(),report=referenceComposition(f.scene,f.observation,f.report),row=report.rows[0];
+ const source=structuredClone(report);source.rows.unshift({...row,targetId:'different-target',edgeResidual:123});source.rows[1].edgeResidual=.2;
+ expect(compositionContext(report,source).rows[0].sourceDelta.edgeResidual).toBe(-.2);
+ source.rows.push({...source.rows[1]});expect(compositionContext(report,source).rows[0].sourceDelta).toBeNull();
+ source.rows.pop();source.rows[1].instanceIds=['b'];expect(compositionContext(report,source).rows[0].sourceDelta).toBeNull();
+ expect(()=>compositionContext(report,{...source,version:LEGACY_REFERENCE_COMPOSITION})).toThrow('版本');
+});
+test('相同实例集合重排可比较；绑定身份变化和不可靠目标不能冒充进步',()=>{
+ const f=fixture();f.scene.observedBindings[0].instanceIds=['a','b'];const report=referenceComposition(f.scene,f.observation,f.report),source=structuredClone(report);
+ source.rows[0].instanceIds=['b','a'];expect(compositionContext(report,source).rows[0].sourceDelta.edgeResidual).toBe(0);
+ source.rows[0].comparisonScope='unverified-binding-scope';expect(compositionContext(report,source).rows[0].sourceDelta).toBeNull();
+ expect(()=>referenceComposition(f.scene,f.observation,f.report,{version:'unknown'})).toThrow('版本');
+});
+test('范围不明也不能跳过非法实例或像素身份校验',()=>{
+ const f=fixture();f.observation.landmarks[0].views.push({...f.observation.landmarks[0].views[0]});
+ f.scene.observedBindings[0].instanceIds.push('unknown');expect(()=>referenceComposition(f.scene,f.observation,f.report)).toThrow('绑定');
+ f.scene.observedBindings[0].instanceIds.pop();f.labels[0]=99;f.report.views[0].labelsBase64=Buffer.from(f.labels.buffer).toString('base64');
+ expect(()=>referenceComposition(f.scene,f.observation,f.report)).toThrow('身份');
 });

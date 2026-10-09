@@ -4,6 +4,7 @@ import {runDir,read,save,digest} from '../store';
 import {parseModelJson} from '../provider';
 import {PROMPT_CONTRACT} from '../prompts';
 import {roleSettings} from '../generation-policy';
+import {SPACE_CONSTRUCTION,selectedSpaceValue} from './space-construction';
 type SavedRequest={system:string;text:string};
 /** Follow only the recorded recovery chain with identical inputs, plan and model. */
 export function savedStage(ctx:any,role:string,validate:(value:any)=>any,allowRejected=false,space?:any,request?:SavedRequest){
@@ -28,7 +29,10 @@ export function savedStage(ctx:any,role:string,validate:(value:any)=>any,allowRe
     const settings=roleSettings(ctx.job.modelSettings,role,ctx.job.optimizationPolicy);
     if(receipt.stopReason!=='completed'||receipt.requestedReasoning!==settings?.reasoningEffort||receipt.executionRoute?.configurationSha256!==ctx.job.profile?.executionRoute?.configurationSha256||prompt.contract!==PROMPT_CONTRACT||prompt.system!==request.system||prompt.input!==request.text)continue;
    }
-   const text=readFileSync(file,'utf8'),value=validate(parseModelJson(text));
+   const text=readFileSync(file,'utf8'),parsed=parseModelJson(text);
+   const selected=role==='scene-space'&&receipt.toolsContract===SPACE_CONSTRUCTION;
+   if(selected&&receipt.stopReason!=='completed')continue;
+   const value=validate(selected?selectedSpaceValue(folder,parsed,source):parsed);
    if(receipt.requestedModel!==ctx.job.modelSettings?.model)throw Error('恢复输出的模型来源不一致');
    return {value,text,receipt,prompt,proof:{sourceJobId:id,sourceVersion:source.pipelineVersion,sourceResponse:prefix+'response.txt',sourceFolder:folder.slice(generation.length+1),responseSha256:digest(text),receipt,chain:[...seen],validatedAt:Date.now()}};
   }
@@ -36,4 +40,11 @@ export function savedStage(ctx:any,role:string,validate:(value:any)=>any,allowRe
  }
  return null;
 }
-export function persistStageReuse(ctx:any,role:string,saved:any){save(join(ctx.dir,role+'-response.txt'),parseModelJson(saved.text));save(join(ctx.dir,role+'-receipt.json'),saved.receipt);if(saved.prompt)save(join(ctx.dir,role+'-prompt.json'),saved.prompt);save(join(ctx.dir,role+'-reuse.json'),saved.proof);}
+export function persistStageReuse(ctx:any,role:string,saved:any){
+ const resolved=role==='scene-space'&&saved.receipt.toolsContract===SPACE_CONSTRUCTION;
+ // A new recovery artifact may store canonical data; the original selection and its receipt stay untouched at source.
+ const receipt=resolved?{...saved.receipt,toolsContract:null,kind:'reused-canonical-space',sourceToolsContract:SPACE_CONSTRUCTION,sourceResponseSha256:digest(saved.text)}:saved.receipt;
+ save(join(ctx.dir,role+'-response.txt'),resolved?saved.value:parseModelJson(saved.text));save(join(ctx.dir,role+'-receipt.json'),receipt);
+ if(saved.prompt)save(join(ctx.dir,role+'-prompt.json'),saved.prompt);
+ save(join(ctx.dir,role+'-reuse.json'),{...saved.proof,...(resolved?{normalization:'selected-checkpoint-to-canonical-space',canonicalSha256:digest(JSON.stringify(saved.value))}:{})});
+}

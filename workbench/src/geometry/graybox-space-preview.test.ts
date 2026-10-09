@@ -90,6 +90,31 @@ test('正常候选回传同机位构图残差，恢复和最终选择验证测�
  }finally{f.close();}
 });
 
+test('v10测量与预览都保留范围不明项；旧v9证据可重开但不可冒充新契约',async()=>{
+ const f=fixture();try{
+  f.options.space.cameras[0].referenceIndex=1;f.options.sourceScene.cameras[0].referenceIndex=1;
+  f.options.sourceScene.observedBindings=[{landmarkId:'whole',instanceIds:['front']},{landmarkId:'detail',instanceIds:['front']}];
+  f.options.observation={landmarks:[{id:'whole',views:[{referenceIndex:1,box:[.2,.2,.8,.8]}]},{id:'detail',views:[{referenceIndex:1,box:[.3,.3,.4,.5]}]}],cameras:[{referenceIndex:1,contentRect:[0,0,1,1]}]};
+  const oldOptions={...f.options,contractVersion:'graybox-space-preview-v9'},old=createGrayboxSpacePreview(oldOptions),patch=f.patch();
+  await old.kit.call('preview_graybox_space',patch);const proof=old.assertReviewed(patch);
+  const prior=readFileSync(join(f.options.folder,'1/reference-composition.json'));
+  expect(JSON.parse(prior.toString()).version).toBe('reference-visible-composition-v1');
+  expect(createGrayboxSpacePreview(oldOptions).assertReviewed(patch)).toEqual(proof);expect(readFileSync(join(f.options.folder,'1/reference-composition.json'))).toEqual(prior);
+  expect(()=>createGrayboxSpacePreview({...oldOptions,contractVersion:GRAYBOX_SPACE_PREVIEW})).toThrow('契约');
+  const options={...f.options,folder:join(f.folder,'v10'),contractVersion:GRAYBOX_SPACE_PREVIEW},tool=createGrayboxSpacePreview(options);
+  const measured=await tool.kit.call('measure_graybox_space',patch);expect(f.renders()).toBe(1);
+  const rows=JSON.parse((measured.content[0] as any).text).referenceComposition.rows;
+  expect(rows.every((r:any)=>r.edgeResidual===null&&r.pixels===null&&r.sourceDelta===null)).toBe(true);
+  expect(()=>tool.assertReviewed(patch)).toThrow('PREVIEW_REQUIRED');
+  const result=await tool.kit.call('preview_graybox_space',patch);expect(result.isError).not.toBe(true);expect(f.renders()).toBe(2);
+  expect(JSON.parse((result.content[0] as any).text).referenceComposition.rows).toEqual(rows);
+  const reopened=createGrayboxSpacePreview(options);expect(reopened.assertReviewed(patch)).toEqual(tool.assertReviewed(patch));expect(f.renders()).toBe(2);
+  expect(JSON.parse(reopened.kit.continuation!().text)).toMatchObject({used:1,measurementUsed:1});
+  const file=join(options.folder,'1/reference-composition.json'),changed=read(file);changed.rows[0].edgeResidual=0;save(file,changed);
+  expect(()=>tool.assertReviewed(patch)).toThrow('构图测量');
+ }finally{f.close();}
+});
+
 test('历史v2真实预览证据可只读重开，不能偷换成新构图测量或重置次数',async()=>{
  const f=fixture();try{const options={...f.options,contractVersion:'graybox-space-preview-v2'},t=createGrayboxSpacePreview(options);await t.kit.call('preview_graybox_space',{patchJson:JSON.stringify(f.patch())});const before=t.assertReviewed(f.patch());expect(before.compositionSha256).toBeUndefined();const opened=createGrayboxSpacePreview(options);expect(opened.assertReviewed(f.patch())).toEqual(before);expect(f.renders()).toBe(1);expect(()=>createGrayboxSpacePreview(f.options)).toThrow('契约');}finally{f.close();}
 });
@@ -250,5 +275,18 @@ test('通用组群通过真实工具契约进入预览与恢复；历史v7仍保
   expect(createGrayboxSpacePreview(f.options).assertReviewed(p)).toEqual(t.assertReviewed(p));expect(f.renders()).toBe(1);
   const old=createGrayboxSpacePreview({...f.options,contractVersion:'graybox-space-preview-v7',folder:join(f.folder,'old-v7')});
   await expect(old.kit.call('preview_graybox_space',{...p,version:'graybox-space-repair-v4'})).rejects.toThrow('历史组群');expect(f.renders()).toBe(1);
+ }finally{f.close();}
+});
+
+test('粗曲面经正常工具预览和摘要选择保存，越界及超点数提前拒绝不耗额度',async()=>{
+ const f=fixture();try{
+  f.options.contractVersion=GRAYBOX_SPACE_PREVIEW;
+  const p:any={...f.patch(),instances:[],parts:[{templateId:'tree',partId:'crown',position:[0,0,1.5],rotation:[0,0,0],scale:[1,1,1],shape:{type:'grid',rows:3,columns:3,doubleSided:true,points:Array.from({length:9},(_,i)=>[(i%3-1)*.5,(Math.floor(i/3)-1)*.5,(i%3)*(Math.floor(i/3))*.08])}}]};
+  const t=createGrayboxSpacePreview(f.options),bad=structuredClone(p);bad.parts[0].shape.rows=10;
+  await expect(t.kit.call('preview_graybox_space',bad)).rejects.toThrow();expect(f.renders()).toBe(0);
+  const outside=structuredClone(p);outside.parts[0].shape.points[0]=[10,0,0];await expect(t.kit.call('preview_graybox_space',outside)).rejects.toThrow();expect(f.renders()).toBe(0);
+  const result=await t.kit.call('preview_graybox_space',p);expect(result.isError).not.toBe(true);expect(f.renders()).toBe(1);
+  const proof=t.assertReviewed(p);expect(t.kit.resolveOutput!({selectedPatchSha256:proof.patchSha256,reason:'保留真实预览的粗曲面；独立质量仍未评估'})).toEqual(p);
+  expect(read(join(f.options.folder,'1/scene.json')).program.templates[0].parts[0].shape).toEqual(p.parts[0].shape);
  }finally{f.close();}
 });

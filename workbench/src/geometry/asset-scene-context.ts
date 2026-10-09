@@ -1,10 +1,11 @@
 import {assetGeometryBasis} from './asset-geometry-basis';
+import {assetReferenceEvidence} from './asset-reference-evidence';
 import {proceduralSeeds,assertProceduralHandoff} from './procedural-handoff';
 import {digest} from '../store';
 import {stable} from '../validated-cache';
 import {spatialInstances} from './spatial-order';
 
-export const ASSET_CONTEXT_VERSION='accepted-space-context-v1';
+export const ASSET_CONTEXT_VERSION='accepted-space-context-v2';
 export type AssetSceneContext={scene:any;review?:any;observation?:any};
 
 /** The other objects are the accepted blockout, never invented finished assets. */
@@ -19,12 +20,14 @@ export function assetContextContract(layout:any,context:AssetSceneContext){
 export function assetSpatialHandoff(brief:any,layout:any,context:AssetSceneContext){
  const contextSha256=assetContextContract(layout,context),instances=layout.program.instances.filter((i:any)=>i.template===brief.id),ids=new Set(instances.map((i:any)=>i.id));
  const relations=(layout.spatialRelations??[]).filter((r:any)=>r.instanceIds.some((id:string)=>ids.has(id))).map((r:any)=>({...r,review:context.review?.relations?.find((v:any)=>v.id===r.id)??null}));
- const visible=(context.observation?.landmarks??[]).filter((l:any)=>layout.observedBindings?.some((b:any)=>b.landmarkId===l.id&&b.instanceIds.some((id:string)=>ids.has(id))));
+ const evidence=assetReferenceEvidence(layout,brief.id,context.observation);
  const cameras=layout.cameras.filter((c:any)=>c.referenceIndex!==null);
  if(!cameras.length)throw Error('ASSET_CONTEXT_CAMERA_REQUIRED：上下文缺少参考机位');
- const area=(c:any)=>Math.max(0,...visible.flatMap((l:any)=>l.views.filter((v:any)=>v.referenceIndex===c.referenceIndex).map((v:any)=>(v.box[2]-v.box[0])*(v.box[3]-v.box[1]))));
+ const direct=evidence.views.filter(v=>cameras.some((c:any)=>c.referenceIndex===v.referenceIndex));
+ const views=direct.length?direct:evidence.contextViews;
+ const area=(c:any)=>Math.max(0,...views.filter((v:any)=>v.referenceIndex===c.referenceIndex).map((v:any)=>(v.box[2]-v.box[0])*(v.box[3]-v.box[1])));
  const camera=[...cameras].sort((a,b)=>area(b)-area(a)||a.referenceIndex-b.referenceIndex)[0];
- return {version:ASSET_CONTEXT_VERSION,contextSha256,instances,referenceCamera:camera,relations,
+ return {version:ASSET_CONTEXT_VERSION,contextSha256,instances,referenceCamera:camera,referenceCameraEvidence:{scope:direct.length?'template-group':views.some(v=>v.referenceIndex===camera.referenceIndex)?'shared-context-only':'unverified',landmarkIds:[...new Set(views.filter(v=>v.referenceIndex===camera.referenceIndex).map(v=>v.landmarkId))],limitation:'原图框仅帮助选择已有参考机位，不证明当前资产或其部件在生成画面可见；共享范围不等于资产轮廓'},relations,
   acceptedGeometrySha256:assetGeometryBasis(context.scene,brief.id)?.sha256??null,
   proceduralStructure:proceduralSeeds(context.scene,brief.id),
   proceduralInstructions:'若存在proceduralStructure，保留各branchCrown部件id/姿态/所有结构参数，调整segments与材质/UV，或按id+_branches和id+_leaves两部件拆层绑定不同材质。不能重抽seed、改密度、缩冠或重造已验收轮廓；其他非程序部件按简报细化。',

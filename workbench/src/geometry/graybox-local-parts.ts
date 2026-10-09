@@ -58,12 +58,12 @@ export function applyGrayboxLocalParts(source:any,space:any,edits:any[],groups:a
 
 /** The normal gate must use exactly the reviewed geometry rather than regenerating old proxies. */
 export function assertGrayboxPartHandoff(source:any,space:any,patch:any,scene:any){
- const expected=applyGrayboxLocalParts(source,space,patch.parts,patch.groups??[],patch.version==='graybox-space-repair-v5');
+ const expected=applyGrayboxLocalParts(source,space,patch.parts,patch.groups??[],['graybox-space-repair-v5','graybox-space-repair-v6'].includes(patch.version));
  if(stable(scene.program.templates)!==stable(expected.templates)||stable(scene.program.materials)!==stable(source.program.materials))throw Error('GRAYBOX_PREVIEW_GEOMETRY_FROZEN：实际几何必须与已有部件补丁完全一致');
  return expected;
 }
 
 export function buildGrayboxPartScene(source:any,space:any,patch:any,plan:any,referenceCount:number){
- const local=applyGrayboxLocalParts(source,space,patch.parts,patch.groups??[],patch.version==='graybox-space-repair-v5');
+ const local=applyGrayboxLocalParts(source,space,patch.parts,patch.groups??[],['graybox-space-repair-v5','graybox-space-repair-v6'].includes(patch.version));
  return validateScene({...source,cameras:space.cameras,spatialContacts:space.spatialContacts,program:{...source.program,templates:local.templates,instances:spatialInstances(space.program.instances)}},plan,referenceCount);
 }

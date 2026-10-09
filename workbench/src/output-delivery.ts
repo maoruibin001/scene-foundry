@@ -67,6 +67,15 @@ export function inspectOutput(job:any,root:string,folder:string,kind:'scene'|'gr
   const images=runtime.images.map((name:string,i:number)=>{if(typeof name!=='string'||!existsSync(local(join(base,'runtime'),name))||digest(readFileSync(local(join(base,'runtime'),name)))!==runtime.hashes[i])throw Error('交付截图摘要不匹配');return [folder,'runtime',name].filter(Boolean).join('/');});
   let evidence:any=null,assessmentError:string|null=null;try{evidence=assessmentEvidence(base,hash);}catch(error){assessmentError=String(error);}
   const snapshot=existsSync(join(base,'candidate.json'))?read(join(base,'candidate.json')):null,output=existsSync(join(base,'output.json'))?read(join(base,'output.json')):null;
+  let layoutDraft:any=null;const draftPath=join(base,'layout-draft.json');
+  if(existsSync(draftPath)){
+   layoutDraft=read(draftPath);
+   if(layoutDraft.version!=='initial-space-draft-v1'||layoutDraft.jobId!==job.id||layoutDraft.rootJobId!==(job.executionRecoveryRoot??job.id)||layoutDraft.scope!=='bounds-only'||layoutDraft.completeScene!==false||layoutDraft.spatialGatePassed!==false||layoutDraft.quality!=='not-assessed'||layoutDraft.distManifestDigest!==hash)throw Error('布局草稿来源或范围不符');
+   for(const file of ['checkpoint-source.json','scene.json','render-scene.json'])if(!existsSync(local(base,file))||layoutDraft.files?.[file]!==digest(readFileSync(local(base,file))))throw Error('布局草稿证据不匹配');
+   const checkpoint=read(local(base,'checkpoint-source.json'));
+   if(checkpoint.checksum!==layoutDraft.checkpointSha256||checkpoint.inputKey!==layoutDraft.inputKey||checkpoint.jobId!==job.id)throw Error('布局草稿检查点来源不符');
+   kind='graybox';
+  }else if(output?.layoutDraft)throw Error('布局草稿说明缺失');
   const partial=evidence?.partial??snapshot?.fields?.partialOutput??output?.partial??(!folder?job.partialOutput:null);
   // A partial iteration must never be promoted merely because it has a score.
   if(kind!=='graybox'&&(partial||evidence?.scope==='partial'||snapshot?.fields?.assessmentScope==='partial'))kind='partial';
@@ -74,7 +83,7 @@ export function inspectOutput(job:any,root:string,folder:string,kind:'scene'|'gr
   const q=kind!=='graybox'&&assessed&&existsSync(join(base,'quality.json'))?read(join(base,'quality.json')):null;
   const delivery=evidence?.files?.['delivery-assessment.json']?read(join(base,'delivery-assessment.json')):null;
   const status=evidence?.status??snapshot?.fields?.status??output?.assessmentStatus??(!folder?job.status:null);
-  return {kind,folder,deliveryStandard:delivery?.standard??'strict',deliveryStatus:kind==='scene'&&q&&delivery?.status==='passed'&&Object.values(runtime.hard).every(x=>x===true)?'passed':null,distManifestDigest:hash,images,project:[folder,'project'].filter(Boolean).join('/'),runtime:[folder,'runtime/runtime.json'].filter(Boolean).join('/'),engine:'ForgeaX Engine',pipelineVersion:job.generatedVersion??job.pipelineVersion,assessmentScope:kind==='partial'?'partial':kind==='graybox'?'graybox':'scene',partial:partial??null,assessmentError,qualityStatus:q?(kind==='partial'?'partial_assessed':status==='passed'&&q.status==='passed'&&report.spec.status==='passed'&&Object.values(runtime.hard).every(x=>x===true)?'passed':'not_met'):'not_assessed',score:q&&Number.isFinite(q.score)?q.score:null,hardChecks:runtime.hard,qualityFile:q?[folder,'quality.json'].filter(Boolean).join('/'):null,...imageEvidence(job,base,folder,runtime,evidence,kind)};
+  return {kind,folder,layoutDraft,deliveryStandard:delivery?.standard??'strict',deliveryStatus:kind==='scene'&&q&&delivery?.status==='passed'&&Object.values(runtime.hard).every(x=>x===true)?'passed':null,distManifestDigest:hash,images,project:[folder,'project'].filter(Boolean).join('/'),runtime:[folder,'runtime/runtime.json'].filter(Boolean).join('/'),engine:'ForgeaX Engine',pipelineVersion:job.generatedVersion??job.pipelineVersion,assessmentScope:kind==='partial'?'partial':kind==='graybox'?'graybox':'scene',partial:partial??null,assessmentError,qualityStatus:q?(kind==='partial'?'partial_assessed':status==='passed'&&q.status==='passed'&&report.spec.status==='passed'&&Object.values(runtime.hard).every(x=>x===true)?'passed':'not_met'):'not_assessed',score:q&&Number.isFinite(q.score)?q.score:null,hardChecks:runtime.hard,qualityFile:q?[folder,'quality.json'].filter(Boolean).join('/'):null,...imageEvidence(job,base,folder,runtime,evidence,kind)};
  }catch{return null;}
 }
 /** Reuse spatial selection; never rank drafts by score or snapshot directory name. */
@@ -101,7 +110,7 @@ export function deliveryInfo(job:any,root=runDir(job.id)){
  const iterations=join(root,'iterations');if(existsSync(iterations))for(const n of readdirSync(iterations).filter(n=>/^\d+$/.test(n))){const v=inspectOutput(job,root,'iterations/'+n,'scene');if(v)candidates.push(v);}
  const blockouts=join(root,'generation/blockout');if(existsSync(blockouts))for(const n of readdirSync(blockouts).filter(n=>/^\d+$/.test(n)).sort((a,b)=>Number(b)-Number(a))){const v=inspectOutput(job,root,'generation/blockout/'+n,'graybox');if(v)candidates.push(v);}
  // Valid assessed candidates first, then actual scene, partial, and spatial draft. Never infer quality from a graybox.
- const rank=(v:any)=>(v.kind==='scene'?30:v.kind==='partial'?20:10)+(v.qualityStatus==='passed'||v.deliveryStatus==='passed'?100:0)+(v.score??0)/100;
+ const rank=(v:any)=>(v.kind==='scene'?30:v.kind==='partial'?20:v.layoutDraft?5:10)+(v.qualityStatus==='passed'||v.deliveryStatus==='passed'?100:0)+(v.score??0)/100;
  candidates.sort((a,b)=>rank(b)-rank(a));
  // Selection includes regression and hard-gate checks; a higher score alone cannot replace it.
  const requested=job.selectedIteration??job.visualIterations?.bestIndex;
@@ -125,7 +134,7 @@ export function deliveryInfo(job:any,root=runDir(job.id)){
   requestedBlockout,servedBlockout:best?.kind==='graybox'&&best.folder.match(/^generation\/blockout\/(\d+)$/)?Number(best.folder.split('/')[2]):null,
   status:verifiedSelection?'selected':hasSelection?'fallback':'available',reason:hasSelection&&!verifiedSelection?'保留候选的证据不完整；暂提供另一份已核验可运行输出，不代表重新选优':null};
  if(requestedBlockout){selection.status=selectedBlockout?'selected':'fallback';selection.reason=selectedBlockout?'已按管线选优记录提供保留灰模；空间评分 '+basis.score+'/5，不代表成品通过':'保留灰模的证据不完整或属于来源任务；暂提供本任务已核验可运行输出，不代表重新选优';}
- return {version:'output-delivery-v2',available:!!best,state:best?'available':['running','queued'].includes(job.status)?'pending':'unavailable',best,selection,execution:{status:job.status,stage:job.stage,error:job.error??null,fault:job.error?failureDisposition(job.error):null},partial:best?.partial??job.partialOutput??null,limitations:best?.kind==='graybox'?'空间草稿，尚未完成详细资产和成品验收':best?.kind==='partial'?'部分资产仍使用本次已经生成的灰模；分数只代表这份草稿，未完成成品验收':best?.assessmentError?'评分证据与当前产物不匹配；保留可运行输出，评分待恢复':best?.qualityStatus==='not_assessed'?'已生成并验证运行，视觉质量尚未完成评估':best?.qualityStatus==='not_met'?'已有场景输出，当前质量未达标':null};
+ return {version:'output-delivery-v2',available:!!best,state:best?'available':['running','queued'].includes(job.status)?'pending':'unavailable',best,selection,execution:{status:job.status,stage:job.stage,error:job.error??null,fault:job.error?failureDisposition(job.error):null},partial:best?.partial??job.partialOutput??null,limitations:best?.layoutDraft?best.layoutDraft.limitations:best?.kind==='graybox'?'空间草稿，尚未完成详细资产和成品验收':best?.kind==='partial'?'部分资产仍使用本次已经生成的灰模；分数只代表这份草稿，未完成成品验收':best?.assessmentError?'评分证据与当前产物不匹配；保留可运行输出，评分待恢复':best?.qualityStatus==='not_assessed'?'已生成并验证运行，视觉质量尚未完成评估':best?.qualityStatus==='not_met'?'已有场景输出，当前质量未达标':null};
 }
 /** Freeze a real render BEFORE external judging/repair; later exceptions cannot erase it. */
 export function preserveOutput(job:any,root:string,folder:string,kind:'scene'|'graybox'|'partial'){
@@ -133,7 +142,7 @@ export function preserveOutput(job:any,root:string,folder:string,kind:'scene'|'g
  const assessmentFile=join(root,folder,'assessment-evidence.json');
  const identity=digest(JSON.stringify([checked.distManifestDigest,read(join(root,folder,'runtime/runtime.json')).hashes,checked.kind,existsSync(assessmentFile)?digest(readFileSync(assessmentFile)):null]));
  const target='delivery/outputs/'+checked.kind+'-'+identity.slice(0,16),dest=join(root,target);
- if(!existsSync(join(dest,'output.json'))){mkdirSync(dest,{recursive:true});for(const item of ['voxel-source-scene.json','voxelization-report.json','voxel-program.json','voxel-metrics.json','scene.vox',...IMAGE_FILES,'project','runtime','materials','generated-scene.json','quality.json','review.json','spec-report.json','delivery-assessment.json','assessment-evidence.json','structure.json','spatial-contacts.json','spatial-openings.json','surface-audit.json']){const p=join(root,folder,item);if(existsSync(p))cpSync(p,join(dest,item),{recursive:true,dereference:false,verbatimSymlinks:true,mode:constants.COPYFILE_FICLONE});}save(join(dest,'output.json'),{createdAt:new Date().toISOString(),source:folder,pipelineVersion:job.generatedVersion??job.pipelineVersion,kind:checked.kind,distManifestDigest:checked.distManifestDigest,partial:checked.partial,assessmentStatus:job.status});}
+ if(!existsSync(join(dest,'output.json'))){mkdirSync(dest,{recursive:true});for(const item of ['voxel-source-scene.json','voxelization-report.json','voxel-program.json','voxel-metrics.json','layout-draft.json','checkpoint-source.json','scene.json','render-scene.json','scene.vox',...IMAGE_FILES,'project','runtime','materials','generated-scene.json','quality.json','review.json','spec-report.json','delivery-assessment.json','assessment-evidence.json','structure.json','spatial-contacts.json','spatial-openings.json','surface-audit.json']){const p=join(root,folder,item);if(existsSync(p))cpSync(p,join(dest,item),{recursive:true,dereference:false,verbatimSymlinks:true,mode:constants.COPYFILE_FICLONE});}save(join(dest,'output.json'),{createdAt:new Date().toISOString(),source:folder,pipelineVersion:job.generatedVersion??job.pipelineVersion,kind:checked.kind,layoutDraft:checked.layoutDraft,distManifestDigest:checked.distManifestDigest,partial:checked.partial,assessmentStatus:job.status});}
  return inspectOutput(job,root,target,checked.kind);
 }
 export function saveDelivery(job:any,root=runDir(job.id)){const info=deliveryInfo(job,root);save(join(root,'delivery.json'),info);return info;}

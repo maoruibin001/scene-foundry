@@ -2,13 +2,12 @@ import {mkdirSync,existsSync,readFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {ROOT,DATA,runDir,save,read,digest} from '../store';
 import {assetInput} from './asset-input';
+import {assetReferenceEvidence,ASSET_REFERENCE_SCOPE_GUIDANCE} from './asset-reference-evidence';
 import {referencePixelSizes,textureSourceEvidence,TEXTURE_SOURCE_GUIDANCE} from './texture-source';
 
 export function assetEvidencePlan(layout:any,brief:any,observation:any){
- const instances=layout.program.instances.filter(i=>i.template===brief.id),ids=new Set(instances.map(i=>i.id));
- const landmarks=new Set((layout.observedBindings??[]).filter(b=>b.instanceIds.some(id=>ids.has(id))).map(b=>b.landmarkId));
- const evidence=(observation?.landmarks??[]).filter(l=>landmarks.has(l.id));
- const crops=evidence.flatMap(l=>l.views.map(v=>({...v,landmarkId:l.id,label:l.label}))).sort((a,b)=>((b.box[2]-b.box[0])*(b.box[3]-b.box[1]))-((a.box[2]-a.box[0])*(a.box[3]-a.box[1]))).slice(0,4);
+ const {evidence,views}=assetReferenceEvidence(layout,brief.id,observation);
+ const crops=views.sort((a,b)=>((b.box[2]-b.box[0])*(b.box[3]-b.box[1]))-((a.box[2]-a.box[0])*(a.box[3]-a.box[1]))).slice(0,4);
  return {evidence,crops,referenceCameras:layout.cameras.filter(c=>c.referenceIndex!==null)};
 }
 
@@ -30,5 +29,5 @@ export async function prepareAssetEvidence(ctx:any,layout:any,brief:any,textures
  const images=receipt.images.map(i=>({path:join(output,i.file),mime:'image/png'}));
  save(join(folder,'reference-evidence.json'),{...receipt,referenceSha256:ctx.images.map(i=>digest(readFileSync(i.path)))});
  const sourceEvidence=ctx.textureSourceEvidence??textureSourceEvidence(layout,ctx.referencePixelSizes??referencePixelSizes(ctx.images));
- return {images,context:{referenceEvidence:plan.evidence,referenceCameras:plan.referenceCameras,textureSourceEvidence:sourceEvidence.filter(t=>input.textureRegistry.some(r=>r.id===t.id)),textureSourceGuidance:TEXTURE_SOURCE_GUIDANCE,imageOrder:[...ctx.images.map((_,n)=>'原始参考图 '+(n+1)),...receipt.images.map(i=>i.label)]}};
+ return {images,context:{referenceEvidence:plan.evidence,referenceEvidenceScope:ASSET_REFERENCE_SCOPE_GUIDANCE,referenceCameras:plan.referenceCameras,textureSourceEvidence:sourceEvidence.filter(t=>input.textureRegistry.some(r=>r.id===t.id)),textureSourceGuidance:TEXTURE_SOURCE_GUIDANCE,imageOrder:[...ctx.images.map((_,n)=>'原始参考图 '+(n+1)),...receipt.images.map(i=>i.label)]}};
 }

@@ -6,13 +6,15 @@ import {surfaceOverridesSchema} from './program-schema';
 import type {SurfaceOverride} from './program';
 import {CONTACTS_PROMPT} from './contacts';
 import {OPENINGS_PROMPT} from './openings';
-import {layoutSchema,validateLayout,validateLayoutStructure,type SceneLayout,type AssetBrief} from './layout';
+import {layoutSchema,validateLayout,validateLayoutStructure,LAYOUT_COORDINATE_RULES,type SceneLayout,type AssetBrief} from './layout';
 import type {Complexity} from '../complexity';
 export type SpaceLayout=Omit<SceneLayout,'version'|'textures'|'lighting'|'textureReuse'|'program'>&{version:'scene-space-v1';program:Omit<SceneLayout['program'],'materials'|'templates'>&{templates:Omit<AssetBrief,'materialIds'>[]}};
 export type SurfacePlan={textureReuse?:SceneLayout['textureReuse'];version:'scene-surface-v1';materials:SceneLayout['program']['materials'];textures:SceneLayout['textures'];lighting:SceneLayout['lighting'];bindings:{templateId:string;materialIds:string[]}[];instanceSurfaces?:{instanceId:string;surfaceOverrides:SurfaceOverride[]}[];assumptions:string[]};
 const obj=(properties:any)=>({type:'object',properties,required:Object.keys(properties),additionalProperties:false});
 function omit(s:any,keys:string[]){for(const key of keys)delete s.properties[key];s.required=s.required.filter((k:string)=>!keys.includes(k));}
 export function spaceSchema(ids?:string[]){const s=layoutSchema(ids);s.properties.version.enum=['scene-space-v1'];omit(s,['textures','lighting','textureReuse']);s.properties.spatialRelations={type:'array',minItems:1,maxItems:24,items:obj({id:{type:'string'},description:{type:'string'},critical:{type:'boolean'},instanceIds:{type:'array',items:{type:'string'}}})};s.required.push('spatialRelations','observedBindings');s.properties.observedBindings={type:'array',items:obj({landmarkId:{type:'string'},instanceIds:{type:'array',items:{type:'string'}}})};omit(s.properties.program.properties.instances.items,['surfaceOverrides']);omit(s.properties.program,['materials']);omit(s.properties.program.properties.templates.items,['materialIds']);return s;}
+/** The model chooses the layout; frozen observed relations are assembled locally. */
+export function spacePlanningSchema(ids?:string[]){const s=spaceSchema(ids);s.properties.version.enum=['scene-space-plan-v2'];omit(s,['spatialRelations']);return s;}
 export function surfaceSchema(){const s=layoutSchema().properties;return obj({version:{type:'string',enum:['scene-surface-v1']},textureReuse:s.textureReuse,materials:s.program.properties.materials,textures:s.textures,lighting:s.lighting,bindings:{type:'array',items:obj({templateId:{type:'string'},materialIds:{type:'array',items:{type:'string'}}})},instanceSurfaces:{type:'array',items:obj({instanceId:{type:'string'},surfaceOverrides:surfaceOverridesSchema()})},assumptions:s.assumptions});}
 export function validateSpace(space:SpaceLayout,plan:any,references:number,level:Complexity){if(space?.version!=='scene-space-v1')throw Error('空间规划版本无效');validateLayoutStructure(space,plan,references,level);return space;}
 export function applySurface(space:SpaceLayout,surface:SurfacePlan,plan:any,references:number,level:Complexity):SceneLayout{
@@ -21,10 +23,11 @@ export function applySurface(space:SpaceLayout,surface:SurfacePlan,plan:any,refe
  if(!Array.isArray(surface.assumptions)||surface.assumptions.some(x=>typeof x!=='string'))throw Error('材质推断说明无效');
  return validateLayout({...space,version:'scene-layout-v1',program:{...space.program,instances:space.program.instances.map(i=>surface.instanceSurfaces?{...i,surfaceOverrides:surface.instanceSurfaces.find(b=>b.instanceId===i.id)!.surfaceOverrides}:i),materials:surface.materials,templates:space.program.templates.map(t=>({...t,materialIds:surface.bindings.find(b=>b.templateId===t.id)!.materialIds}))},textures:surface.textures,textureReuse:surface.textureReuse??[],lighting:surface.lighting,assumptions:[...space.assumptions,...surface.assumptions]},plan,references,level);
 }
-export const SPACE_PROMPT=`这是通用场景生成的空间规划步骤。根据全部参考图和冻结需求，输出 scene-space-v1。只决定物体模板、实例位置、尺度、朝向和参考机位；材质、贴图片段、光照和逐部件几何由后续独立步骤完成，此步不要推演它们的完整构造。不要调用工具，不输出程序代码。
+export const SPACE_PROMPT=`这是通用场景生成的空间规划步骤。根据全部参考图和冻结需求，输出 scene-space-plan-v2。只决定物体模板、实例位置、尺度、朝向和参考机位；材质、贴图片段、光照和逐部件几何由后续独立步骤完成，此步不要推演它们的完整构造。不要调用工具，不输出程序代码。
+${LAYOUT_COORDINATE_RULES}
 全部图片属于同一个空间。单位为米，Z向上，rotation是绕XYZ依次旋转的弧度，scale为正值。templates最多16个；同形物体共用模板，不同位置用instances。模板包含id、中文label、简洁description、origin、bounds.min/max、maxParts。origin明确本体局部原点与朝向，bounds给出完整物体在局部坐标下的外包络；真实开口在description说明，后续几何不能填死。每个description只描述最重要的轮廓和开口，不写施工长文。每模板maxParts为1..64，是空间阶段的部件预估；独立材质规划完成后会按实际必需材质槽核对最少部件数，但不提高单资产及场景总上限。所有实例的模板maxParts相加不得超过输入的部件预算。
 每个实例含id、中文label、template、position、rotation、scale、requirementIds。关键需求至少有一个对应实例绑定，明确数量按完整物体计数，不让配件重复计数。entities与instances一一对应，instanceId、role(subject/context/ground)和自由定义的category表示语义，不局限预制类别。category使用中文类别名称（1至56字符，无首尾空白或控制字符），同类实体使用相同名称；它不是资产ID或路径。复杂度的数量和种类预算必须满足，不添加无关物体凑数。
-新增 observedBindings 为每个已观察地标绑定 instanceIds，每个实例必须有地标依据，禁止新增未观察物体。新增 spatialRelations，逐字保留输入 observation.relations 的 id、description、critical，并把 landmarkIds 按绑定展开为 instanceIds，不能删除关系或降低关键性。以下为关系类型说明：1–24 项由图片可观察的空间关系：id、中文 description、critical、instanceIds。覆盖主体的前后左右、大小比例、遮挡、通道和纵深；每项绑定已有实例。不可见关系写入 assumptions，不冒充观察。它们随后必须用 Engine 灰模截图逐项验收，验收不通过不会开始资产生成。
+observedBindings 为每个已观察地标绑定 instanceIds，每个实例必须有地标依据，禁止新增未观察物体。输入 observation.relations 已经冻结，必须据此安排主体的前后左右、大小比例、遮挡、通道和纵深。不要在输出中重复 spatialRelations：程序将逐字保留原关系 id、description、critical，并依据 observedBindings 确定地展开 instanceIds；不能删除关系或降低关键性。不可见关系写入 assumptions，不冒充观察。全部原关系随后仍须用 Engine 灰模截图逐项验收，验收不通过不会开始资产生成。
 每张参考图恰好一个referenceIndex为1..图片总数的相机。场景至少两个不同位置，最多六个，额外检查机位的referenceIndex为null。相机name用中文，position、target与物体共用Z向上坐标，fov为垂直视场弧度。projection 选择 perspective 或 orthographic；等距作品采用 orthographic，orthographicHeight 为米制垂直覆盖高度，perspective时为null。机位靠图中透视和遮挡估计，不能远距离俯视掩盖细节。
 不可观察的背面、尺度及相机估计放入中文assumptions。当前仅规划，不能称为几何已生成、已符合质量门槛。完全根据当前输入设计，不依赖固定场景坐标或专用物件。
 ${OPENINGS_PROMPT}
