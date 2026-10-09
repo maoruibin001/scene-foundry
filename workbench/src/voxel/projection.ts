@@ -3,12 +3,13 @@ export function orthographicBounds(view: any) {
   if (!Number.isFinite(height) || height <= 0 || !Number.isFinite(aspect) || aspect <= 0) throw Error("体素正交相机范围无效");
   return { left: -height * aspect / 2, right: height * aspect / 2, bottom: -height / 2, top: height / 2, near: .1, far: 1000 };
 }
-/** Extend the fixed Engine's camera route only when an authored view requests orthographic projection. */
+/** Keep authored projection and frame aspect consistent when switching fixed Engine views. */
 export function voxelProjection(world: string, controller: string, views: any[]) {
-  if (!views.some(view => view.projection === "orthographic")) return { world, controller };
+  const ortho=views.some(view=>view.projection==="orthographic");
+  if(!ortho&&!views.some(view=>view.frame))return {world,controller};
   const renderImport=/import\s*\{([^}]+)\}\s*from\s*(['"])@forgeax\/engine\/render\2/;
-  if(!renderImport.test(world))throw Error('固定 Engine render 导入缺失');
-  world=world.replace(renderImport,(_match,symbols,quote)=>`import {${/\borthographic\b/.test(symbols)?symbols:symbols.trimEnd()+', orthographic '} } from ${quote}@forgeax/engine/render${quote}`);
+  if(ortho&&!renderImport.test(world))throw Error('固定 Engine render 导入缺失');
+  if(ortho)world=world.replace(renderImport,(_match,symbols,quote)=>`import {${/\borthographic\b/.test(symbols)?symbols:symbols.trimEnd()+', orthographic '} } from ${quote}@forgeax/engine/render${quote}`);
   const first = views[0];
   if (first.projection === "orthographic") {
     const expression = /perspective\(\{fov:[^,}]+,aspect:16\/9,near:0\.1,far:1000\}\)/;
@@ -17,6 +18,6 @@ export function voxelProjection(world: string, controller: string, views: any[])
   }
   const old = "if(audit.views[selected].fov)ctx.world.set(camera,Camera,{fov:audit.views[selected].fov}).unwrap();";
   if (!controller.includes(old)) throw Error("固定 Engine 机位切换模板变化");
-  const replace = `const v=audit.views[selected] as any;if(v.projection==='orthographic'){const h=v.orthographicHeight,a=v.frame?v.frame.width/v.frame.height:16/9;ctx.world.set(camera,Camera,{projection:1,fov:0,left:-h*a/2,right:h*a/2,bottom:-h/2,top:h/2,near:.1,far:1000}).unwrap();}else if(v.fov)ctx.world.set(camera,Camera,{projection:0,fov:v.fov}).unwrap();`;
+  const replace = `const v=audit.views[selected] as any;if(v.projection==='orthographic'){const h=v.orthographicHeight,a=v.frame?v.frame.width/v.frame.height:16/9;ctx.world.set(camera,Camera,{projection:1,fov:0,left:-h*a/2,right:h*a/2,bottom:-h/2,top:h/2,near:.1,far:1000}).unwrap();}else if(v.fov)ctx.world.set(camera,Camera,{projection:0,fov:v.fov,aspect:v.frame?v.frame.width/v.frame.height:16/9}).unwrap();`;
   return { world, controller: controller.replace(old, replace) };
 }

@@ -33,7 +33,7 @@ export async function renderRepairPreview(scene:any,images:{path:string;mime:str
    if(!ready)throw Error('候选预览启动失败');
    await command(['node',join(ROOT,'src/geometry/repair-preview-capture.mjs'),game,url,capture]);
    const receipt=read(join(capture,'preview-capture.json'));if(receipt.frames.length!==scene.cameras.length)throw Error('候选预览缺少机位');
-   receipt.sceneSha256=digest(JSON.stringify(authored));receipt.renderedSceneSha256=digest(JSON.stringify(scene));receipt.distManifestDigest=expectedManifest;receipt.voxelized=Boolean(authored.voxelizationTarget);receipt.frames=receipt.frames.map((f:any,i:number)=>{const bytes=readFileSync(join(capture,f.file));assertVisibilityCamera(scene.cameras[i],f.pose,i,bytes.readUInt32BE(16),bytes.readUInt32BE(20));return {...f,sha256:digest(bytes)};});
+   receipt.sceneSha256=digest(JSON.stringify(authored));receipt.renderedSceneSha256=digest(JSON.stringify(scene));receipt.distManifestDigest=expectedManifest;receipt.voxelized=Boolean(authored.voxelizationTarget);receipt.frames=receipt.frames.map((f:any,i:number)=>{const bytes=readFileSync(join(capture,f.file));assertVisibilityCamera(scene.cameras[i],f.pose,i,bytes.readUInt32BE(16),bytes.readUInt32BE(20),true);return {...f,sha256:digest(bytes)};});
    if(receipt.report?.pageErrors?.length||receipt.report?.consoleErrors?.length)throw Error('候选预览出现Engine错误');
    save(join(folder,'engine-preview-receipt.json'),receipt);return receipt.frames.map((f:any)=>({type:'image' as const,mimeType:'image/png',data:readFileSync(join(capture,f.file)).toString('base64')}));
   }finally{if(p.exitCode===null)p.kill();await p.exited;writeFileSync(join(folder,'preview.log'),(await logs).join('\n'));}

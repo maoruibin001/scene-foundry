@@ -1,9 +1,9 @@
 import {diagnosticFrame} from './reference-frame.mjs';
-import {basis,type Camera} from './camera-fit';
+import {basis,orthographicHeight,type Camera} from './camera-fit';
 import {compileGeometryProgram,type Texture} from './program';
 import type {SceneInput} from './scene-contract';
 
-export const VISIBILITY_METHOD='opaque-geometry-visibility-v2';
+export const VISIBILITY_METHOD='opaque-geometry-visibility-v3';
 export const VISIBILITY_PROMPT='若输入有geometryVisibility，最后追加的是对应机位的彩色编号几何诊断图：原图在前、actualFrameNames实际截图居中、diagnosticImages诊断图最后。数字从palette映射到真实实例和模板；visibleParts给出主要可见部件、材质与归一化范围，instanceOcclusions给出不同物体的前后遮挡，nearestPartOcclusions也包含同一物体内部层次。对照真实截图和原图，把主要差距落实到实际实例、部件与材料；不要只看包围盒猜谁挡住了谁。诊断图不包含光照和材质外观，不是新的目标图；透明表面被排除、面积只是低分辨率几何采样。正常表皮盖住底层、家具遮住地面都是合理现象，不能把遮挡量直接当成错误或自动按面积选择修改。结合参考图判断可见桌面、通道、开口和前中后景应有的关系，保留正确遮挡。';
 type Point=[number,number,number];
 type Mesh={name:string;entityId:string;geometry:{positions:number[];indices:number[]}};
@@ -14,7 +14,7 @@ export function rasterVisibility(meshes:Mesh[],camera:Camera,width=320,height=18
  if(!Number.isInteger(width)||!Number.isInteger(height)||width<8||height<8||width>640||height>640)throw Error('可见性诊断分辨率无效');
  const size=width*height,front=new Int32Array(size).fill(-1),back=new Int32Array(size).fill(-1),depth=new Float64Array(size).fill(Infinity),second=new Float64Array(size).fill(Infinity);
  const objectFront=new Int32Array(size).fill(-1),other=new Int32Array(size).fill(-1),objectDepth=new Float64Array(size).fill(Infinity),otherDepth=new Float64Array(size).fill(Infinity);
- const b=basis(camera),t=Math.tan(camera.fov/2),aspect=width/height;
+ const b=basis(camera),t=Math.tan(camera.fov/2),aspect=width/height,orthoHeight=orthographicHeight(camera);
  const clip=(input:Point[],z:number,keepGreater:boolean)=>{const result:Point[]=[];for(let i=0;i<input.length;i++){
   const a=input[i],c=input[(i+1)%input.length],inside=(p:Point)=>keepGreater?p[2]>=z:p[2]<=z,aa=inside(a),cc=inside(c);
   if(aa)result.push(a);if(aa!==cc){const f=(z-a[2])/(c[2]-a[2]);result.push([a[0]+f*(c[0]-a[0]),a[1]+f*(c[1]-a[1]),z]);}
@@ -34,7 +34,7 @@ export function rasterVisibility(meshes:Mesh[],camera:Camera,width=320,height=18
   for(let i=0;i<indices.length;i+=3){
    const input=[points[indices[i]],points[indices[i+1]],points[indices[i+2]]];
    const polygon=clip(clip(input,near,true),far,false);if(polygon.length<3)continue;
-   const projected=polygon.map(([x,y,z])=>[(.5+x/(z*t*aspect*2))*width,(.5-y/(z*t*2))*height,1/z] as Point);
+   const projected=polygon.map(([x,y,z])=>{const span=orthoHeight??z*t*2;return [(.5+x/(span*aspect))*width,(.5-y/span)*height,orthoHeight===null?1/z:z] as Point;});
    for(let j=1;j<projected.length-1;j++){
     const a=projected[0],c=projected[j],d=projected[j+1],area=edge(a,c,d[0],d[1]);
     // Engine 默认背面剔除；双面网格由编译器生成反向三角形。
@@ -43,7 +43,7 @@ export function rasterVisibility(meshes:Mesh[],camera:Camera,width=320,height=18
     const y0=Math.max(0,Math.ceil(Math.min(a[1],c[1],d[1])-.5)),y1=Math.min(height-1,Math.floor(Math.max(a[1],c[1],d[1])-.5));
     for(let y=y0;y<=y1;y++)for(let x=x0;x<=x1;x++){
      const u=edge(c,d,x+.5,y+.5)/area,v=edge(d,a,x+.5,y+.5)/area,w=1-u-v;if(u< -1e-9||v< -1e-9||w< -1e-9)continue;
-     insert(y*width+x,1/(u*a[2]+v*c[2]+w*d[2]),id);
+     const interpolated=u*a[2]+v*c[2]+w*d[2];insert(y*width+x,orthoHeight===null?1/interpolated:interpolated,id);
     }
    }
   }
@@ -52,7 +52,7 @@ export function rasterVisibility(meshes:Mesh[],camera:Camera,width=320,height=18
 }
 
 /** 仅诊断不透明几何；不会产生质量得分、失败门槛或删除建议。 */
-export function sceneVisibility(source:SceneInput,textures:Record<string,Texture>={}){
+export function sceneVisibility(source:SceneInput,textures:Record<string,Texture>={},options:{legacyPerspective?:boolean}={}){
  const compiled=compileGeometryProgram({...source.program,materials:source.program.materials.map(m=>({...m,textureId:null,surfaceDetail:null}))});
  const excluded=source.program.materials.filter(m=>{
   if(m.color[3]<.95)return true;if(!m.textureId)return false;const texture=textures[m.textureId];if(!texture)return true;
@@ -63,7 +63,7 @@ export function sceneVisibility(source:SceneInput,textures:Record<string,Texture
  const kept=allMeta.map((m,i)=>({m,mesh:compiled.meshes[i]})).filter(x=>!excluded.includes(x.m.materialId));
  const meshes=kept.map(x=>x.mesh),metadata=kept.map(x=>x.m),palette=source.program.instances.map((i,n)=>({number:n+1,instanceId:i.id,label:i.label,templateId:i.template}));
  const views=source.cameras.map(camera=>{
-  const frame=diagnosticFrame(camera),raster=rasterVisibility(meshes,camera,frame.width,frame.height),count=raster.width*raster.height;
+  const frame=diagnosticFrame(camera),raster=rasterVisibility(meshes,options.legacyPerspective?{...camera,projection:'perspective'}:camera,frame.width,frame.height),count=raster.width*raster.height;
   const stats=new Map<number,{pixels:number;sumX:number;sumY:number;rect:number[]}>(),pairs=new Map<string,number>(),objectPairs=new Map<string,number>();
   for(let p=0;p<count;p++){
    const id=raster.front[p];if(id<0)continue;const x=p%raster.width,y=Math.floor(p/raster.width),s=stats.get(id)??{pixels:0,sumX:0,sumY:0,rect:[x,y,x+1,y+1]};
@@ -82,7 +82,7 @@ export function sceneVisibility(source:SceneInput,textures:Record<string,Texture
   const labels=Uint16Array.from(raster.front,id=>id<0?0:palette.find(p=>p.instanceId===metadata[id].instanceId)!.number);
   return {cameraName:camera.name,referenceIndex:camera.referenceIndex,width:raster.width,height:raster.height,parts,instances,occlusions,instanceOcclusions,labelsBase64:Buffer.from(labels.buffer).toString('base64')};
  });
- return {method:VISIBILITY_METHOD,source:'实际编译网格与冻结相机；不是 Engine 截图分割',limitations:'320×180 像素中心采样，近面0.1米，远面1000米，按背面剔除；分别统计最近不同部件和最近不同实例的两层深度。透明材质、含透明像素或缺失像素的纹理不参与遮挡；不模拟光照、纹理颜色、后处理或更深层可见性。共面交界的部件身份可能歧义，小面积或相互重叠的编号可能省略。面积仅辅助定位，不能判定错误、删除物体或代替质量评分。',excludedMaterials:excluded,palette,views};
+ return {method:options.legacyPerspective?'opaque-geometry-visibility-v2':VISIBILITY_METHOD,source:'实际编译网格与冻结相机；不是 Engine 截图分割',limitations:'320×180 像素中心采样，近面0.1米，远面1000米，按背面剔除；分别统计最近不同部件和最近不同实例的两层深度。透明材质、含透明像素或缺失像素的纹理不参与遮挡；不模拟光照、纹理颜色、后处理或更深层可见性。共面交界的部件身份可能歧义，小面积或相互重叠的编号可能省略。面积仅辅助定位，不能判定错误、删除物体或代替质量评分。',excludedMaterials:excluded,palette,views};
 }
 
 export function visibilityContext(report:ReturnType<typeof sceneVisibility>){

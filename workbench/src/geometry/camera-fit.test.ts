@@ -1,5 +1,5 @@
 import {test,expect} from 'bun:test';
-import {project,ray,rayScene,fitCamera,type Match} from './camera-fit';
+import {project,ray,cameraRay,basis,rayScene,fitCamera,type Match} from './camera-fit';
 import {alignmentSchema,ALIGNMENT_PROMPT,validateObservations} from './camera-alignment';
 import {compileGeometryProgram} from './program';
 const seed={position:[7,-8,3],target:[0,0,1.3],fov:1},target={position:[7.5,-7.6,3.1],target:[.3,.1,1.1],fov:1.08};
@@ -20,4 +20,15 @@ test('已对齐或留出点不一致时不伪称改善，不接受少量点求�
 test('观测契约不裁掉内容、不接收虚构机位和重复标签，允许如实报告无可用点',()=>{
  const v:any={version:'camera-observations-v1',views:[{referenceIndex:1,contentRect:[0,0,1,1],points:[],uncertainty:'无法对应'}]};expect(validateObservations(v,1)).toBe(v);expect(()=>validateObservations(v,2)).toThrow('独立观测');v.views[0].contentRect=[0,.4,1,1];expect(()=>validateObservations(v,1)).toThrow('裁掉');v.views[0].contentRect=[0,0,1,1];const p={label:'一点',referenceUV:[.3,.4],renderUV:[.4,.5],confidence:.9};v.views[0].points=[p,p];expect(()=>validateObservations(v,1)).toThrow('身份');
  const walk=(s:any)=>{if(s.type==='object'){expect(s.additionalProperties).toBe(false);expect(s.required).toEqual(Object.keys(s.properties));Object.values(s.properties).forEach(walk)}if(s.items)walk(s.items)};walk(alignmentSchema());expect(ALIGNMENT_PROMPT).not.toContain('餐厅');expect(ALIGNMENT_PROMPT).toContain('全部说明使用中文');
+});
+
+test('正交投影不随深度缩放；任意Z向上机位的像素射线平行且可逆',()=>{
+ const c={...seed,projection:'orthographic' as const,orthographicHeight:8};
+ for(const aspect of [1,16/9,.8])for(const point of points){const uv=project(c,point,aspect),beam=cameraRay(c,uv,aspect);beam.direction.forEach((v,k)=>expect(v).toBeCloseTo(basis(c).forward[k],8));const restored=beam.origin.map((v,k)=>v+beam.direction[k]*uv[2]);restored.forEach((v,k)=>expect(v).toBeCloseTo(point[k],8));const deeper=point.map((v,k)=>v+beam.direction[k]*5);expect(project(c,deeper,aspect)[0]).toBeCloseTo(uv[0],8);expect(project(c,deeper,aspect)[1]).toBeCloseTo(uv[1],8);}
+ expect(()=>project({...c,orthographicHeight:0},points[0])).toThrow('覆盖高度');
+});
+test('正交校准优化覆盖高度，保留投影类型与原始视场，不依赖透视FOV缩放',()=>{
+ const c={...seed,projection:'orthographic' as const,orthographicHeight:8},target={...c,orthographicHeight:9};
+ const ms:Match[]=points.map((point,i)=>({label:'观测'+i,point,expected:project(target,point).slice(0,2),observed:project(c,point).slice(0,2),confidence:.95,meshId:'part'+i}));
+ const fitted=fitCamera(c,ms);expect(fitted.camera.projection).toBe('orthographic');expect(fitted.camera.fov).toBe(c.fov);expect(fitted.report.accepted).toBe(true);expect(fitted.report.validationAfter).toBeLessThan(fitted.report.validationBefore*.2);expect(c.orthographicHeight).toBe(8);
 });

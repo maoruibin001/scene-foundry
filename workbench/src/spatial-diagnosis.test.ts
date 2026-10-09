@@ -1,5 +1,5 @@
 import {test,expect} from 'bun:test';
-import {mkdtempSync,rmSync} from 'node:fs';
+import {mkdtempSync,rmSync,writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {ImprovementLedger} from './improvement-governance';
@@ -16,6 +16,35 @@ test('有证据新版本继续同账本，不改评分历史或增加调用额�
  expect(()=>resumeDiagnosedSpatialRepair(f.ledger,f.source,0,reason+'再试',{id:'new'},'protocol')).toThrow('已经尝试');
  const first=f.ledger.result(f.source.improvementId,{kind:'space',comparison:'spatial-composition-v3',score:59,status:'failed',jobId:'new'});expect(first.stopped).toBeUndefined();expect(first.noGain).toBe(1);expect(first.progress.previousBest).toBe(60);
  const stopped=f.ledger.result(f.source.improvementId,{kind:'space',comparison:'spatial-composition-v3',score:59,status:'failed',jobId:'new-round2'});expect(stopped.stopped).toBeTruthy();expect(stopped.noGain).toBe(2);expect(stopped.progress.previousBest).toBe(60);
+ }finally{f.close();}
+});
+
+test('有界历史实验的新机制只能显式追加1至2次修复，不重置调用或结果且同版本不可重复追加',()=>{
+ const f=fixture();try{
+  const id=f.source.improvementId,v=f.ledger.get(id);v.limits={...v.limits,repairs:6,calls:100};v.repairs=6;v.calls=26;
+  // Historical finite limits are fixture inputs, not a grant made by the continuation.
+  writeFileSync(f.ledger.path(id),JSON.stringify(v));
+  f.ledger.markStopped(id,'累计修复 6/6 次，已达到上限；手动续跑沿用累计次数');
+  const before=f.ledger.get(id);
+  for(const extra of [undefined,0,3,-1,1.5])expect(()=>resumeDiagnosedSpatialRepair(f.ledger,f.source,0,reason,{id:'new'},'protocol',{additionalRepairs:extra})).toThrow('累计预算');
+  expect(spatialDiagnosisHTML({...f.source,improvement:before},{id:'new'})).not.toContain('id="spatial-refine"');
+  const html=spatialDiagnosisHTML({...f.source,improvement:before},{id:'new'},{allowFiniteRevisions:true});expect(html).toContain('最多追加 2 次修复');
+  const diagnosis=resumeDiagnosedSpatialRepair(f.ledger,f.source,0,reason,{id:'new'},'protocol',{additionalRepairs:2}),after=f.ledger.get(id);
+  expect(after.calls).toBe(26);expect(after.repairs).toBe(6);expect(after.limits).toEqual({...before.limits,repairs:8});expect(after.results).toEqual(before.results);
+  expect(()=>resumeDiagnosedSpatialRepair(f.ledger,f.source,0,reason+'换说明',{id:'new'},'protocol',{additionalRepairs:2})).toThrow('已经尝试');
+  f.ledger.reserveStrategyRepair(id,'diagnosed-graybox-repair',reason,diagnosis.revisionId);f.ledger.reserveStrategyRepair(id,'diagnosed-graybox-repair',reason,diagnosis.revisionId);
+  expect(f.ledger.get(id).repairs).toBe(7);
+ }finally{f.close();}
+});
+
+test('有界新机制不能追加调用预算、绕过外部阻塞或在未停止时反复授予修复',()=>{
+ for(const stopped of ['AUTHENTICATION_FAILED','累计模型调用已达上限，需诊断机制与基础条件',null]){
+  const f=fixture();try{const id=f.source.improvementId,v=f.ledger.get(id);v.limits={...v.limits,repairs:2,calls:100};v.stopped=stopped;writeFileSync(f.ledger.path(id),JSON.stringify(v));
+   expect(()=>resumeDiagnosedSpatialRepair(f.ledger,f.source,0,reason,{id:'new'},'protocol',{additionalRepairs:1})).toThrow('外部阻塞');
+  }finally{f.close();}
+ }
+ const f=fixture();try{const id=f.source.improvementId,v=f.ledger.get(id);v.limits={...v.limits,repairs:2,calls:100};v.calls=97;writeFileSync(f.ledger.path(id),JSON.stringify(v));
+  expect(()=>resumeDiagnosedSpatialRepair(f.ledger,f.source,0,reason,{id:'new'},'protocol',{additionalRepairs:2})).toThrow('累计调用预算不足');
  }finally{f.close();}
 });
 test('运行中、完整场景、未评估轮次、旧版本、改评分协议或外部阻塞均拒绝',()=>{

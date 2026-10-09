@@ -1,6 +1,7 @@
+import {compileGeometryProgram} from './program';
 import {test,expect} from 'bun:test';
 import {rasterVisibility,sceneVisibility,visibilityContext} from './visibility';
-import {ray,rayScene} from './camera-fit';
+import {ray,cameraRay,rayScene} from './camera-fit';
 import {assertVisibilityCamera} from './visibility-evidence';
 
 const camera={position:[0,-5,1],target:[0,0,1],fov:1};
@@ -52,3 +53,23 @@ test('物体表皮和底层不会吞掉跨物体遮挡；运行机位不一致�
 });
 
 test('诊断使用实例覆盖后的真实材质和透明度，身份仍能回指原模板部件',()=>{const s=scene();s.program.materials.push({...s.program.materials[0],id:'transparent',color:[1,1,1,.2],textureId:null});s.program.instances[0].surfaceOverrides=[{sourceMaterialId:'surface',targetMaterialId:'transparent',uvScale:null}];let r=sceneVisibility(s);expect(r.views[0].instances.map(i=>i.instanceId)).toEqual(['back']);s.program.materials[1].color[3]=1;r=sceneVisibility(s);expect(r.views[0].parts[0]).toMatchObject({instanceId:'front',sourceMaterialId:'surface',materialId:'transparent',partId:'panel'});});
+
+test('正交光栅的每像素可见身份和深度与独立网格射线一致，含倾斜面及近裁剪',()=>{
+ const s=scene(),c={...s.cameras[0],projection:'orthographic',orthographicHeight:4};
+ s.program.instances[1].position=[.7,2.2,1];s.program.instances[1].rotation=[0,0,.4];
+ const meshes=compileGeometryProgram(s.program).meshes,w=64,h=64,r=rasterVisibility(meshes,c,w,h,.1,20),cast=rayScene(meshes,{near:.1,far:20});let hits=0;
+ for(let y=0;y<h;y++)for(let x=0;x<w;x++){const beam=cameraRay(c,[(x+.5)/w,(y+.5)/h],1),hit=cast(beam.origin,beam.direction),at=r.front[y*w+x];if(hit){expect(at).toBeGreaterThanOrEqual(0);expect(meshes[at].name).toBe(hit.meshId);expect(r.depth[y*w+x]).toBeCloseTo(hit.distance,6);hits++;}else expect(at).toBe(-1);}
+ expect(hits).toBeGreaterThan(100);
+});
+
+test('实际相机投影回执拒绝投影、范围、裁剪及宽高比不一致，旧无回执不能证明当前契约',()=>{
+ const c:any={...camera,name:'正面',referenceIndex:1,projection:'orthographic',orthographicHeight:4,frame:{width:900,height:900}};
+ const projection={projection:1,fov:0,aspect:1,left:-2,right:2,bottom:-2,top:2,near:.1,far:1000};
+ const pose={selectedView:0,position:[0,1,5],target:[0,1,0],fov:c.fov,cameraProjection:projection};
+ expect(()=>assertVisibilityCamera(c,pose,0,900,900,true)).not.toThrow();
+ for(const patch of [{projection:0},{top:3},{near:.2},{far:500}])expect(()=>assertVisibilityCamera(c,{...pose,cameraProjection:{...projection,...patch}},0,900,900,true)).toThrow();
+ expect(()=>assertVisibilityCamera(c,{...pose,cameraProjection:undefined},0,900,900,true)).toThrow('缺少实际');
+ const perspective={...c,projection:'perspective'},p={...pose,cameraProjection:{...projection,projection:0,fov:c.fov}};
+ expect(()=>assertVisibilityCamera(perspective,p,0,900,900,true)).not.toThrow();
+ for(const patch of [{fov:c.fov+.1},{aspect:16/9}])expect(()=>assertVisibilityCamera(perspective,{...p,cameraProjection:{...p.cameraProjection,...patch}},0,900,900,true)).toThrow('实际透视');
+});

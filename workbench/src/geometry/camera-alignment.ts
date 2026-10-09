@@ -4,7 +4,7 @@ import {callValidated} from '../contracts';
 import {save,read,digest,runDir,ROOT,DATA} from '../store';
 import {compileGeometryProgram} from './program';
 import {validateScene} from './scene-contract';
-import {fitCamera,project,ray,rayScene,type Match} from './camera-fit';
+import {fitCamera,project,ray,cameraRay,rayScene,type Match} from './camera-fit';
 import {recoverCodexOutput} from '../codex-output-recovery';
 const obj=(properties:any)=>({type:'object',properties,required:Object.keys(properties),additionalProperties:false});
 const vector=(n:number)=>({type:'array',items:{type:'number',minimum:0,maximum:1},minItems:n,maxItems:n});
@@ -39,14 +39,14 @@ export async function alignCameras(job:any,plan:any,images:{path:string;mime:str
   const expectedDirection=ray(camera,[.5,.5]),actualTarget=[pose.target[0],-pose.target[2],pose.target[1]],actualDirection=ray({...camera,target:actualTarget},[.5,.5]);if(Math.hypot(...expectedDirection.map((v,k)=>v-actualDirection[k]))>.001)throw Error('截图的观察方向与生成机位不符');
   if(Math.abs(contentAspect/aspect-1)>.05){reports.push({referenceIndex:view.referenceIndex,accepted:false,reason:'参考内容与实际画面的宽高比不同，需要先按对应宽高比采集画面'});continue;}
   const matches:Match[]=[],rejected:any[]=[];
-  for(const point of view.points){if(point.confidence<.75){rejected.push({label:point.label,reason:'对应置信度不足'});continue;}const uv=point.renderUV,hit=cast(camera.position,ray(camera,uv,aspect));if(!hit){rejected.push({label:point.label,reason:'射线没有命中实际可见网格'});continue;}
-   const neighbors=[[2,0],[-2,0],[0,2],[0,-2]].map(d=>cast(camera.position,ray(camera,[uv[0]+d[0]/frame.size[0],uv[1]+d[1]/frame.size[1]],aspect)));
+  for(const point of view.points){if(point.confidence<.75){rejected.push({label:point.label,reason:'对应置信度不足'});continue;}const uv=point.renderUV,beam=cameraRay(camera,uv,aspect),hit=cast(beam.origin,beam.direction);if(!hit){rejected.push({label:point.label,reason:'射线没有命中实际可见网格'});continue;}
+   const neighbors=[[2,0],[-2,0],[0,2],[0,-2]].map(d=>{const beam=cameraRay(camera,[uv[0]+d[0]/frame.size[0],uv[1]+d[1]/frame.size[1]],aspect);return cast(beam.origin,beam.direction);});
    if(neighbors.filter(h=>h?.meshId===hit.meshId).length<3){rejected.push({label:point.label,reason:'点位邻近遮挡轮廓，网格命中不稳定'});continue;}
    const expected=point.referenceUV.map((v:number,k:number)=>(v-rect[k])/(rect[k+2]-rect[k]));matches.push({label:point.label,point:hit.point,meshId:hit.meshId,observed:uv,expected,confidence:point.confidence});
   }
   const spread=[0,1].map(k=>Math.max(...matches.map(m=>m.expected[k]))-Math.min(...matches.map(m=>m.expected[k])));
   if(matches.length<10||spread[0]<.3||spread[1]<.2||new Set(matches.map(m=>m.meshId)).size<3){reports.push({referenceIndex:view.referenceIndex,accepted:false,reason:'可靠对应点不足或分布集中，不能可靠求解相机',matches,rejected});continue;}
-  const fitted=fitCamera(camera,matches,aspect),occluded=fitted.report.rows.filter(m=>{const uv=project(fitted.camera,m.point,aspect),hit=cast(fitted.camera.position,ray(fitted.camera,uv,aspect));return !hit||Math.hypot(...hit.point.map((v,k)=>v-m.point[k]))>.04;}).length;
+  const fitted=fitCamera(camera,matches,aspect),occluded=fitted.report.rows.filter(m=>{const uv=project(fitted.camera,m.point,aspect),beam=cameraRay(fitted.camera,uv,aspect),hit=cast(beam.origin,beam.direction);return !hit||Math.hypot(...hit.point.map((v,k)=>v-m.point[k]))>.04;}).length;
   const accepted=fitted.report.accepted&&occluded<=matches.length*.15;reports.push({referenceIndex:view.referenceIndex,...fitted.report,accepted,occluded,rejected,beforeCamera:camera,afterCamera:fitted.camera});if(accepted)scene.cameras[source.cameras.indexOf(camera)]=fitted.camera;
  }
  const report={method:'camera-alignment-v1',sourceJobId:job.reuseSceneFrom,sourceDigest:sha,referenceSha256:refs,quality:'not-assessed',acceptedViews:reports.filter(r=>r.accepted).length,views:reports,limitations:['固定所有几何和材质，只检验机位是否存在可测量偏差。','同名点由模型观察，留出点验证不能替代重新运行与独立视觉验收。','几何比例、缺失结构和纹理缺陷不能靠相机校准解决。']};save(join(folder,'alignment.json'),report);job.cameraAlignment=report;

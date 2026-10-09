@@ -4,7 +4,8 @@ import {sceneVisibility} from './visibility';
 import {validRect,contentBox} from './reference-projection';
 
 export const LEGACY_REFERENCE_COMPOSITION='reference-visible-composition-v1';
-export const REFERENCE_COMPOSITION='reference-visible-composition-v2';
+export const PREVIOUS_REFERENCE_COMPOSITION='reference-visible-composition-v2';
+export const REFERENCE_COMPOSITION='reference-visible-composition-v3';
 export const COMPOSITION_PROMPT='referenceComposition将原图地标框与同机位实际编译网格的可见范围对照；expected/visible/delta均在已记录内容区归一化。delta=[左,上,右,下]为候选减原图，正值表示该边偏右或偏下。outsideTargetFraction仅表示该实例可见像素落在目标框外，不能当作错误率或按面积自动增删；原图框不是分割、框内不应全部填满。partial/occluded比较的是可见范围，不是完整三维边界；透明、小面积及遮挡仍有不确定性。sourceDelta显示较来源的边界残差变化，负值表示该项几何定位更接近，不能当作质量提高。结合实际Engine画面检查通道和层次，避免通过遮住实例、放大冠体或换机位追逐数值；独立空间/70评审不变。';
 const round=(n:number)=>+n.toFixed(5);
 const rmse=(delta:number[])=>Math.sqrt(delta.reduce((n,v)=>n+v*v,0)/4);
@@ -22,9 +23,11 @@ function unresolvedScope(scene:any,observation:any,landmark:any,binding:any,targ
 }
 
 /** Compare visible surfaces, not whole-object AABBs. This report never grants a quality pass. */
-export function referenceComposition(scene:any,observation:any,visibility=sceneVisibility(scene),options:{version?:string}={}){
+export function referenceComposition(scene:any,observation:any,visibility:any=undefined,options:{version?:string}={}){
  const version=options.version??REFERENCE_COMPOSITION,legacy=version===LEGACY_REFERENCE_COMPOSITION;
- if(!legacy&&version!==REFERENCE_COMPOSITION)throw Error('未知构图测量版本');
+ if(!legacy&&version!==PREVIOUS_REFERENCE_COMPOSITION&&version!==REFERENCE_COMPOSITION)throw Error('未知构图测量版本');
+ // Replaying historical evidence preserves its old measurement, never relabels it as an improvement.
+ visibility??=sceneVisibility(scene,{}, {legacyPerspective:version!==REFERENCE_COMPOSITION});
  const report:any={version,quality:'not-assessed',
   source:{programSha256:digest(stable(scene.program)),camerasSha256:digest(stable(scene.cameras)),bindingsSha256:digest(stable(scene.observedBindings??[])),observationSha256:digest(stable(observation??null)),visibilitySha256:digest(stable(visibility))},
   limitations:'原图框来自观察记录，不是像素分割或深度真值。可见范围来自冻结机位的低分辨率不透明编译网格；不包括透明表面、纹理颜色和光照。不推断框内目标填充密度，不作为评分或放行门槛。',rows:[],unverified:[]};

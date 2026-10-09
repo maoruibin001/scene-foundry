@@ -21,7 +21,7 @@ function fixture(){
  const render:any=async(scene:any,_images:any,_refs:any,dir:string)=>{
   renders++;if(fail)throw Error('fixture renderer error');if(cancel){controller.abort();controller.signal.throwIfAborted();}
   mkdirSync(join(dir,'capture'),{recursive:true});
-  const frames=scene.cameras.map((c:any,i:number)=>{const file=`candidate-${i+1}.png`,bytes=Buffer.alloc(32);Buffer.from('89504e470d0a1a0a','hex').copy(bytes);bytes.writeUInt32BE(1600,16);bytes.writeUInt32BE(900,20);bytes.writeUInt32BE(renders,24);writeFileSync(join(dir,'capture',file),bytes);return {file,referenceIndex:c.referenceIndex,sha256:digest(bytes),pose:{selectedView:badPose?99:i,position:[c.position[0],c.position[2],-c.position[1]],target:[c.target[0],c.target[2],-c.target[1]],fov:c.fov}};});
+  const frames=scene.cameras.map((c:any,i:number)=>{const file=`candidate-${i+1}.png`,bytes=Buffer.alloc(32);Buffer.from('89504e470d0a1a0a','hex').copy(bytes);bytes.writeUInt32BE(1600,16);bytes.writeUInt32BE(900,20);bytes.writeUInt32BE(renders,24);writeFileSync(join(dir,'capture',file),bytes);return {file,referenceIndex:c.referenceIndex,sha256:digest(bytes),pose:{selectedView:badPose?99:i,position:[c.position[0],c.position[2],-c.position[1]],target:[c.target[0],c.target[2],-c.target[1]],fov:c.fov,cameraProjection:c.projection==='orthographic'?{projection:1,fov:0,near:.1,far:1000,aspect:16/9,left:-c.orthographicHeight*8/9,right:c.orthographicHeight*8/9,bottom:-c.orthographicHeight/2,top:c.orthographicHeight/2}:{projection:0,fov:c.fov,aspect:16/9,near:.1,far:1000}}};});
   save(join(dir,'engine-preview-receipt.json'),{sceneSha256:digest(JSON.stringify(scene)),frames,report:{consoleErrors:[],pageErrors:[]}});return [];
  };
  const options:any={contractVersion:"graybox-space-preview-v4",space,sourceScene,images:[],folder:join(folder,'review'),signal:controller.signal,schema:grayboxSpaceRepairSchema(),apply:(p:any)=>applyGrayboxSpaceRepair(space,p,v=>v),buildScene:(s:any,p:any)=>({...sourceScene,cameras:s.cameras,spatialContacts:s.spatialContacts,program:{...sourceScene.program,templates:applyGrayboxLocalParts(sourceScene,s,p.parts).templates,instances:s.program.instances}}),render};
@@ -90,7 +90,7 @@ test('正常候选回传同机位构图残差，恢复和最终选择验证测�
  }finally{f.close();}
 });
 
-test('v10测量与预览都保留范围不明项；旧v9证据可重开但不可冒充新契约',async()=>{
+test('当前测量与预览都保留范围不明项；旧v9证据可重开但不可冒充新契约',async()=>{
  const f=fixture();try{
   f.options.space.cameras[0].referenceIndex=1;f.options.sourceScene.cameras[0].referenceIndex=1;
   f.options.sourceScene.observedBindings=[{landmarkId:'whole',instanceIds:['front']},{landmarkId:'detail',instanceIds:['front']}];

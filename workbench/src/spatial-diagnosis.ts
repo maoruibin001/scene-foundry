@@ -31,17 +31,21 @@ export function loadSpatialRepairSeed(source:any,round:unknown){
  return {...basis,folder,space:values['space.json'],feedback:gate.review,provenance:{sourceJobId:source.id,sourceRound:basis.round,sourceVersion:source.pipelineVersion,sourceFiles:Object.fromEntries(names.map(n=>[n,digest(readFileSync(join(folder,n)))])),runtimeDigest:runtime.distManifestDigest,score:gate.review.score,sourceAccepted:false,modelCall:false}};
 }
 
-export function resumeDiagnosedSpatialRepair(ledger:ImprovementLedger,source:any,round:unknown,reason:unknown,version:any,assessmentProtocol:string){
+export function resumeDiagnosedSpatialRepair(ledger:ImprovementLedger,source:any,round:unknown,reason:unknown,version:any,assessmentProtocol:string,options:{additionalRepairs?:number}={}){
  spatialRepairBasis(source,round);
  if(typeof reason!=='string'||reason.trim().length<40||reason.length>6000)throw Error('请说明真实失败证据、已验证的新机制和下一轮检查（40至6000字）');
  if(!version?.id||version.id===source.pipelineVersion?.id)throw Error('来源路径已停止，需要已验证并冻结的新机制版本；不能原样重跑');
  if(assessmentProtocol!==source.profile?.assessmentProtocolSha256)throw Error('空间诊断续接不能改变评分协议或复评旧画面');
  const current=ledger.get(source.improvementId);
- if(current.limits.repairs!==null||current.limits.calls!==null)throw Error('新机制入口不绕过累计预算');
+ const finite=current.limits.repairs!==null||current.limits.calls!==null,extra=options.additionalRepairs??0;
+ if(finite&&(!Number.isInteger(extra)||extra<1||extra>2))throw Error('新机制入口不绕过累计预算：须明确追加最多1至2次修复');
+ if(!finite&&extra!==0)throw Error('无限修复账本无需追加次数，累计调用仍保留');
+ if(current.limits.calls!==null&&current.calls+4>current.limits.calls)throw Error('累计调用预算不足，诊断修复不增加或重置调用额度');
  const id=digest(JSON.stringify([source.executionRecoveryRoot??source.id,version.id,GRAYBOX_SPACE_REPAIR]));
  if(current.strategyRevisions?.some(r=>r.id===id))throw Error('此冻结机制已经尝试，改写说明或换来源轮次不会重新获得重跑机会');
- if(!current.stopped?.startsWith('同一评审契约连续两轮'))throw Error('外部阻塞或其他停止原因需先解除，不能冒充质量诊断');
- ledger.reviseStrategy(source.improvementId,{id,reason:reason.trim(),pipelineVersion:version,additionalRepairs:0});
+ const qualityStop=current.stopped?.startsWith('同一评审契约连续两轮'),repairStop=finite&&(/^(累计修复 \d+\/\d+ 次，已达到上限|灰模与成品已共用 \d+ 次修正额度)/.test(current.stopped??''));
+ if(!qualityStop&&!repairStop)throw Error('外部阻塞或其他停止原因需先解除，不能冒充质量诊断');
+ ledger.reviseStrategy(source.improvementId,{id,reason:reason.trim(),pipelineVersion:version,additionalRepairs:finite?extra:0});
  return {contract:GRAYBOX_SPACE_REPAIR,reason:reason.trim(),revisionId:id,sourceRound:round,sourceJobId:source.id};
 }
 

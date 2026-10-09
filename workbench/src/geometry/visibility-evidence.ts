@@ -9,9 +9,11 @@ import type {Texture} from './program';
 const escape=(value:unknown)=>String(value).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]!));
 function fileURL(path:string){const local=relative(DATA,path);if(local.startsWith('..')||local.startsWith('/'))throw Error('诊断证据位于数据目录外');return '/files/'+local.split('/').map(encodeURIComponent).join('/');}
 
-export function assertVisibilityCamera(camera:SceneInput['cameras'][number],pose:any,index:number,width:number,height:number){
+export function assertVisibilityCamera(camera:SceneInput['cameras'][number],pose:any,index:number,width:number,height:number,requireProjection=false){
  const convert=(p:number[])=>[p[0],p[2],-p[1]],same=(a:any,b:number[])=>Array.isArray(a)&&a.length===3&&a.every((v,k)=>Number.isFinite(v)&&Math.abs(v-b[k])<1e-4);
  if(pose?.selectedView!==index||!same(pose.position,convert(camera.position))||!same(pose.target,convert(camera.target))||!Number.isFinite(pose.fov)||Math.abs(pose.fov-camera.fov)>1e-5||!height||Math.abs(width/height-cameraAspect(camera))>1e-4)throw Error('可见性诊断与实际采集机位、视场或画幅不一致');
+ const p=pose?.cameraProjection;if(requireProjection&&!p)throw Error('缺少实际相机投影回执');if(p){const expected=camera.projection==='orthographic'?1:0;if(p.projection!==expected)throw Error('实际相机投影与声明不一致');if(!Number.isFinite(p.near)||!Number.isFinite(p.far)||Math.abs(p.near-.1)>1e-5||Math.abs(p.far-1000)>1e-4)throw Error('实际相机裁剪范围与诊断不一致');if(expected===1){const h=camera.orthographicHeight!,a=cameraAspect(camera),checks=[[p.left,-h*a/2],[p.right,h*a/2],[p.bottom,-h/2],[p.top,h/2]];if(checks.some(([v,w])=>!Number.isFinite(v)||Math.abs(v-w)>1e-4))throw Error('实际正交相机范围与声明不一致');}else if(!Number.isFinite(p.fov)||Math.abs(p.fov-camera.fov)>1e-5||!Number.isFinite(p.aspect)||Math.abs(p.aspect-cameraAspect(camera))>1e-4)throw Error('实际透视相机视场或宽高比不一致');}
+
 }
 
 export function prepareVisibilityEvidence(source:SceneInput,textures:Record<string,Texture>,folder:string,sourceDir:string,runtime:any,frames:string[]){
@@ -25,7 +27,7 @@ export function prepareVisibilityEvidence(source:SceneInput,textures:Record<stri
   const actual=join(sourceDir,'runtime',frame.file),actualHash=digest(readFileSync(actual));
   if(actualHash!==runtime.hashes[runtime.images.indexOf(frame.file)])throw Error('几何诊断的实际画面摘要不一致');
   const png=readFileSync(actual);if(png.length<24||png.subarray(0,8).toString('hex')!=='89504e470d0a1a0a')throw Error('实际画面不是有效PNG');
-  assertVisibilityCamera(source.cameras[index],runtime.poses?.[index],index,png.readUInt32BE(16),png.readUInt32BE(20));
+  assertVisibilityCamera(source.cameras[index],runtime.poses?.[index],index,png.readUInt32BE(16),png.readUInt32BE(20),true);
   return {...r,path:join(folder,r.file),mime:'image/png',sha256:digest(readFileSync(join(folder,r.file))),actualFrame:frame.file,actualFramePath:actual,actualFrameSha256:actualHash};
  });
  const context={...visibilityContext(report),occlusionEncoding:'front/behind 为[图中实例编号,部件ID]；身份从palette查询。遮挡本身不代表错误。',diagnosticImages:images.map(({path,mime,actualFramePath,...r}:any)=>r)};

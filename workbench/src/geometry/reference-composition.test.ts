@@ -1,5 +1,5 @@
 import {test,expect} from 'bun:test';
-import {referenceComposition,compositionContext,LEGACY_REFERENCE_COMPOSITION,REFERENCE_COMPOSITION} from './reference-composition';
+import {referenceComposition,compositionContext,LEGACY_REFERENCE_COMPOSITION,PREVIOUS_REFERENCE_COMPOSITION,REFERENCE_COMPOSITION} from './reference-composition';
 import {sceneVisibility} from './visibility';
 import {stable} from '../validated-cache';
 
@@ -95,4 +95,13 @@ test('范围不明也不能跳过非法实例或像素身份校验',()=>{
  f.scene.observedBindings[0].instanceIds.push('unknown');expect(()=>referenceComposition(f.scene,f.observation,f.report)).toThrow('绑定');
  f.scene.observedBindings[0].instanceIds.pop();f.labels[0]=99;f.report.views[0].labelsBase64=Buffer.from(f.labels.buffer).toString('base64');
  expect(()=>referenceComposition(f.scene,f.observation,f.report)).toThrow('身份');
+});
+
+test('正交构图使用真实平行投影；历史透视算法保留来源版本，不可跨版本声称改善',()=>{
+ const f=fixture();f.scene.cameras[0]={...f.scene.cameras[0],projection:'orthographic',orthographicHeight:3,frame:{width:320,height:320}};
+ const current=referenceComposition(f.scene,f.observation),old=referenceComposition(f.scene,f.observation,undefined,{version:PREVIOUS_REFERENCE_COMPOSITION});
+ expect(current.version).toBe(REFERENCE_COMPOSITION);expect(old.version).toBe(PREVIOUS_REFERENCE_COMPOSITION);
+ expect(current.source.visibilitySha256).not.toBe(old.source.visibilitySha256);
+ expect(current.rows[0].visible).not.toEqual(old.rows[0].visible);
+ expect(()=>compositionContext(current,old)).toThrow('版本');
 });
