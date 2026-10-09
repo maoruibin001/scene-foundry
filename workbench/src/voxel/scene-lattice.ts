@@ -1,9 +1,10 @@
 import type {V} from '../geometry/mesh';
+import {VOXEL_LIMITS} from './limits';
 
 export const VOXEL_LATTICE_VERSION='voxel-lattice-v1';
 export const VOXEL_LATTICE_CELL_SIZES=[.025,.05,.1,.125,.2,.25,.5,1] as const;
 export const QUARTER_TURNS=Array.from({length:9},(_,i)=>(i-4)*Math.PI/2);
-export const VOXEL_LATTICE_LIMITS={axis:192,gridCells:2_000_000} as const;
+export const VOXEL_LATTICE_LIMITS={axis:VOXEL_LIMITS.dimension,gridCells:VOXEL_LIMITS.gridCells,entities:VOXEL_LIMITS.entities} as const;
 export type VoxelLattice={version:typeof VOXEL_LATTICE_VERSION;cellSize:number;origin:V};
 const EPSILON=1e-6,ANGLE_EPSILON=1e-10;
 const fail=(ok:any,message:string)=>{if(!ok)throw Error('VOXEL_LATTICE: '+message);};
@@ -40,6 +41,8 @@ function rotateQuarter(point:V,angles:V):V{
 export function voxelSpaceGrid(space:any){
  const lattice=validateVoxelLattice(space?.voxelLattice),program=space?.program;
  fail(Array.isArray(program?.templates)&&program.templates.length>0&&Array.isArray(program.instances)&&program.instances.length>0,'共同格网需要模板边界与实际实例');
+ fail(program.instances.length<=VOXEL_LIMITS.entities,'严格体素空间全部实例最多'+VOXEL_LIMITS.entities+'个（含ground、context、subject），实际 '+program.instances.length+'；模板复用不减少实例计数，不能把水面或块簇逐块拆成实体来超出最终上限');
+ if(space.entities!==undefined)fail(Array.isArray(space.entities)&&space.entities.length<=VOXEL_LIMITS.entities,'严格体素空间语义实体最多'+VOXEL_LIMITS.entities+'个（含全部role），必须在初始规划内满足最终转换预算');
  const templates=new Map<string,any>();
  for(const template of program.templates){
   fail(typeof template?.id==='string'&&!templates.has(template.id),'模板身份缺失或重复');

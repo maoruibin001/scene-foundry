@@ -1,6 +1,7 @@
 import {test,expect} from 'bun:test';
 import {assertLatticePose,assertLatticeVector,validateVoxelLattice,validateVoxelSpace,voxelSpaceGrid,voxelLatticeSchema,VOXEL_LATTICE_CELL_SIZES,QUARTER_TURNS} from './scene-lattice';
 import {spaceSchema,spacePlanningSchema,validateSpace} from '../geometry/layout-stages';
+import {VOXEL_LIMITS} from './limits';
 
 const lattice=()=>({version:'voxel-lattice-v1' as const,cellSize:.25,origin:[0,0,0] as [number,number,number]});
 function space():any{return {version:'scene-space-v1',voxelLattice:lattice(),program:{templates:[{id:'part',bounds:{min:[-.5,-.25,0],max:[.5,.25,1]}}],instances:[{id:'one',template:'part',position:[1,0,0],rotation:[0,0,Math.PI/2],scale:[1,1,1]}]}};}
@@ -43,6 +44,18 @@ test('ordinary and historical layouts remain opt-in while present invalid lattic
  const before=JSON.stringify(legacy);expect(validateVoxelSpace(legacy)).toBe(legacy);expect(JSON.stringify(legacy)).toBe(before);expect(()=>validateVoxelSpace(legacy,{required:true})).toThrow('缺少voxelLattice');
  expect(()=>validateSpace(legacy,{},1,'simple',{strictVoxel:true})).toThrow('缺少voxelLattice');
  legacy.voxelLattice=lattice();expect(()=>validateVoxelSpace(legacy)).toThrow('VOXEL_LATTICE');
+});
+test('strict initial planning admits64 total instances and rejects65 before geometry or conversion, including ground',()=>{
+ const value=space();value.program.instances=Array.from({length:VOXEL_LIMITS.entities},(_,i)=>({...structuredClone(value.program.instances[0]),id:'i_'+i}));value.entities=value.program.instances.map(i=>({instanceId:i.id,role:'ground',category:'水面'}));
+ const before=JSON.stringify(value);expect(validateVoxelSpace(value,{required:true})).toBe(value);expect(voxelSpaceGrid(value).cells).toBe(144);expect(JSON.stringify(value)).toBe(before);
+ value.program.instances.push({...structuredClone(value.program.instances[0]),id:'i_extra'});value.entities.push({instanceId:'i_extra',role:'ground',category:'水面'});const over=JSON.stringify(value);
+ expect(()=>validateVoxelSpace(value,{required:true})).toThrow('最多64个');expect(()=>voxelSpaceGrid(value)).toThrow('实际 65');expect(JSON.stringify(value)).toBe(over);
+ delete value.voxelLattice;expect(validateVoxelSpace(value)).toBe(value);expect(JSON.stringify(value)).toBe(JSON.stringify({...JSON.parse(over),voxelLattice:undefined}));
+});
+test('strict admission also rejects overflow in a separately declared entity array; legacy data is unchanged',()=>{
+ const value=space();value.entities=Array.from({length:VOXEL_LIMITS.entities+1},(_,i)=>({instanceId:'i_'+i,role:'context',category:'构件'}));const before=JSON.stringify(value);
+ expect(()=>validateVoxelSpace(value)).toThrow('语义实体最多64个');expect(JSON.stringify(value)).toBe(before);
+ delete value.voxelLattice;expect(validateVoxelSpace(value)).toBe(value);expect(value.entities).toHaveLength(65);
 });
 test('strict planning schema is explicit and does not mutate any ordinary default schema',()=>{
  const ordinary=spaceSchema(['R1']),before=JSON.stringify(ordinary);const strict=spacePlanningSchema(['R1'],{strictVoxel:true});

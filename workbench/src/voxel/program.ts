@@ -1,9 +1,10 @@
+import { VOXEL_LIMITS } from "./limits";
 import { validateScene, type SceneInput } from "../geometry/scene-contract";
 import { compileGeometryProgram, type Part } from "../geometry/program";
 
 export const VOXEL_VERSION = "voxel-scene-v1";
 export const VOXEL_GRID_VERSION = "voxel-grid-v2";
-export const VOXEL_LIMITS = { dimension: 192, gridCells: 2_000_000, filledCells: 500_000, operationCells: 8_000_000, entities: 64, palette: 64, operations: 512, boxesPerEntity: 128, boxes: 2048 };
+export { VOXEL_LIMITS } from "./limits";
 type V = [number, number, number];
 export type VoxelOperation = { action: "fill" | "erase" | "paint"; shape: "box" | "ellipsoid" | "ramp"; min: V; size: V; palette: string | null; slopeAxis: "x" | "y"; reverse: boolean; overlap?:'reject'|'keep-existing'|'replace' };
 export type VoxelEntity = { id: string; label: string; category: string; role: "subject" | "context" | "ground"; requirementIds: string[]; operations: VoxelOperation[] };

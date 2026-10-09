@@ -1,6 +1,7 @@
 import {voxelGeometryGuidance} from '../voxel/construction-guidance';
 import {VOXEL_SPACE_GUIDANCE,VOXEL_STRICT_SPACE_GUIDANCE,VOXEL_GEOMETRY_GUIDANCE,VOXEL_SURFACE_GUIDANCE} from '../voxel/construction-guidance';
 import {voxelComponentRequirements,VOXEL_COMPONENT_REQUIREMENTS_GUIDANCE} from '../voxel/landmark-coverage';
+import {VOXEL_LIMITS} from '../voxel/limits';
 import {withInitialSpaceDraft} from './space-draft';
 import {assetGeometryBasis} from './asset-geometry-basis';
 import {assertProceduralHandoff,proceduralSeeds,PROCEDURAL_HANDOFF_RULES} from './procedural-handoff';
@@ -56,7 +57,7 @@ export async function generateLayout(ctx:GenerationContext){
    system:(construction?spaceConstructionPrompt(construction.kit.instructions):SPACE_PROMPT)+'\n'+matchingGuidance(job)+(job.sceneKind==='voxel'?'\n'+(strictVoxel?VOXEL_STRICT_SPACE_GUIDANCE:VOXEL_SPACE_GUIDANCE):''),
    schemaContext:{requirementIds:plan.requirements.map((r:any)=>r.id),derivedSpatialRelations:true,...(strictVoxel?{strictVoxel:true}:{})},
    text:JSON.stringify({input:job.prompt,scoring:scoringGuidance(job.policy),referenceImages:images.length,generationBrief:job.generationBrief,observation:ctx.observation,plan,productionRules:SPEC.rules,
-    ...(strictVoxel?{requiredIndependentComponents:voxelComponentRequirements(ctx.observation),minimumIndependentInstanceSlots:voxelComponentRequirements(ctx.observation).length,independentComponentGuidance:VOXEL_COMPONENT_REQUIREMENTS_GUIDANCE}:{})})},dir,validateNewSpace),()=>construction?.snapshot(),ctx.preserveSpaceDraft,signal,error=>save(join(dir,'space-draft-warning.json'),{error:String(error),originalStageFailurePreserved:true}));
+    ...(strictVoxel?{requiredIndependentComponents:voxelComponentRequirements(ctx.observation),minimumIndependentInstanceSlots:voxelComponentRequirements(ctx.observation).length,maximumTotalInstanceSlots:VOXEL_LIMITS.entities,instanceBudgetGuidance:'最低独立组件数量与全部实例上限必须同时满足；最多'+VOXEL_LIMITS.entities+'个instances及对应entities，包含ground、context、subject全部role，复用模板不减少实例计数。同一连续水面或同一组件区域的重复块使用一个有界voxelVolume内的fill/erase/repeat构造，不能逐条水带、逐块绿植增加实体绕过上限，也不能删除关键组件或借用宿主别名。',independentComponentGuidance:VOXEL_COMPONENT_REQUIREMENTS_GUIDANCE}:{})})},dir,validateNewSpace),()=>construction?.snapshot(),ctx.preserveSpaceDraft,signal,error=>save(join(dir,'space-draft-warning.json'),{error:String(error),originalStageFailurePreserved:true}));
  });
  const estimate=firstPassCallEstimate(space.value.program.templates.length,job.matchingLevel??'detailed');
  save(join(dir,'call-estimate.json'),estimate);
