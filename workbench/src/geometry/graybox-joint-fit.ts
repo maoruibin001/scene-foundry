@@ -7,7 +7,7 @@ const round=(n:number)=>Math.round(n*1e5)/1e5;
 export function jointFitCheck(candidate:any,source:any){
  const cameras=new Map<number,any>(),violations:any[]=[];
  const camera=(referenceIndex:number)=>{if(!cameras.has(referenceIndex))cameras.set(referenceIndex,{referenceIndex,deltas:[],before:[],after:[],sourceCritical:{measured:0,unverified:0},candidateCritical:{measured:0,unverified:0}});return cameras.get(referenceIndex);};
- const scope=(row:any)=>['bound-instance-union','exclusive-instance-subset'].includes(row.comparisonScope)?'measured':'unverified';
+ const scope=(row:any)=>['bound-instance-union','exclusive-instance-subset','exclusive-part-subset'].includes(row.comparisonScope)?'measured':'unverified';
  for(const row of source?.rows??[])if(row.critical)camera(row.referenceIndex).sourceCritical[scope(row)]++;
  for(const row of candidate?.rows??[]){
   const c=camera(row.referenceIndex),delta=row.sourceDelta;

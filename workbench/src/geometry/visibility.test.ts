@@ -73,3 +73,13 @@ test('实际相机投影回执拒绝投影、范围、裁剪及宽高比不一�
  expect(()=>assertVisibilityCamera(perspective,p,0,900,900,true)).not.toThrow();
  for(const patch of [{fov:c.fov+.1},{aspect:16/9}])expect(()=>assertVisibilityCamera(perspective,{...p,cameraProjection:{...p.cameraProjection,...patch}},0,900,900,true)).toThrow('实际透视');
 });
+
+test('部件身份采样需显式开启；关闭时可见性报告与历史一致',()=>{
+ const s=scene(),off=sceneVisibility(s),on=sceneVisibility(s,{},{partLabels:true});
+ expect(off).not.toHaveProperty('partPalette');expect(off.views[0]).not.toHaveProperty('partLabelsBase64');
+ expect(JSON.stringify({...on,partPalette:undefined,views:on.views.map(({partLabelsBase64,...v}:any)=>v)})).toBe(JSON.stringify(off));
+ const parts=new Uint16Array(Buffer.from(on.views[0].partLabelsBase64!,'base64').buffer.slice(0)),labels=new Uint16Array(Buffer.from(on.views[0].labelsBase64,'base64').buffer.slice(0));
+ const owner=new Map(on.partPalette!.map(p=>[p.number,p.instanceId])),instance=new Map(on.palette.map(p=>[p.number,p.instanceId]));
+ expect(parts.length).toBe(labels.length);for(let i=0;i<parts.length;i++)expect(parts[i]?owner.get(parts[i]):undefined).toBe(labels[i]?instance.get(labels[i]):undefined);
+ expect(parts.some(Boolean)).toBe(true);
+});

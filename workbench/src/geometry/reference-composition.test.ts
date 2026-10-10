@@ -1,5 +1,5 @@
 import {test,expect} from 'bun:test';
-import {referenceComposition,compositionContext,LEGACY_REFERENCE_COMPOSITION,PREVIOUS_REFERENCE_COMPOSITION,REFERENCE_COMPOSITION,NEXT_REFERENCE_COMPOSITION,COMPOSITION_SUBSET_PROMPT} from './reference-composition';
+import {referenceComposition,compositionContext,LEGACY_REFERENCE_COMPOSITION,PREVIOUS_REFERENCE_COMPOSITION,REFERENCE_COMPOSITION,NEXT_REFERENCE_COMPOSITION,PART_REFERENCE_COMPOSITION,COMPOSITION_SUBSET_PROMPT,COMPOSITION_PART_PROMPT} from './reference-composition';
 import {sceneVisibility} from './visibility';
 import {stable} from '../validated-cache';
 
@@ -141,4 +141,44 @@ test('v4来源对照：相同测量子集给出残差变化；子集或逐框分
  expect(moved.rows[0].measuredInstanceIds).toEqual(['a','b']);expect(moved.rows[1].comparisonScope).toBe('unverified-binding-scope');
  for(const row of moved.rows)expect(row.sourceDelta).toMatchObject({edgeResidual:null,identityChanged:true,visibilityLost:false});
  expect(()=>compositionContext(moved,referenceComposition(f.scene,f.observation,f.report))).toThrow('版本');
+});
+// Two parts of one shared instance: p on the left half, q on the right; landmarks L and M both bind only instance a.
+function partFixture(){
+ const f=fixture();f.scene.program.templates[0].parts.push({...f.scene.program.templates[0].parts[0],id:'q'});
+ f.scene.observedBindings.push({landmarkId:'M',instanceIds:['a']});
+ f.observation.landmarks[0].views[0].box=[.25,.25,.5,.75];
+ f.observation.landmarks.push({id:'M',label:'部件',critical:true,views:[{referenceIndex:1,box:[.5,.25,.75,.75],extent:'partial'}]});
+ f.report.partPalette=[{number:1,instanceId:'a',partId:'p'},{number:2,instanceId:'a',partId:'q'},{number:3,instanceId:'b',partId:'p'}];
+ const parts=(cells:[number,number,number][])=>{const l=new Uint16Array(64);for(const [x,y,n] of cells)l[y*8+x]=n;f.report.views[0].partLabelsBase64=Buffer.from(l.buffer).toString('base64');};
+ paint(f,square(2,6,1));parts([...square(2,4,1),...square(4,6,2)]);
+ return {...f,parts};
+}
+const v5={version:PART_REFERENCE_COMPOSITION};
+test('v5完全共用实例时按部件可见重心逐框分配；v4同输入仍未验证',()=>{
+ const f=partFixture(),before=stable(f);
+ expect(referenceComposition(f.scene,f.observation,f.report,v4).rows.every((r:any)=>r.comparisonScope==='unverified-binding-scope')).toBe(true);
+ const report=referenceComposition(f.scene,f.observation,f.report,v5),[l,m]=report.rows;
+ expect(report.version).toBe(PART_REFERENCE_COMPOSITION);expect(report.limitations).toContain(COMPOSITION_PART_PROMPT);expect(report.limitations).toContain(COMPOSITION_SUBSET_PROMPT);
+ expect(l).toMatchObject({comparisonScope:'exclusive-part-subset',measuredParts:['a/p'],visible:[.25,.25,.5,.75],edgeResidual:0,pixels:8,status:'measured-visible-extent'});
+ expect(m).toMatchObject({comparisonScope:'exclusive-part-subset',measuredParts:['a/q'],visible:[.5,.25,.75,.75],edgeResidual:0});
+ expect(l.warnings.join()).toContain('不是语义分割');
+ // One visible part is the whole shared object: no assignment.
+ const single=partFixture();single.parts(square(2,6,1));expect(referenceComposition(single.scene,single.observation,single.report,v5).rows.every((r:any)=>r.comparisonScope==='unverified-binding-scope')).toBe(true);expect(report.unverified).toEqual([]);expect(stable(f)).toBe(before);
+ // Missing part identities stay unverified and say why.
+ delete f.report.views[0].partLabelsBase64;const bare=referenceComposition(f.scene,f.observation,f.report,v5);
+ expect(bare.rows.every((r:any)=>r.comparisonScope==='unverified-binding-scope'&&r.edgeResidual===null)).toBe(true);expect(bare.unverified[0]).toContain('缺少部件身份');
+});
+test('v5候选沿用来源部件分配：部件移出原框是残差变大，不是身份改变；不一致部件身份拒绝',()=>{
+ const f=partFixture(),source=referenceComposition(f.scene,f.observation,f.report,v5);
+ // q drifts left into L's box; a fresh assignment would hand q to L, the frozen one keeps it on M.
+ paint(f,square(2,4,1));f.parts([...square(2,3,1),...square(3,4,2)]);
+ const fresh=referenceComposition(f.scene,f.observation,f.report,v5),frozen=compositionContext(referenceComposition(f.scene,f.observation,f.report,{...v5,assignment:source}),source);
+ expect(fresh.rows[0].measuredParts).toEqual(['a/p','a/q']);
+ expect(frozen.rows.map((r:any)=>r.measuredParts)).toEqual([['a/p'],['a/q']]);
+ expect(frozen.rows[1].sourceDelta.edgeResidual).toBeGreaterThan(0);expect(frozen.rows[1].sourceDelta.identityChanged).toBeUndefined();
+ const changed=compositionContext(fresh,source);expect(changed.rows[0].sourceDelta).toMatchObject({edgeResidual:null,identityChanged:true});
+ // A part label claiming instance b over an instance-a pixel is rejected.
+ paint(f,square(2,6,1));f.parts([...square(2,4,3),...square(4,6,2)]);expect(()=>referenceComposition(f.scene,f.observation,f.report,v5)).toThrow('部件可见性身份无效');
+ f.parts([...square(2,4,1),...square(4,5,2)]);expect(()=>referenceComposition(f.scene,f.observation,f.report,v5)).toThrow('部件可见性身份无效');
+ expect(()=>compositionContext(source,referenceComposition(f.scene,f.observation,f.report,v4))).toThrow('版本');
 });

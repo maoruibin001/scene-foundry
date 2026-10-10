@@ -52,7 +52,7 @@ export function rasterVisibility(meshes:Mesh[],camera:Camera,width=320,height=18
 }
 
 /** 仅诊断不透明几何；不会产生质量得分、失败门槛或删除建议。 */
-export function sceneVisibility(source:SceneInput,textures:Record<string,Texture>={},options:{legacyPerspective?:boolean}={}){
+export function sceneVisibility(source:SceneInput,textures:Record<string,Texture>={},options:{legacyPerspective?:boolean;partLabels?:boolean}={}){
  const compiled=compileGeometryProgram({...source.program,materials:source.program.materials.map(m=>({...m,textureId:null,surfaceDetail:null}))});
  const excluded=source.program.materials.filter(m=>{
   if(m.color[3]<.95)return true;if(!m.textureId)return false;const texture=textures[m.textureId];if(!texture)return true;
@@ -62,6 +62,8 @@ export function sceneVisibility(source:SceneInput,textures:Record<string,Texture
  if(allMeta.length!==compiled.meshes.length||allMeta.some((m,i)=>compiled.meshes[i].name!==m.instanceId+'__'+m.partId+'__'+m.sourceMaterialId||compiled.meshes[i].geometry.material.id!==m.materialId))throw Error('编译网格顺序与可见性身份不一致');
  const kept=allMeta.map((m,i)=>({m,mesh:compiled.meshes[i]})).filter(x=>!excluded.includes(x.m.materialId));
  const meshes=kept.map(x=>x.mesh),metadata=kept.map(x=>x.m),palette=source.program.instances.map((i,n)=>({number:n+1,instanceId:i.id,label:i.label,templateId:i.template}));
+ // Opt-in part identities keep historical visibility digests unchanged.
+ const partPalette=options.partLabels?[...new Map(allMeta.map(m=>[m.instanceId+'/'+m.partId,m])).values()].map((m,n)=>({number:n+1,instanceId:m.instanceId,partId:m.partId})):null,partNumbers=new Map(partPalette?.map(p=>[p.instanceId+'/'+p.partId,p.number]));
  const views=source.cameras.map(camera=>{
   const frame=diagnosticFrame(camera),raster=rasterVisibility(meshes,options.legacyPerspective?{...camera,projection:'perspective'}:camera,frame.width,frame.height),count=raster.width*raster.height;
   const stats=new Map<number,{pixels:number;sumX:number;sumY:number;rect:number[]}>(),pairs=new Map<string,number>(),objectPairs=new Map<string,number>();
@@ -80,9 +82,9 @@ export function sceneVisibility(source:SceneInput,textures:Record<string,Texture
   const summarize=(counts:Map<string,number>)=>[...counts].sort((a,b)=>b[1]-a[1]).slice(0,24).map(([key,pixels])=>{const [a,b]=key.split(':').map(Number);return {front:metadata[a],behind:metadata[b],pixels,frameFraction:+(pixels/count).toFixed(5)};});
   const occlusions=summarize(pairs),instanceOcclusions=summarize(objectPairs);
   const labels=Uint16Array.from(raster.front,id=>id<0?0:palette.find(p=>p.instanceId===metadata[id].instanceId)!.number);
-  return {cameraName:camera.name,referenceIndex:camera.referenceIndex,width:raster.width,height:raster.height,parts,instances,occlusions,instanceOcclusions,labelsBase64:Buffer.from(labels.buffer).toString('base64')};
+  return {cameraName:camera.name,referenceIndex:camera.referenceIndex,width:raster.width,height:raster.height,parts,instances,occlusions,instanceOcclusions,labelsBase64:Buffer.from(labels.buffer).toString('base64'),...(partPalette?{partLabelsBase64:Buffer.from(Uint16Array.from(raster.front,id=>id<0?0:partNumbers.get(metadata[id].instanceId+'/'+metadata[id].partId)!).buffer).toString('base64')}:{})};
  });
- return {method:options.legacyPerspective?'opaque-geometry-visibility-v2':VISIBILITY_METHOD,source:'实际编译网格与冻结相机；不是 Engine 截图分割',limitations:'320×180 像素中心采样，近面0.1米，远面1000米，按背面剔除；分别统计最近不同部件和最近不同实例的两层深度。透明材质、含透明像素或缺失像素的纹理不参与遮挡；不模拟光照、纹理颜色、后处理或更深层可见性。共面交界的部件身份可能歧义，小面积或相互重叠的编号可能省略。面积仅辅助定位，不能判定错误、删除物体或代替质量评分。',excludedMaterials:excluded,palette,views};
+ return {method:options.legacyPerspective?'opaque-geometry-visibility-v2':VISIBILITY_METHOD,source:'实际编译网格与冻结相机；不是 Engine 截图分割',limitations:'320×180 像素中心采样，近面0.1米，远面1000米，按背面剔除；分别统计最近不同部件和最近不同实例的两层深度。透明材质、含透明像素或缺失像素的纹理不参与遮挡；不模拟光照、纹理颜色、后处理或更深层可见性。共面交界的部件身份可能歧义，小面积或相互重叠的编号可能省略。面积仅辅助定位，不能判定错误、删除物体或代替质量评分。',excludedMaterials:excluded,palette,...(partPalette?{partPalette}:{}),views};
 }
 
 export function visibilityContext(report:ReturnType<typeof sceneVisibility>){
