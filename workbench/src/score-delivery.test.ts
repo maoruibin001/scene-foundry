@@ -6,7 +6,7 @@ import {matchingPolicy,productionWindow,remainingProductionMs} from './matching-
 import {abortDisposition,executionFaultOf,withProviderRecovery} from './provider-recovery';
 import {AutomaticResumer} from './automatic-resume';
 import {recoveryInfo} from './recovery';
-import {read} from './store';
+import {read,save} from './store';
 test('旧的一小时时窗只有用户明确继续才扩展，保留原提交与旧截止证据',()=>{
  const source={productionWindow:{version:'first-score-window-v1',startedAt:1000,workDeadlineAt:3001000,scoreDeadlineAt:3601000,targetMs:3600000}};
  const job={matchingPolicy:matchingPolicy('standard'),createdAt:new Date(8001000).toISOString()};
@@ -33,4 +33,12 @@ test('独立资产瞬态错误保留到任务恢复；硬阻塞和已到制作�
  expect(executionFaultOf({...fresh,assetFailures:[...fresh.assetFailures,{error:'PROVIDER_HTTP_401'}]}).recoverable).toBe(false);
  expect(executionFaultOf({...fresh,productionWindow:{workDeadlineAt:1}}).recoverable).toBe(false);
  const d=mkdtempSync(join(tmpdir(),'partial-continuation-'));let n=0;try{const jobs=[fresh],resumer=new AutomaticResumer(join(d,'requests.json'),{list:()=>jobs,executing:()=>false,resume:async j=>{n++;const child={id:'next',recoverySourceJobId:j.id,status:'running'};jobs.push(child);return child;}});await resumer.tick();await resumer.tick();expect(n).toBe(1);}finally{rmSync(d,{recursive:true,force:true});}
+});
+test('资产逻辑调用恢复已耗尽时保留草稿并要求诊断，不由外层任务重置恢复次数',async()=>{
+ const exhausted:any={id:'exhausted-asset',status:'needs_review',error:'资产未齐',partialOutput:{completed:15,total:16,missing:[{id:'window'}]},quality:{score:60},assetFailures:[{error:'PROVIDER_RECOVERY_EXHAUSTED: PROVIDER_HTTP_429 rate limit exceeded'}],executionRecoveryPolicy:{version:'execution-recovery-v2',enabled:true}};
+ expect(executionFaultOf(exhausted)).toMatchObject({kind:'exhausted',recoverable:false});
+ const root=mkdtempSync(join(tmpdir(),'partial-exhausted-')),file=join(root,'requests.json'),before=JSON.stringify(exhausted);let dispatches=0;
+ try{save(file,{requests:[{jobId:exhausted.id,status:'pending'}]});const worker=new AutomaticResumer(file,{list:()=>[exhausted],executing:()=>false,resume:async()=>{dispatches++;throw Error('must not dispatch');}});await worker.tick();await worker.tick();
+  expect(dispatches).toBe(0);expect(read(file).requests[0]).toMatchObject({status:'blocked',requiresDiagnosis:true});expect(read(file).requests[0].reason).toContain('已用尽有界恢复');expect(JSON.stringify(exhausted)).toBe(before);
+ }finally{rmSync(root,{recursive:true,force:true});}
 });

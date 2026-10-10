@@ -1,9 +1,10 @@
-import {test,expect} from 'bun:test';
-import {mkdtempSync,mkdirSync,writeFileSync,readFileSync,rmSync,symlinkSync,cpSync} from 'node:fs';
+import {test,expect,spyOn} from 'bun:test';
+import * as fs from 'node:fs';
+import {mkdtempSync,mkdirSync,writeFileSync,readFileSync,rmSync,symlinkSync,cpSync,existsSync,renameSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {digest,save,read} from './store';
-import {deliveryInfo,preserveOutput,failureDisposition,sealAssessment,inspectOutput} from './output-delivery';
+import {deliveryInfo,preserveOutput,failureDisposition,sealAssessment,sealSpatialAssessment,inspectOutput} from './output-delivery';
 import {snapshotIteration} from './geometry/iteration-snapshots';
 import {deliveryHTML} from '../public/delivery-ui.js';
 import {freezeImageGoal,assessImageReconstruction,IMAGE_ATTRIBUTES} from './image-reconstruction';
@@ -203,4 +204,129 @@ test('灰模选优兼容同一任务目录的真实路径和符号链接，不�
    expect(deliveryInfo(f.job,f.root).selection.status).toBe('available');
   }
  }finally{rmSync(aliases,{recursive:true,force:true});f.cleanup();}
+});
+function spatiallyReviewedFixture(){
+ const f=fixture('generation/blockout/0');f.job.images=[{id:'a'.repeat(64)}];f.job.prompt='same frozen reference';f.job.reconstructionGoal=freezeImageGoal(f.job.images,f.job.prompt);
+ save(join(f.root,'reconstruction-goal.json'),f.job.reconstructionGoal);
+ save(join(f.dir,'space.json'),{spatialRelations:[{id:'R1',critical:true}]});save(join(f.dir,'scene.json'),{geometry:'canonical'});save(join(f.dir,'render-scene.json'),{geometry:'canonical',presentation:'neutral'});save(join(f.dir,'reference-composition.json'),{scope:'geometry-projection'});
+ const before=preserveOutput(f.job,f.root,'generation/blockout/0','graybox')!;
+ const proof={jobId:f.job.id,round:0,folder:f.dir,score:3,passed:false,runtimeDigest:read(join(f.dir,'runtime/runtime.json')).distManifestDigest};
+ const gate={round:0,passed:false,failed:['R1'],protocol:'spatial-composition-v3',threshold:{space:3.5},review:{score:3,confidence:.9},frames:['view.png'],runtimeDigest:proof.runtimeDigest,selection:{eligible:true,changed:true,retained:proof}};
+ save(join(f.dir,'gate.json'),gate);f.job.blockout={rounds:[gate],repairBasis:proof};return {...f,before,gate};
+}
+test('空间评审完成后建立独立不可覆盖快照，预评审输出和原有分数不变',()=>{
+ const f=spatiallyReviewedFixture();try{
+  const beforePath=join(f.root,f.before.folder,'output.json'),beforeBytes=readFileSync(beforePath,'utf8');
+  expect(existsSync(join(f.root,f.before.folder,'gate.json'))).toBe(false);
+  const seal=sealSpatialAssessment(f.job,f.root,'generation/blockout/0'),after=preserveOutput(f.job,f.root,'generation/blockout/0','graybox')!;
+  expect(after.folder).not.toBe(f.before.folder);expect(readFileSync(beforePath,'utf8')).toBe(beforeBytes);
+  expect(after.spatialAssessment.gate).toEqual(f.gate);expect(after.spatialAssessment.evidence).toEqual(seal);
+  expect(deliveryInfo(f.job,f.root).best.folder).toBe('generation/blockout/0');
+  for(const file of Object.keys(seal.files))expect(digest(readFileSync(join(f.root,after.folder,file)))).toBe(seal.files[file]);
+  const outputBytes=readFileSync(join(f.root,after.folder,'output.json'),'utf8');expect(preserveOutput(f.job,f.root,'generation/blockout/0','graybox')?.folder).toBe(after.folder);expect(readFileSync(join(f.root,after.folder,'output.json'),'utf8')).toBe(outputBytes);
+  expect(after).toMatchObject({kind:'graybox',score:null,qualityStatus:'not_assessed',deliveryStatus:null});expect(existsSync(join(f.root,after.folder,'image-reconstruction.json'))).toBe(false);
+ }finally{f.cleanup();}
+});
+test('空间来源丢失时从同轮已封存备份交付真实规划、评审与截图',()=>{
+ const f=spatiallyReviewedFixture();try{
+  sealSpatialAssessment(f.job,f.root,'generation/blockout/0');const saved=preserveOutput(f.job,f.root,'generation/blockout/0','graybox')!;
+  rmSync(f.dir,{recursive:true});const d=deliveryInfo(f.job,f.root);
+  expect(d.selection).toMatchObject({status:'selected',servedBlockout:0});expect(d.best.folder).toBe(saved.folder);expect(d.best.spatialAssessment.gate).toEqual(f.gate);expect(d.best.score).toBeNull();expect(d.best.deliveryStatus).toBeNull();
+ }finally{f.cleanup();}
+});
+test('空间评审封存拒绝不属于本轮的评审、构建与机位，不能据它新增评分',()=>{
+ for(const defect of ['round','runtime','frame','confidence']){
+  const f=spatiallyReviewedFixture();try{
+   const gate=structuredClone(f.gate);if(defect==='round')gate.round=1;if(defect==='runtime')gate.runtimeDigest='b'.repeat(64);if(defect==='frame')gate.frames=['missing.png'];if(defect==='confidence')gate.review.confidence=2;
+   save(join(f.dir,'gate.json'),gate);f.job.blockout.rounds=[gate];expect(()=>sealSpatialAssessment(f.job,f.root,'generation/blockout/0')).toThrow();expect(deliveryInfo(f.job,f.root).best.score).toBeNull();
+  }finally{f.cleanup();}
+ }
+});
+test('灰模侧车或封存归属篡改不影响可运行性，但不得恢复为已核验保留轮次',()=>{
+ for(const defect of ['space.json','gate.json','scene.json','render-scene.json','reference-composition.json','reconstruction-goal.json','evidence-source','evidence-job']){
+  const f=spatiallyReviewedFixture();try{
+   sealSpatialAssessment(f.job,f.root,'generation/blockout/0');const saved=preserveOutput(f.job,f.root,'generation/blockout/0','graybox')!;rmSync(f.dir,{recursive:true});
+   const base=join(f.root,saved.folder);
+   if(defect.startsWith('evidence-')){const p=join(base,'spatial-assessment-evidence.json'),v=read(p);if(defect==='evidence-source')v.source='generation/blockout/1';else v.jobId='other-job';save(p,v);}else save(join(base,defect),{tampered:true});
+   const d=deliveryInfo(f.job,f.root);expect(d.available).toBe(true);expect(d.selection.status).toBe('fallback');expect(d.best.score).toBeNull();expect(d.best.deliveryStatus).toBeNull();
+  }finally{f.cleanup();}
+ }
+});
+test('带原图目标的灰模明确未评估成品，不借根成品原图报告，也不显示正常流程ENOENT',()=>{
+ const f=spatiallyReviewedFixture();try{
+  f.job.imageReconstruction={goalId:f.job.reconstructionGoal.id,status:'passed',level:'close'};
+  const d=deliveryInfo(f.job,f.root),best=d.best;expect(best.reconstructionGoal.id).toBe(f.job.reconstructionGoal.id);expect(best.imageReconstruction).toMatchObject({status:'needs_review',level:'unverified',scope:'partial'});expect(best.imageReconstructionFile).toBeNull();expect(JSON.stringify(best.imageReconstruction)).not.toContain('ENOENT');
+  const html=imageReconstructionHTML({...f.job,delivery:d});expect(html).toContain('尚未进行完整成品原图对照');expect(html).not.toContain('可见范围接近参考');expect(html).not.toContain('原图对照报告 →');
+ }finally{f.cleanup();}
+});
+
+function refusedSpatialTwin(){
+ const f=spatiallyReviewedFixture();
+ const foreign={...f.job.blockout.repairBasis,jobId:'original-root',folder:'/independent/original-root/blockout/0'};
+ f.gate.review.score=3.2;f.gate.failed=['new-critical'];f.gate.selection={eligible:false,changed:false,retained:foreign};
+ f.job.blockout={rounds:[f.gate],repairBasis:foreign};save(join(f.dir,'gate.json'),f.gate);
+ sealSpatialAssessment(f.job,f.root,'generation/blockout/0');const post=preserveOutput(f.job,f.root,'generation/blockout/0','graybox')!;
+ // Fixed names force the exact pre-review-first fallback ordering independently of hash ordering.
+ const beforeFolder='delivery/outputs/graybox-0000000000000000',afterFolder='delivery/outputs/graybox-ffffffffffffffff';
+ renameSync(join(f.root,f.before.folder),join(f.root,beforeFolder));renameSync(join(f.root,post.folder),join(f.root,afterFolder));
+ rmSync(f.dir,{recursive:true});
+ return {...f,beforeFolder,afterFolder};
+}
+test('被拒灰模fallback只展示同一真实产物的审后封存，不改变原basis或选优',()=>{
+ const f=refusedSpatialTwin();try{
+  const prePath=join(f.root,f.beforeFolder,'output.json'),preBytes=readFileSync(prePath,'utf8'),jobBytes=JSON.stringify(f.job);
+  const d=deliveryInfo(f.job,f.root);
+  expect(d.selection).toMatchObject({status:'fallback',requestedBlockout:{jobId:'original-root',round:0},servedBlockout:0});
+  expect(d.best.folder).toBe(f.afterFolder);expect(d.best.spatialAssessment.gate).toEqual(f.gate);
+  expect(d.best).toMatchObject({score:null,qualityStatus:'not_assessed',deliveryStatus:null});
+  expect(d.best.spatialAssessment.gate.selection.eligible).toBe(false);expect(d.best.spatialAssessment.gate.review.score).toBe(3.2);
+  expect(d.best.imageReconstruction).toMatchObject({status:'needs_review',level:'unverified',scope:'partial'});
+  expect(existsSync(join(f.root,f.afterFolder,'image-reconstruction.json'))).toBe(false);
+  expect(readFileSync(prePath,'utf8')).toBe(preBytes);expect(JSON.stringify(f.job)).toBe(jobBytes);
+ }finally{f.cleanup();}
+});
+test('fallback审后证据必须同源同版本同帧同几何同目标，异常时保留原可运行快照',()=>{
+ for(const defect of ['invalid-seal','gate-resealed','foreign-job','foreign-version','other-source','metadata-version','metadata-source','different-frames','different-space','different-goal','missing-pre-space']){
+  const f=refusedSpatialTwin();try{
+   const post=join(f.root,f.afterFolder),sealPath=join(post,'spatial-assessment-evidence.json'),seal=read(sealPath),metaPath=join(post,'output.json'),meta=read(metaPath);
+   if(defect==='invalid-seal')seal.files['gate.json']='broken';
+   if(defect==='gate-resealed'){const gate=read(join(post,'gate.json'));gate.review.score=5;save(join(post,'gate.json'),gate);seal.files['gate.json']=digest(readFileSync(join(post,'gate.json')));}
+   if(defect==='foreign-job')seal.jobId='other';
+   if(defect==='foreign-version')seal.pipelineVersionId='other';
+   if(defect==='other-source'){seal.source='generation/blockout/1';seal.round=1;const gate=read(join(post,'gate.json'));gate.round=1;save(join(post,'gate.json'),gate);seal.files['gate.json']=digest(readFileSync(join(post,'gate.json')));}
+   if(defect==='metadata-version')meta.pipelineVersion={id:'other'};
+   if(defect==='metadata-source')meta.source='generation/blockout/1';
+   if(defect==='different-frames'){const file=join(post,'runtime/view.png');writeFileSync(file,'different real render');const runtime=read(join(post,'runtime/runtime.json'));runtime.hashes=[digest('different real render')];save(join(post,'runtime/runtime.json'),runtime);seal.files['runtime/runtime.json']=digest(readFileSync(join(post,'runtime/runtime.json')));}
+   if(defect==='different-space'){save(join(post,'space.json'),{geometry:'other-space'});seal.files['space.json']=digest(readFileSync(join(post,'space.json')));}
+   if(defect==='different-goal'){save(join(post,'reconstruction-goal.json'),{id:'other-goal'});seal.files['reconstruction-goal.json']=digest(readFileSync(join(post,'reconstruction-goal.json')));}
+   if(defect==='missing-pre-space')rmSync(join(f.root,f.beforeFolder,'space.json'));
+   save(sealPath,seal);save(metaPath,meta);
+   const d=deliveryInfo(f.job,f.root);expect(d.best.folder).toBe(f.beforeFolder);expect(d.selection.status).toBe('fallback');
+   expect(d.best.spatialAssessment).toBeNull();expect(d.best.score).toBeNull();expect(d.best.deliveryStatus).toBeNull();
+  }finally{f.cleanup();}
+ }
+});
+test('没有有效审后同候选时不补评审，无fallback请求时不改变灰模rank',()=>{
+ const f=refusedSpatialTwin();try{
+  delete f.job.blockout;expect(deliveryInfo(f.job,f.root).best.folder).toBe(f.beforeFolder);
+  f.job.blockout={rounds:[f.gate],repairBasis:f.gate.selection.retained};
+  rmSync(join(f.root,f.afterFolder),{recursive:true});const d=deliveryInfo(f.job,f.root);
+  expect(d.best.folder).toBe(f.beforeFolder);expect(d.selection.status).toBe('fallback');expect(d.best.spatialAssessment).toBeNull();
+ }finally{f.cleanup();}
+});
+test('缺output元数据的审后残留不阻断后续完整同源封存，来源未知仍安全保留',()=>{
+ const f=refusedSpatialTwin();let listing:any;try{
+  const residual='delivery/outputs/graybox-1111111111111111';
+  cpSync(join(f.root,f.afterFolder),join(f.root,residual),{recursive:true});
+  rmSync(join(f.root,residual,'output.json'));
+  expect(inspectOutput(f.job,f.root,residual,'graybox')?.spatialAssessment?.gate).toEqual(f.gate);
+  const actualRead=fs.readdirSync;
+  listing=spyOn(fs,'readdirSync').mockImplementation(((path:any,...options:any[])=>String(path)===join(f.root,'delivery/outputs')?[f.beforeFolder,residual,f.afterFolder].map(p=>p.split('/').at(-1)):actualRead(path,...options)) as any);
+  const d=deliveryInfo(f.job,f.root);expect(d.best.folder).toBe(f.afterFolder);
+  expect(d.selection).toMatchObject({status:'fallback',requestedBlockout:{jobId:'original-root',round:0},servedBlockout:0});
+  expect(d.best.score).toBeNull();expect(d.best.deliveryStatus).toBeNull();
+  rmSync(join(f.root,f.beforeFolder,'output.json'));
+  const unknown=deliveryInfo(f.job,f.root);expect(unknown.best.folder).toBe(f.beforeFolder);
+  expect(unknown.best.spatialAssessment).toBeNull();expect(unknown.selection.status).toBe('fallback');
+ }finally{listing?.mockRestore();f.cleanup();}
 });

@@ -46,3 +46,16 @@ test('完整场景包包含根评审侧车，旧输出没有报告仍可下载�
   expect(legacy.dist).toBe('root-dist');expect(legacy.sidecars).toEqual({});
  }finally{f.cleanup();}
 });
+test('灰模下载带走选定候选的空间评审和冻结目标，保留未评范围且不造原图成品报告',()=>{
+ const f=fixture();try{
+  const selected=output(f.root,'generation/blockout/0','graybox-dist'),files=['space.json','gate.json','reference-composition.json','spatial-assessment-evidence.json','reconstruction-goal.json'];
+  for(const file of files){writeFileSync(join(selected,file),JSON.stringify({candidate:'selected-graybox'}));writeFileSync(join(f.root,file),JSON.stringify({candidate:'different-root'}));}
+  writeFileSync(join(f.root,'image-reconstruction.json'),JSON.stringify({status:'passed',candidate:'different-root'}));
+  const receipt=run('output-package.py',f.root,{best:{folder:'generation/blockout/0',distManifestDigest:'c'.repeat(64),kind:'graybox',qualityStatus:'not_assessed',score:null}}),zip=archive(join(f.root,receipt.file));
+  for(const file of files)expect(zip.names).toContain(file);expect(zip.names).not.toContain('image-reconstruction.json');expect(zip.dist).toBe('graybox-dist');
+  const contents=spawnSync('python3',['-c',`import sys,json,zipfile
+with zipfile.ZipFile(sys.argv[1]) as z:
+ print(json.dumps({p:json.loads(z.read(p)) for p in ${JSON.stringify(files)}}))`,join(f.root,receipt.file)],{encoding:'utf8'});
+  expect(contents.status,contents.stderr).toBe(0);for(const file of files)expect(JSON.parse(contents.stdout)[file]).toEqual({candidate:'selected-graybox'});
+ }finally{f.cleanup();}
+});
