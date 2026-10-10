@@ -13,6 +13,7 @@ import {deliveryStandard} from './delivery-standard';
 import {creationPolicy} from './quality';
 import {deriveRepairOutcome} from './geometry/repair-outcome';
 import {savedQualityDiagnosis,persistQualityDiagnosis} from './quality-diagnosis';
+import {runInsight,aggregateInsights} from './pipeline-insights';
 import {providerFault,executionFaultOf,automaticContinuationOptions} from './provider-recovery';
 import {AutomaticResumer} from './automatic-resume';
 import {recoveryStatus} from './recovery-status';
@@ -85,6 +86,8 @@ if(!FOLLOWER){claimCoordinator();if(!executionHeld()){references.recover();recov
  if(req.method==='GET'&&u.pathname==='/api/models')return json(PROVIDER==='codex-cli'?{...(await codexModels()),defaults:defaultModelSettings(),defaultsByComplexity:COMPLEXITY_MODEL_DEFAULTS,source:codexRouteInfo()?.providerId==='openai'?'Codex app-server model/list':'当前启动器固定模型及 OpenAI 订阅模型列表'}:{models:[],defaults:null,source:PROVIDER});
  if(req.method==='GET'&&u.pathname==='/api/jobs')return json(queryJobHistory(mounted.namespaced?listJobs().filter(j=>j.sceneKind==='voxel'):listJobs(),u.searchParams,versions.list(),allBatches()));
  const timingRoute=u.pathname.match(/^\/api\/jobs\/([a-f0-9-]{36})\/timing$/);if(req.method==='GET'&&timingRoute)return json({...timingSnapshot(getJob(timingRoute[1]),runDir(timingRoute[1])),production:productionTimingSnapshot(timingRoute[1])});
+ const insightRoute=u.pathname.match(/^\/api\/jobs\/([a-f0-9-]{36})\/insight$/);if(req.method==='GET'&&insightRoute){const j=getJob(insightRoute[1]);return json(runInsight(j,runDir(j.id),j.improvementId?improvement.get(j.improvementId):null));}
+ if(req.method==='GET'&&u.pathname==='/api/insights')return json(aggregateInsights(listJobs().slice(0,Number(u.searchParams.get('limit')??50)).map(j=>runInsight(j,runDir(j.id),null))));
  const repairAudit=u.pathname.match(/^\/api\/jobs\/([a-f0-9-]{36})\/repair-audit$/);if(req.method==='GET'&&repairAudit){const j=getJob(repairAudit[1]);return json(deriveRepairOutcome(j,runDir(j.id)));}
  const jobDetail=u.pathname.match(/^\/api\/jobs\/([a-f0-9-]{36})$/);if(req.method==='GET'&&jobDetail){const j=getJob(jobDetail[1]);return json({...j,delivery:deliveryInfo(j),diagnosis:savedQualityDiagnosis(j),spatialMechanismChangeAvailable:(j.blockout?.status==='stopped'||j.voxelConstructionVersion==='voxel-lattice-v1'&&j.status==='blocked'&&j.stage==='space')?(()=>{try{assertSpatialMechanismChanged(versions.get(j.pipelineVersion.id).files,versions.get(activeVersion.id).files);return true;}catch{return false;}})():null,automaticRecovery:recoveryStatus(runDir(j.id)),autoRecoveryEligible:executionFaultOf(j).recoverable||legacyJobs().some(x=>x.id===j.id),autoRecoveryRequest:existsSync(join(DATA,'automatic-recovery-requests-v2.json'))?read(join(DATA,'automatic-recovery-requests-v2.json')).requests.find(r=>r.jobId===j.id)??null:null,displayStage:displayStage(j),improvement:j.improvementId?improvement.get(j.improvementId):null,availableCheckpoints:checkpoints.matching(j),recovery:isExecuting(j.id)?{available:false,mode:'active',reason:j.status==='cancelled'?'正在停止执行，请稍候':'任务正在执行'}:recoveryInfo(j,listJobs())});}
  if(req.method==='GET'&&u.pathname==='/api/spec')return json({...SPEC,quality:scoringGuidance(creationPolicy())});
