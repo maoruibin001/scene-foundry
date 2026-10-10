@@ -10,6 +10,8 @@ The [source coverage record](docs/source-coverage.md) identifies which parts of 
 
 The [image reconstruction goal and acceptance guide](docs/image-reconstruction-goal.md) explains how original images define the target, how per-image comparisons bind to actual rendered evidence, and which improvements still require real generation validation.
 
+For agent coordination, the [ordinary and voxel pipeline handoff](docs/scene-pipeline-handoff-2026-10-10.md) records the verified source and service snapshot, acceptance results, blockers, evidence locations, and suggested task boundaries as of October 10, 2026. Local ports and process IDs in that document must be rechecked before use.
+
 For a clean installation and the browser acceptance procedure, follow the [from-zero runbook](docs/run-from-zero.md). The [latest fresh-clone validation record](docs/clean-run-validation-2026-09-24.md) distinguishes the checks that passed from the model-backed generation step that remains blocked.
 
 ## Layout
