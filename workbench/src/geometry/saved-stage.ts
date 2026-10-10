@@ -5,6 +5,7 @@ import {parseModelJson} from '../provider';
 import {PROMPT_CONTRACT} from '../prompts';
 import {roleSettings} from '../generation-policy';
 import {SPACE_CONSTRUCTION,selectedSpaceValue} from './space-construction';
+import {blockoutContactsRecorded} from './blockout-input-evidence';
 type SavedRequest={system:string;text:string};
 /** Follow only the recorded recovery chain with identical inputs, plan and model. */
 export function savedStage(ctx:any,role:string,validate:(value:any)=>any,allowRejected=false,space?:any,request?:SavedRequest){
@@ -16,6 +17,7 @@ export function savedStage(ctx:any,role:string,validate:(value:any)=>any,allowRe
   if(role==='scene-space'&&existsSync(generation))folders.unshift(...readdirSync(generation).filter(n=>/^space-repair-\d+$/.test(n)).sort((a,b)=>Number(b.split('-').at(-1))-Number(a.split('-').at(-1))).map(n=>join(generation,n)));
   if(role==='scene-blockout'){folders.length=0;const root=join(generation,'blockout');if(existsSync(root))for(const n of readdirSync(root).filter(n=>/^\d+$/.test(n)).sort((a,b)=>Number(b)-Number(a))){const folder=join(root,n);if(existsSync(join(folder,'space.json'))&&JSON.stringify(read(join(folder,'space.json')))===JSON.stringify(space))folders.push(folder);}}
   for(const folder of folders){
+  if(role==='scene-blockout'&&!blockoutContactsRecorded(folder,space))continue;
   // A saved clay scene is also a reusable geometry artifact. A failed spatial
   // verdict invalidates its layout acceptance, not the existence of its meshes.
   if(role==='scene-blockout'&&existsSync(join(folder,'scene.json'))&&existsSync(join(folder,'gate.json'))){

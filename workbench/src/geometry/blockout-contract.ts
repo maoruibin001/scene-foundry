@@ -2,11 +2,14 @@ import type {VoxelLattice} from '../voxel/scene-lattice';
 import {validateCrown,CROWN_RULES} from './branch-crown';
 import {geometryProgramSchema} from './program-schema';
 import {shapeTriangles} from './program';
+import {assetContacts} from './contacts';
 
 export const BLOCKOUT_PART_LIMIT=8;
 export const BLOCKOUT_GRID_AXIS=9;
-/** Local geometry depends on its brief and openings, not on world placement or camera. */
-export function blockoutTemplateInput(space:any,brief:any){const ids=new Set(space.program.instances.filter(i=>i.template===brief.id).map(i=>i.id));return {contract:'local-graybox-v1',...(space.voxelLattice?{voxelLattice:space.voxelLattice}:{}),brief:{...brief,maxParts:Math.min(32,brief.maxParts),materialIds:['blockout']},spatialOpenings:(space.spatialOpenings??[]).filter(o=>ids.has(o.instanceId))};}
+/** Camera-independent local geometry includes the shared interfaces derived from instance poses. */
+export function blockoutTemplateInput(space:any,brief:any){const ids=new Set(space.program.instances.filter(i=>i.template===brief.id).map(i=>i.id));return {contract:'local-graybox-v2',...(space.voxelLattice?{voxelLattice:space.voxelLattice}:{}),brief:{...brief,maxParts:Math.min(BLOCKOUT_PART_LIMIT,brief.maxParts),materialIds:['blockout']},spatialOpenings:(space.spatialOpenings??[]).filter(o=>ids.has(o.instanceId)),spatialContacts:assetContacts(space,brief.id)};}
+/** Repair receives the same interface derivation, including every use of a shared template. */
+export function blockoutSharedInterfaces(space:any){return space.program.templates.map(brief=>({templateId:brief.id,spatialContacts:assetContacts(space,brief.id)})).filter(item=>item.spatialContacts.length);}
 const types=new Set(['box','tube','lathe','extrusion','cushion','branchCrown','grid','voxelVolume']);
 /** Wire contract for composition only. Finished assets keep the full geometry contract. */
 export function compactBlockoutSchema(options:{voxel?:boolean;voxelLattice?:VoxelLattice}={}){
@@ -59,5 +62,6 @@ export function expandBlockoutGeometry(value:any){
 export const COMPACT_BLOCKOUT_RULES=CROWN_RULES+`
 此阶段只构造共同空间中的大轮廓、占幅、通道和开口，每模板1–8个部件，不逐叶、逐花或逐砖建模。植物可用branchCrown在少量参数下表达真实连接枝冠、叶簇与空隙，简单植物也可用粗枝与数个冠体；不得把通道、门窗或冠体间空隙填成整块箱体。详细叶形、花瓣、UV、贴图和光照材质由后续资产阶段处理。
 只输出id、position、rotation、scale、shape；系统统一附加灰材质和无纹理默认值。位置以米为单位，Z向上，旋转为依次XYZ的弧度；遵守brief的局部原点、bounds和朝向，实例和机位由系统处理。
+spatialContacts给出本模板各实例的共享接口localPoints，程序已经按同一空间规划推导到模板局部坐标。粗轮廓的实际表面也应经过这些点，保留承托或连续接缝；不能各自猜测连接位置，也不能用孤立补片、扩大构件或遮挡来伪装贴合。一模板多实例须同时满足每项有参考依据的接口，无法在当前轮廓内兼容时明确修正构造，不删除约束。toleranceMeters仅为几何诊断容差，不替代空间画面验收。
 box以中心为原点，size为宽深高，radius不可超过最短边的一半；tube连接from/to，radius/endRadius定义两端半径；lathe用最多12个[半径,高度]轮廓点绕Z旋转，arc/start的null表示完整圆周/0，闭合端应有半径0；extrusion用最多12点简单不自交XY轮廓沿+Z挤出depth；cushion以size定义封闭圆滑冠体，roundness=2..8、seamDepth=0、segments=4..8。旋转构造最多12分段，尺寸和scale须0.001..100。
 非旋转对称、非等截面的大曲面可用grid：rows与columns为2..9整数，points严格按行排列、共rows*columns个局部[x,y,z]点、最多81点，doubleSided为布尔值。优先3x3至5x5，只有轮廓需要时增加采样；它直接连接网格点，不会自动拟合原图或插值成另一曲面。边界行/列对应真实轮廓，中间行表示截面弯曲和收束。保持行列相邻关系与面朝向；doubleSided只控制背面可见，不增加实体厚度、不自动封口，不可用单张曲面冒充封闭实体。实心物体须补侧面/底面，真实开口保持畅通；实际编译边界、接触与总预算照常检查。不用grid铺参考照片或背景板，不用无关堆叠填满预算。`;

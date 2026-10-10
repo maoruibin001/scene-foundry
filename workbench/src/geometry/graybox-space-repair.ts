@@ -2,7 +2,7 @@ import {voxelGeometryGuidance} from '../voxel/construction-guidance';
 import {QUARTER_TURNS,type VoxelLattice} from '../voxel/scene-lattice';
 import {VOXEL_GEOMETRY_GUIDANCE} from '../voxel/construction-guidance';
 import {CROWN_RULES} from './branch-crown';
-import {compactBlockoutSchema,COMPACT_BLOCKOUT_RULES} from './blockout-contract';
+import {compactBlockoutSchema,COMPACT_BLOCKOUT_RULES,blockoutSharedInterfaces} from './blockout-contract';
 import {spatialRejectedFeedback,assertNotRejectedSpatialScene} from './spatial-rejected-attempt';
 import {mkdirSync,readFileSync,existsSync,cpSync,constants} from 'node:fs';
 import {join,basename} from 'node:path';
@@ -86,6 +86,7 @@ export const GRAYBOX_REPAIR_PROMPT=CROWN_RULES+`
 依据原始参考图、实际Engine灰模、实例编号图和独立关系评分，只输出graybox-space-repair-v8补丁。编号图是编译几何定位证据，不是参考图分割或质量分；不能用编号图颜色解释原图材质。检查机位帮助辨别深度，仍以referenceIndex对应的实拍判断构图。
 先把具体关系差距对应到实例和已有冠体/框架部件；用实例position/rotation/scale或参考相机校正占幅、左右、前后、通道和遮挡。最多改12实例、6机位、8连接；空数组表示保留。templates必须为空，模板简报和预算冻结。parts最多修改4个模板的24个已有部件，含templateId/partId/position/rotation/scale及可选shape；shape省略/null保留来源。最多2模板6部件可替换为完整契约的粗轮廓box/tube/lathe/extrusion/cushion/grid，最多12轮廓点/分段、cushion最多8分段；grid限定每轴2..9、总点数<=81，保持真实曲面边界和闭合需要；不使用scatter或手工逐叶逐花。另可用groups:[{templateId,parts}]重建最多3个失败模板的内部结构，每模板1–8个部件，使用同一灰模契约的box/tube/lathe/extrusion/cushion/branchCrown/grid，不强制包含任何场景类别专属几何；按冻结简报重建真实承托、连接、轮廓和空隙，建筑/家具/机械结构可由框架或封闭体组合，植物才按需要使用连接枝冠。每部件完整id/position/rotation/scale/shape，系统填灰材质。groups与parts不得同时修改同一模板。新部件可重排，但实体/模板id、原bounds、数量、需求、总预算和机位证据保持约束。不要保留已经错误的孤立大块只换文字；也不能用无关密度堵住通道。仅姿态不能表达已确认的过粗或断续轮廓时，依据原图更换这些已有部件的轮廓；共享模板会同时影响其全部实例，必须检查其全部使用位置和不同深度，不能假装只影响单个实例。UV/材质/身份数量、原bounds、开口和总几何上限仍保持来源。依据原图调整部件连接、尺度层次及局部空隙，不用大块填满画幅或封堵通道。模板id/label/maxParts、实体语义、数量、需求和关键关系由系统保留，不能新增删除实体或模板、降低关键性或用机位隐藏主体。未列出的字段和对象逐字保留。
 实例及部件尺度每轴每轮仅允许来源的0.5到2倍；部件位移每轴不超过冻结bounds跨度的一半，全部实际编译几何仍须在原bounds内，单位米、Z向上、rotation为XYZ弧度。机位name、projection不改，referenceIndex与画幅由系统保留。正交投影的占幅由orthographicHeight决定，fov不影响正交画面；可以在相机补丁中显式调整覆盖高度为来源的0.5至2倍，省略则保持来源。透视机位使用fov，不能借orthographicHeight改变投影类型。接触points属aId局部坐标，数量保留；移动连接双方时一起检查冻结开口和接触点不能脱离边界。需要更大结构变化应在reason说明未解决，不能绕过校验。
+sharedInterfaces按previousSpace中的来源实例位姿，为各模板全部连接实例推导spatialContacts/localPoints。它用于定位来源几何的接缝和承托，不代表接口已贴合；改变任何连接双方的实例位姿或contacts.points后须按新位姿重新核对两方局部接口，不能盲沿用来源localPoints或靠孤立补片补洞。此输入不自动新增或重生成模板，仍只允许本契约的已有部件或有限groups补丁。
 branchCrown由系统构造枝叶，模型仅选结构参数；不手工逐叶、材质或细节规划。按本次独立评审指出的真实失败关系同时看连接、空隙和轮廓，不以外接框改善替代实拍判断。reason说明原图差距、实际网格的定位依据和改动；checks引用原关系id，描述实拍证据与下一轮可见预期。不能声称尚未渲染的补丁已经通过。`;
 
 export async function repairGrayboxSpace(space:any,ctx:any,sourceFolder:string,feedback:any,folder:string,validate:(space:any)=>any){
@@ -120,7 +121,7 @@ export async function repairGrayboxSpace(space:any,ctx:any,sourceFolder:string,f
   tools:preview.kit,
   images:[...ctx.images,...frameNames.map(f=>({path:join(sourceFolder,'runtime',f),mime:'image/png'})),...rejected.images,...evidence.images],
   system:GRAYBOX_REPAIR_PROMPT+(ctx.job.sceneKind==='voxel'?'\n'+voxelGeometryGuidance(space.voxelLattice):'')+'\n'+COMPACT_BLOCKOUT_RULES+'\n'+VISIBILITY_PROMPT+'\n'+preview.kit.instructions+'\n若输入有rejectedCandidates，额外图片在来源Engine画面之后、编号图之前，按rejectedEngineFrames排列。它们是已独立失败的改动和实拍，不是来源或新参考目标；比较其具体退步与当前较好来源，避免重复那些几何。只在当前来源上修正，不能累积失败候选或采信它的成功宣称。完全相同的失败几何和机位将在测量/渲染前拒绝。',
-  text:JSON.stringify({input:ctx.job.prompt,plan:ctx.plan,previousSpace:space,actualGraybox:source.program,observation:ctx.observation,referenceComposition:composition,feedback,rejectedCandidates:rejected.context,visibility:evidence.context,
+  text:JSON.stringify({input:ctx.job.prompt,plan:ctx.plan,previousSpace:space,sharedInterfaces:blockoutSharedInterfaces(space),actualGraybox:source.program,observation:ctx.observation,referenceComposition:composition,feedback,rejectedCandidates:rejected.context,visibility:evidence.context,
    diagnosedStrategy:ctx.job.spatialDiagnosis?.reason??null,imageOrder:{references:ctx.images.length,engineFrames:runtime.referenceFrames,rejectedEngineFrames:rejected.attempts.flatMap(a=>a.frames.map(f=>({jobId:a.jobId,round:a.round,file:f.file,referenceIndex:f.referenceIndex,sha256:f.sha256}))),diagnosticMaps:evidence.context.diagnosticImages},
    source:{spaceSha256:digest(JSON.stringify(space)),renderSceneSha256:digest(readFileSync(join(sourceFolder,'render-scene.json'))),runtimeDigest:runtime.distManifestDigest}})},folder,patch=>{applyGrayboxSpaceRepair(space,patch,validate);preview.assertReviewed(patch);return patch;});
  const applied=applyGrayboxSpaceRepair(space,result.value,validate),local=applyGrayboxLocalParts(canonical,applied.value,result.value.parts,result.value.groups??[]),scene=buildScene(applied.value,result.value);

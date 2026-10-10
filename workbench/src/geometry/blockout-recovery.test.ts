@@ -9,6 +9,10 @@ import {generateBlockoutTemplates,BLOCKOUT_MATERIALS} from './blockout-assets';
 import {recoverBlockoutTemplates} from './blockout-recovery';
 import {matchingPolicy} from '../matching-level';
 import {limitBlockoutTessellation} from './blockout-tessellation';
+import {blockoutGenerationInput} from './blockout-assets';
+import {blockoutSharedInterfaces} from './blockout-contract';
+import {blockoutContactsRecorded} from './blockout-input-evidence';
+import {savedStage} from './saved-stage';
 
 function localFixture(){
  const f=checkpointFixture(),id=crypto.randomUUID(),root=runDir(id),folder=join(root,'generation/blockout/1');
@@ -20,6 +24,53 @@ function localFixture(){
  mkdirSync(folder,{recursive:true});save(join(root,'job.json'),job);seed(0);
  return {f,id,root,folder,space,job,value,seed,ctx:{job,plan:job.plan,images:[],signal:new AbortController().signal},close:()=>{rmSync(f.root,{recursive:true,force:true});rmSync(root,{recursive:true,force:true});}};
 }
+
+test('历史空间声明了接口但真实旧请求未传入时，不复用相关灰模；无连接模板仍可复用',()=>{
+ const x=localFixture();try{
+  x.space.spatialContacts=[{id:'join',label:'共同接缝',kind:'seam',aId:'t0',bId:'t1',points:[[1,0,.2]],referenceIndices:[],evidence:'测试连接'}];x.seed(0);
+  const prompt=join(x.root,'generation/blockout/0/batches/0/scene-blockout-prompt.json');
+  save(prompt,{input:JSON.stringify({items:x.space.program.templates.map(brief=>({contract:'composition-graybox-v2',brief}))})});
+  expect([...recoverBlockoutTemplates(x.space,x.ctx,v=>v,x.folder).keys()]).toEqual(x.space.program.templates.slice(2).map(t=>t.id));
+  save(prompt,{input:JSON.stringify({items:x.space.program.templates.map(brief=>blockoutGenerationInput(x.space,brief))})});
+  expect(recoverBlockoutTemplates(x.space,x.ctx,v=>v,x.folder).size).toBe(10);
+  const next=structuredClone(x.space);next.spatialContacts[0].points[0][1]=.1;expect(recoverBlockoutTemplates(next,x.ctx,v=>v,x.folder).size).toBe(8);
+  const moved=structuredClone(x.space);moved.program.instances[0].position=[.1,0,0];expect(recoverBlockoutTemplates(moved,x.ctx,v=>v,x.folder).has('t1')).toBe(false);
+ }finally{x.close();}
+});
+
+test('接口恢复必须匹配该响应自己的请求，不能借另一个失败批次的接口证据',()=>{
+ const x=localFixture();try{
+  x.space.spatialContacts=[{id:'join',label:'共同接缝',kind:'seam',aId:'t0',bId:'t1',points:[[1,0,.2]],referenceIndices:[],evidence:'测试连接'}];x.seed(0);
+  const root=join(x.root,'generation/blockout/0/batches');save(join(root,'0/scene-blockout-prompt.json'),{input:JSON.stringify({items:x.space.program.templates.map(brief=>({brief}))})});
+  mkdirSync(join(root,'1'),{recursive:true});save(join(root,'1/scene-blockout-prompt.json'),{input:JSON.stringify({items:x.space.program.templates.map(brief=>blockoutGenerationInput(x.space,brief))})});
+  expect(recoverBlockoutTemplates(x.space,x.ctx,v=>v,x.folder).size).toBe(8);
+ }finally{x.close();}
+});
+
+test('整灰模savedStage复用也核对真实接点输入，不能绕过逐模板恢复guard',()=>{
+ const x=localFixture(),child=crypto.randomUUID();try{
+  x.space.spatialContacts=[{id:'join',label:'共同接缝',kind:'seam',aId:'t0',bId:'t1',points:[[1,0,.2]],referenceIndices:[],evidence:'测试连接'}];x.seed(0);
+  const folder=join(x.root,'generation/blockout/0'),prompt=join(folder,'batches/0/scene-blockout-prompt.json');save(join(folder,'scene.json'),{program:{templates:x.value.templates}});save(join(folder,'gate.json'),{runtimeDigest:'verified-runtime',frames:['reference.png'],passed:false});
+  for(const t of x.space.program.templates){mkdirSync(join(folder,'templates',t.id),{recursive:true});save(join(folder,'templates',t.id,'batch-source.json'),{batch:0});}
+  const ctx={...x.ctx,job:{...x.job,id:child,recoverySourceJobId:x.id}};let validations=0;
+  expect(savedStage(ctx,'scene-blockout',v=>{validations++;return v;},false,x.space)).toBeNull();expect(validations).toBe(0);
+  save(prompt,{input:JSON.stringify({items:x.space.program.templates.map(b=>blockoutGenerationInput(x.space,b))})});
+  const saved=savedStage(ctx,'scene-blockout',v=>{validations++;return v;},false,x.space);expect(saved?.receipt.kind).toBe('saved-graybox-artifact');expect(validations).toBe(1);
+  save(prompt,{input:JSON.stringify({items:[]})});mkdirSync(join(folder,'batches/1'),{recursive:true});save(join(folder,'batches/1/scene-blockout-prompt.json'),{input:JSON.stringify({items:x.space.program.templates.map(b=>blockoutGenerationInput(x.space,b))})});
+  expect(savedStage(ctx,'scene-blockout',v=>v,false,x.space)).toBeNull();
+ }finally{x.close();}
+});
+
+test('全场景fallback及已评审局部补丁可凭其实际sharedInterfaces输入恢复，旧原始点记录不足',()=>{
+ const x=localFixture();try{
+  x.space.spatialContacts=[{id:'join',label:'共同接缝',kind:'seam',aId:'t0',bId:'t1',points:[[1,0,.2]],referenceIndices:[],evidence:'测试连接'}];x.seed(0);const folder=join(x.root,'generation/blockout/0');
+  save(join(folder,'scene-blockout-prompt.json'),{input:JSON.stringify({space:x.space})});expect(blockoutContactsRecorded(folder,x.space)).toBe(false);
+  save(join(folder,'scene-blockout-prompt.json'),{input:JSON.stringify({space:x.space,sharedInterfaces:blockoutSharedInterfaces(x.space)})});expect(blockoutContactsRecorded(folder,x.space)).toBe(true);
+  rmSync(join(folder,'scene-blockout-prompt.json'));const repair=join(x.root,'generation/space-repair-1');mkdirSync(repair,{recursive:true});save(join(folder,'graybox-parts-source.json'),{version:'reviewed-graybox-geometry-v1',repairFolder:repair});
+  save(join(repair,'scene-space-prompt.json'),{input:JSON.stringify({previousSpace:x.space})});expect(blockoutContactsRecorded(folder,x.space)).toBe(false);
+  save(join(repair,'scene-space-prompt.json'),{input:JSON.stringify({previousSpace:x.space,sharedInterfaces:blockoutSharedInterfaces(x.space)})});expect(blockoutContactsRecorded(folder,x.space)).toBe(true);
+ }finally{x.close();}
+});
 
 test('同任务空间修正只重建6个改变的局部契约，4个原样复用并按当前空间校验',async()=>{
  const x=localFixture();try{

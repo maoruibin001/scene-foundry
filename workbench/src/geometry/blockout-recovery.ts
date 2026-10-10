@@ -3,6 +3,7 @@ import {join,relative} from 'node:path';
 import {read,runDir,digest} from '../store';
 import {blockoutTemplateInput} from './blockout-contract';
 import {recoverReviewedGrayboxGeometry} from './graybox-reviewed-geometry';
+import {blockoutContactInputRecorded} from './blockout-input-evidence';
 
 /** Reuse local geometry within this execution chain when its actual input is unchanged.
  * Placement changes still require validation and a new complete spatial assessment.
@@ -27,7 +28,8 @@ export function recoverBlockoutTemplates(space:any,ctx:any,validate:(value:any,b
    if(!existsSync(spaceFile))continue;const previousSpace=read(spaceFile);
    const compatible=space.program.templates.filter(brief=>{
     const previous=previousSpace.program.templates.filter(t=>t.id===brief.id);
-    return previous.length===1&&JSON.stringify(blockoutTemplateInput(previousSpace,previous[0]))===JSON.stringify(blockoutTemplateInput(space,brief));
+    const input=blockoutTemplateInput(space,brief);
+    return previous.length===1&&JSON.stringify(blockoutTemplateInput(previousSpace,previous[0]))===JSON.stringify(input)&&blockoutContactInputRecorded(folder,space,brief);
    });
    if(!compatible.length)continue;
    const reviewed=recoverReviewedGrayboxGeometry(folder,ctx);
@@ -43,7 +45,7 @@ export function recoverBlockoutTemplates(space:any,ctx:any,validate:(value:any,b
    for(const file of candidates){
     const raw=readFileSync(file,'utf8');let value:any;try{value=JSON.parse(raw);}catch{continue;}
     for(const brief of compatible){
-     if(found.has(brief.id)||value?.templates?.filter(t=>t.id===brief.id).length!==1)continue;
+     if(found.has(brief.id)||value?.templates?.filter(t=>t.id===brief.id).length!==1||!blockoutContactInputRecorded(folder,space,brief,file))continue;
      const proof={sourceJobId:id,sourceRound:Number(round),sourceVersion:source.pipelineVersion,sourceFile:file,responseSha256:digest(raw),localContractSha256:digest(JSON.stringify(blockoutTemplateInput(space,brief))),sourceSpaceSha256:digest(JSON.stringify(previousSpace)),chain:[...seen],validatedAt:Date.now()};
      try{const checked=validate({templates:[value.templates.find(t=>t.id===brief.id)]},brief,proof);found.set(brief.id,{value:checked,proof});}catch{/* Never restore a template that still fails the current contract. */}
     }

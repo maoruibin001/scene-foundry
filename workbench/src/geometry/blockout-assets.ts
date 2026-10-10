@@ -9,7 +9,7 @@ import {roleSettings} from '../generation-policy';
 import {executionSettings} from '../execution-settings';
 import {assetWorkers} from './asset-workers';
 import {validateAsset} from './layout';
-import {BLOCKOUT_PART_LIMIT,COMPACT_BLOCKOUT_RULES,assertBlockoutGeneration,blockoutTemplateInput} from './blockout-contract';
+import {COMPACT_BLOCKOUT_RULES,assertBlockoutGeneration,blockoutTemplateInput} from './blockout-contract';
 export {blockoutTemplateInput} from './blockout-contract';
 import {standardJob,STANDARD_MATCHING} from '../matching-level';
 import {repairBlockoutContours} from './blockout-contours';
@@ -20,12 +20,13 @@ import {assertProceduralBudget} from './procedural-handoff';
 
 export const BLOCKOUT_MATERIALS=[{id:'blockout',color:[.52,.55,.58,1],roughness:.85,metallic:0,textureId:null}];
 export const BLOCKOUT_TEMPLATE_PROMPT='根据已冻结的局部空间契约生成一个三维灰模模板，只输出 templates 数组且恰好包含指定 id。各参考图对应同一资产；不能改变世界机位、摆放或局部原点。\n'+COMPACT_BLOCKOUT_RULES;
-export function blockoutGenerationInput(space:any,brief:any){const input=blockoutTemplateInput(space,brief);input.contract='composition-graybox-v2';input.brief.maxParts=Math.min(BLOCKOUT_PART_LIMIT,input.brief.maxParts);return {...input,proceduralTriangleBudget:assetTriangleBudget(space,brief),proceduralBudgetInstructions:'branchCrown必须在本额度内保留全部结构并为详细部件留出余量；场景总量合格不能替代单资产额度。'};}
+export function blockoutGenerationInput(space:any,brief:any){const input=blockoutTemplateInput(space,brief);input.contract='composition-graybox-v3';return {...input,proceduralTriangleBudget:assetTriangleBudget(space,brief),proceduralBudgetInstructions:'branchCrown必须在本额度内保留全部结构并为详细部件留出余量；场景总量合格不能替代单资产额度。'};}
 export function validateBlockoutTemplate(value:any,space:any,brief:any){
  const input=blockoutTemplateInput(space,brief);
  if(value?.templates?.length!==1||value.templates[0].id!==brief.id||value.templates[0].parts?.some(p=>p.shape?.type==='scatter'))throw Error('灰模只允许指定模板与简单几何');
  assertProceduralBudget({program:{templates:value.templates}},space);
- validateAsset({version:'asset-geometry-v1',template:value.templates[0]},input.brief,{...space,program:{...space.program,instances:spatialInstances(space.program.instances),materials:BLOCKOUT_MATERIALS}},{});return value;
+ // Existing validated geometry retains its declared contract; fresh output is separately limited by assertBlockoutGeneration.
+ validateAsset({version:'asset-geometry-v1',template:value.templates[0]},{...input.brief,maxParts:Math.min(32,brief.maxParts)},{...space,program:{...space.program,instances:spatialInstances(space.program.instances),materials:BLOCKOUT_MATERIALS}},{});return value;
 }
 export function checkedBlockoutTemplate(value:any,space:any,brief:any,folder:string,proof:any=null){
  const repaired=repairBlockoutContours(value);
@@ -64,7 +65,7 @@ export async function generateBlockoutBatches(space:any,ctx:any,folder:string,re
   const dir=join(folder,'batches',String(index));mkdirSync(dir,{recursive:true});
   for(const b of batch)Object.assign(progress.steps.find(s=>s.id===b.id),{status:'running',startedAt:Date.now()});progress.active++;progress.peak=Math.max(progress.peak,progress.active);persist();
   try{
-   const result=await request({role:'scene-blockout',schemaContext:{voxel:job.sceneKind==='voxel',voxelLattice:space.voxelLattice},modelSettings:roleSettings(job.modelSettings,'scene-blockout',job.optimizationPolicy),signal:childSignal,maxTokens:10000,images,system:BLOCKOUT_TEMPLATE_PROMPT.replace('一个三维灰模模板，只输出 templates 数组且恰好包含指定 id','一组独立三维灰模模板，只输出 templates 数组且恰好包含本批全部指定 id')+'\n每项通常1–8个部件；各自保留原点、轮廓及通透开口，不生成细节。'+(job.sceneKind==='voxel'?'\n'+voxelGeometryGuidance(space.voxelLattice):''),text:JSON.stringify({contract:'batch-local-graybox-v1',items:batch.map(b=>blockoutGenerationInput(space,b))})},dir,v=>{
+   const result=await request({role:'scene-blockout',schemaContext:{voxel:job.sceneKind==='voxel',voxelLattice:space.voxelLattice},modelSettings:roleSettings(job.modelSettings,'scene-blockout',job.optimizationPolicy),signal:childSignal,maxTokens:10000,images,system:BLOCKOUT_TEMPLATE_PROMPT.replace('一个三维灰模模板，只输出 templates 数组且恰好包含指定 id','一组独立三维灰模模板，只输出 templates 数组且恰好包含本批全部指定 id')+'\n每项通常1–8个部件；各自保留原点、轮廓及通透开口，不生成细节。'+(job.sceneKind==='voxel'?'\n'+voxelGeometryGuidance(space.voxelLattice):''),text:JSON.stringify({contract:'batch-local-graybox-v2',items:batch.map(b=>blockoutGenerationInput(space,b))})},dir,v=>{
     assertBlockoutGeneration(v);
     if(v?.templates?.length!==batch.length||new Set(v.templates.map(t=>t.id)).size!==batch.length||v.templates.some(t=>!batch.some(b=>b.id===t.id)))throw Error('批量灰模必须与本批模板逐一对应');
     return {templates:batch.map(b=>checkedBlockoutTemplate({templates:[v.templates.find(t=>t.id===b.id)]},space,b,dir).templates[0])};
