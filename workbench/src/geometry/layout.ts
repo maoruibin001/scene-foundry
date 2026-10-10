@@ -7,7 +7,7 @@ import {geometryProgramSchema,GEOMETRY_RULES} from './program-schema';
 import {sceneSchema,validateSceneContext,validateSceneTopology,validateScene,SCENE_RULES,type SceneInput} from './scene-contract';
 import {compileGeometryProgram,validateGeometryProgram,validateSurfaceOverrides,type GeometryProgram,type Texture} from './program';
 import {validateMaterialEmission} from './material-emission';
-import {COMPLEXITIES,complexityPolicy,type Complexity} from '../complexity';
+import {sceneBudget,type Complexity} from '../complexity';
 import {ASSET_STEP_LIMITS,assetPartCapacity,surfacePartBudget} from './surface-part-budget';
 import {RANGE,coordinateVectorSchema,vectorErrors} from './constraints';
 export {ASSET_STEP_LIMITS} from './surface-part-budget';
@@ -26,7 +26,7 @@ export const LAYOUT_COORDINATE_RULES=`空间坐标契约：模板 bounds.min/max
 export function validateLayout(layout:SceneLayout,plan:any,referenceCount:number,level:Complexity){
  assert(layout?.version==='scene-layout-v1','共享布局版本无效');validateLayoutStructure(layout,plan,referenceCount,level);validateVoxelSpace(layout);
  const materials=layout.program.materials;if(layout.voxelLattice)validateVoxelMaterials(materials);
- assert(Array.isArray(materials)&&materials.length>0&&materials.length<=COMPLEXITIES[level].maxMaterials&&materials.every(m=>id(m.id))&&new Set(materials.map(m=>m.id)).size===materials.length,'材质数量或身份无效');
+ assert(Array.isArray(materials)&&materials.length>0&&materials.length<=sceneBudget(level,layout,referenceCount>0).maxMaterials&&materials.every(m=>id(m.id))&&new Set(materials.map(m=>m.id)).size===materials.length,'材质数量或身份无效');
  for(const m of materials)assert(Array.isArray(m.color)&&m.color.length===4&&m.color.every(n=>Number.isFinite(n)&&n>=0&&n<=1)&&Number.isFinite(m.roughness)&&m.roughness>=0&&m.roughness<=1&&Number.isFinite(m.metallic)&&m.metallic>=0&&m.metallic<=1&&(m.textureId===null||id(m.textureId)),'布局材质无效');
  for(const m of materials){validateSurfaceDetail(m.surfaceDetail);validateMaterialEmission(m.emission);}
  const ids=new Set(materials.map(m=>m.id));for(const t of layout.program.templates)assert(Array.isArray(t.materialIds)&&t.materialIds.length>0&&new Set(t.materialIds).size===t.materialIds.length&&t.materialIds.every(m=>ids.has(m)),'资产材质引用无效');
@@ -36,7 +36,7 @@ export function validateLayout(layout:SceneLayout,plan:any,referenceCount:number
 }
 /** 空间规划与最终布局共享这些约束，不注入虚构材质或占位几何。 */
 export function validateLayoutStructure(layout:any,plan:any,referenceCount:number,level:Complexity){
- const p=layout?.program,budget=complexityPolicy(level,referenceCount>0&&Array.isArray(layout?.observedBindings));assert(p?.version==='geometry-v1'&&typeof p.name==='string'&&p.name.trim(),'布局缺少版本或名称');
+ const p=layout?.program,budget=sceneBudget(level,layout,referenceCount>0&&Array.isArray(layout?.observedBindings));assert(p?.version==='geometry-v1'&&typeof p.name==='string'&&p.name.trim(),'布局缺少版本或名称');
  for(const [items,max,label] of [[p.templates,ASSET_STEP_LIMITS.templates,'资产模板'],[p.instances,256,'实例']] as const){assert(Array.isArray(items)&&items.length>0&&items.length<=max,label+'数量超出契约');assert(items.every((x:any)=>id(x.id))&&new Set(items.map((x:any)=>x.id)).size===items.length,label+'身份无效或重复');}
  const templates=new Map<string,AssetBrief>(p.templates.map((t:AssetBrief)=>[t.id,t])),requirements=new Set(plan.requirements.map((r:any)=>r.id));
  const boundsErrors=p.templates.flatMap((t:any)=>{

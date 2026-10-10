@@ -334,3 +334,28 @@ test('超时检查点只复用唯一核验实拍，不选择预测、多候选�
  }finally{f.close();}
  const f2=fixture();try{const t=createGrayboxSpacePreview(f2.options);for(const x of [.5,.4])await t.kit.call('preview_graybox_space',{patchJson:JSON.stringify(f2.patch(x))});expect(t.onlyReviewedCheckpoint()).toBeNull();expect(f2.renders()).toBe(2);}finally{f2.close();}
 });
+
+test('v13实际预览若使参考机位退步则不可最终选择；改善候选可选，历史v12审计不受新门槛影响',async()=>{
+ const setup=(f:any)=>{f.options.space.cameras[0].referenceIndex=1;f.options.sourceScene.cameras[0].referenceIndex=1;f.options.sourceScene.observedBindings=[{landmarkId:'L1',instanceIds:['front']}];
+  f.options.observation={landmarks:[{id:'L1',label:'近景',critical:true,views:[{referenceIndex:1,box:[.25,.25,.75,.75],extent:'occluded',evidence:'原图遮挡但仍有可见边缘'}]}],cameras:[{referenceIndex:1,contentRect:[0,0,1,1]}]};};
+ const f=fixture();try{setup(f);
+  const options={...f.options,contractVersion:GRAYBOX_SPACE_PREVIEW},t=createGrayboxSpacePreview(options),worse=f.patch(1.5),better=f.patch(.5);
+  expect(t.kit.instructions).toContain('跨机位联合门槛');
+  const measured=JSON.parse((await t.kit.call('measure_graybox_space',worse)).content[0].text);
+  expect(measured.jointFit.passed).toBe(false);expect(measured.jointFit.violations.map((v:any)=>v.kind)).toContain('camera-mean-regression');
+  const shown=JSON.parse((await t.kit.call('preview_graybox_space',worse)).content[0].text);
+  expect(shown.jointFit.passed).toBe(false);expect(shown.quality).toContain('jointFit未通过');
+  expect(()=>t.assertReviewed(worse)).toThrow('GRAYBOX_JOINT_FIT_REGRESSION');
+  expect(()=>t.kit.resolveOutput!({selectedPatchSha256:shown.patchSha256,reason:'只看单一机位就选择退步候选'})).toThrow('GRAYBOX_JOINT_FIT_REGRESSION');
+  expect(t.onlyReviewedCheckpoint()).toBeNull();
+  expect(JSON.parse(t.kit.continuation!().text).candidates[0].jointFit.passed).toBe(false);
+  // The rejected render still consumed preview quota; reopening does not reset it.
+  expect(read(join(options.folder,'graybox-preview-audit.json')).used).toBe(1);
+  const ok=JSON.parse((await t.kit.call('preview_graybox_space',better)).content[0].text);
+  expect(ok.jointFit.passed).toBe(true);expect(t.kit.resolveOutput!({selectedPatchSha256:ok.patchSha256,reason:'两机位均未退步后选择实际候选'})).toEqual(better);
+  expect(createGrayboxSpacePreview(options).assertReviewed(better).patchSha256).toBe(ok.patchSha256);
+  const legacy={...f.options,folder:join(f.folder,'v12'),contractVersion:'graybox-space-preview-v12'},old=createGrayboxSpacePreview(legacy);
+  const oldShown=JSON.parse((await old.kit.call('preview_graybox_space',worse)).content[0].text);
+  expect(oldShown.jointFit).toBeUndefined();expect(()=>old.assertReviewed(worse)).not.toThrow();expect(old.kit.instructions).not.toContain('跨机位联合门槛');
+ }finally{f.close();}
+});

@@ -2,6 +2,7 @@ import {voxelGeometryGuidance} from '../voxel/construction-guidance';
 import {VOXEL_SPACE_GUIDANCE,VOXEL_STRICT_SPACE_GUIDANCE,VOXEL_GEOMETRY_GUIDANCE,VOXEL_SURFACE_GUIDANCE} from '../voxel/construction-guidance';
 import {voxelComponentRequirements,VOXEL_COMPONENT_REQUIREMENTS_GUIDANCE} from '../voxel/landmark-coverage';
 import {VOXEL_LIMITS} from '../voxel/limits';
+import {voxelGenerationBrief} from '../complexity';
 import {withInitialSpaceDraft} from './space-draft';
 import {assetGeometryBasis} from './asset-geometry-basis';
 import {assertProceduralHandoff,proceduralSeeds,PROCEDURAL_HANDOFF_RULES} from './procedural-handoff';
@@ -42,6 +43,7 @@ export async function generateLayout(ctx:GenerationContext){
  const strictVoxel=job.voxelConstructionVersion==='voxel-lattice-v1';
  if(!ctx.stage||!ctx.acceptSpace)throw Error('SPATIAL_GATE_REQUIRED：生成流程必须提供独立阶段记录和灰模验收');
  ctx.onProgress?.('逐图观察地标、遮挡与机位依据');ctx.observation=await ctx.stage('observe',()=>observeReferences(ctx));
+ if(strictVoxel){const needed=voxelComponentRequirements(ctx.observation).length;if(needed>VOXEL_LIMITS.entities)throw Error('SPACE_BUDGET_INFEASIBLE：原图观察要求'+needed+'个独立组件，超过体素全部实例上限'+VOXEL_LIMITS.entities+'；未发起空间规划调用');}
  ctx.onProgress?.('规划空间与参考机位');
  const validateSavedSpace=(v:any)=>{v=completeObservedSpacePlan(v,ctx.observation);if(!Array.isArray(v.spatialOpenings))throw Error('空间规划缺少开口声明');return bindObservedSpace(validateSpace(v,plan,images.length,job.complexity,{strictVoxel}),ctx.observation)};
  let space=await ctx.stage('space',async()=>{if(job.spatialRepairSource){const source=read(join(runDir(job.spatialRepairSource.jobId),'job.json'));if(source.prompt!==job.prompt||JSON.stringify(source.images?.map(i=>i.id))!==JSON.stringify(job.images?.map(i=>i.id))||JSON.stringify(source.modelSettings)!==JSON.stringify(job.modelSettings)||JSON.stringify(source.plan)!==JSON.stringify(plan))throw Error('空间诊断来源的输入、模型或需求改变');ctx.spatialRepairSeed=loadSpatialRepairSeed(source,job.spatialRepairSource.round);const value=validateSavedSpace(ctx.spatialRepairSeed.space);save(join(dir,'spatial-diagnosis-source.json'),ctx.spatialRepairSeed.provenance);ctx.job.stages.space.reused=true;return {value,receipt:{kind:'spatial-diagnosis-basis',...ctx.spatialRepairSeed.provenance}};}const saved=savedStage(ctx,'scene-space',validateSavedSpace);if(saved){persistStageReuse(ctx,'scene-space',saved);ctx.job.stages.space.reused=true;return {value:saved.value,receipt:saved.receipt};}const validateNewSpace=(v:any)=>{
@@ -52,11 +54,11 @@ export async function generateLayout(ctx:GenerationContext){
   };
   const construction=PROVIDER==='codex-cli'?createSpaceConstruction({folder:join(dir,'space-construction'),jobId:job.id,rootJobId:job.executionRecoveryRoot??job.id,
    inputKey:digest(stable({prompt:job.prompt,plan,images:images.map(i=>({sha256:digest(readFileSync(i.path)),mime:i.mime})),observation:ctx.observation,complexity:job.complexity,generationBrief:job.generationBrief,modelSettings:job.modelSettings,policy:job.policy,optimizationPolicy:job.optimizationPolicy,profile:job.profile,...(strictVoxel?{voxelConstructionVersion:job.voxelConstructionVersion}:{})})),
-   requirementIds:plan.requirements.map((r:any)=>r.id),signal,strictVoxel,validate:validateNewSpace}):null;
+   requirementIds:plan.requirements.map((r:any)=>r.id),signal,strictVoxel,observation:ctx.observation,validate:validateNewSpace}):null;
   return withInitialSpaceDraft(()=>callValidated({modelSettings:job.modelSettings,role:'scene-space',signal,maxTokens:9000,images,tools:construction?.kit,
-   system:(construction?spaceConstructionPrompt(construction.kit.instructions):SPACE_PROMPT)+'\n'+matchingGuidance(job)+(job.sceneKind==='voxel'?'\n'+(strictVoxel?VOXEL_STRICT_SPACE_GUIDANCE:VOXEL_SPACE_GUIDANCE):''),
+   system:(construction?spaceConstructionPrompt(construction.kit.instructions,construction.kit.version):SPACE_PROMPT)+'\n'+matchingGuidance(job)+(job.sceneKind==='voxel'?'\n'+(strictVoxel?VOXEL_STRICT_SPACE_GUIDANCE:VOXEL_SPACE_GUIDANCE):''),
    schemaContext:{requirementIds:plan.requirements.map((r:any)=>r.id),derivedSpatialRelations:true,...(strictVoxel?{strictVoxel:true}:{})},
-   text:JSON.stringify({input:job.prompt,scoring:scoringGuidance(job.policy),referenceImages:images.length,generationBrief:job.generationBrief,observation:ctx.observation,plan,productionRules:SPEC.rules,
+   text:JSON.stringify({input:job.prompt,scoring:scoringGuidance(job.policy),referenceImages:images.length,generationBrief:strictVoxel?voxelGenerationBrief(job.generationBrief,job.complexity):job.generationBrief,observation:ctx.observation,plan,productionRules:SPEC.rules,
     ...(strictVoxel?{requiredIndependentComponents:voxelComponentRequirements(ctx.observation),minimumIndependentInstanceSlots:voxelComponentRequirements(ctx.observation).length,maximumTotalInstanceSlots:VOXEL_LIMITS.entities,instanceBudgetGuidance:'最低独立组件数量与全部实例上限必须同时满足；最多'+VOXEL_LIMITS.entities+'个instances及对应entities，包含ground、context、subject全部role，复用模板不减少实例计数。同一连续水面或同一组件区域的重复块使用一个有界voxelVolume内的fill/erase/repeat构造，不能逐条水带、逐块绿植增加实体绕过上限，也不能删除关键组件或借用宿主别名。',independentComponentGuidance:VOXEL_COMPONENT_REQUIREMENTS_GUIDANCE}:{})})},dir,validateNewSpace),()=>construction?.snapshot(),ctx.preserveSpaceDraft,signal,error=>save(join(dir,'space-draft-warning.json'),{error:String(error),originalStageFailurePreserved:true}));
  });
  const estimate=firstPassCallEstimate(space.value.program.templates.length,job.matchingLevel??'detailed');

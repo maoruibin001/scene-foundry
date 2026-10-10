@@ -92,3 +92,11 @@ test('相机错误指出具体机位及范围，不把非法目标换成原点',
  expect(message).toContain('参考视角.target[1]=101');expect(message).toContain('参考视角.fov=9');expect(message).toContain('0.3..2.2');
  expect(JSON.stringify(l)).toBe(before);
 });
+test('严格体素格点布局按体素最终合同计预算，普通布局仍按复杂度上限',()=>{
+ const four=()=>{const l:any=layout();l.program.templates[0].maxParts=64;l.program.instances.push({...l.program.instances[0],id:'third',position:[0,5,0],requirementIds:[]},{...l.program.instances[0],id:'fourth',position:[5,5,0],requirementIds:[]});l.entities.push({instanceId:'third',role:'context',category:'new_shape'},{instanceId:'fourth',role:'context',category:'new_shape'});return l;};
+ expect(()=>validateLayout(four(),plan,2,'simple')).toThrow('展开后的资产预算超限：256 > 192');
+ expect(validateLayout({...four(),voxelLattice:{version:'voxel-lattice-v1',cellSize:.2,origin:[0,0,0]}},plan,2,'simple').program.instances.length).toBe(4);
+ const crowd=(n:number,lattice:boolean)=>{const l:any=layout();l.program.templates[0].maxParts=1;for(let i=0;i<n;i++){l.program.instances.push({...pose,id:'c'+i,label:'c'+i,template:'novel',position:[0,6+i,0],requirementIds:[]});l.entities.push({instanceId:'c'+i,role:'context',category:'new_shape'});}return lattice?{...l,voxelLattice:{version:'voxel-lattice-v1',cellSize:.2,origin:[0,0,0]}}:l;};
+ expect(()=>validateLayout(crowd(30,false),plan,2,'complex')).toThrow('布局实体数量');
+ expect(validateLayout(crowd(30,true),plan,2,'complex').entities.length).toBeGreaterThan(29);
+});

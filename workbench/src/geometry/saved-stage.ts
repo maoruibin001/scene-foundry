@@ -4,7 +4,7 @@ import {runDir,read,save,digest} from '../store';
 import {parseModelJson} from '../provider';
 import {PROMPT_CONTRACT} from '../prompts';
 import {roleSettings} from '../generation-policy';
-import {SPACE_CONSTRUCTION,selectedSpaceValue} from './space-construction';
+import {SPACE_CONSTRUCTION_VERSIONS,selectedSpaceValue} from './space-construction';
 import {blockoutContactsRecorded} from './blockout-input-evidence';
 type SavedRequest={system:string;text:string};
 /** Follow only the recorded recovery chain with identical inputs, plan and model. */
@@ -32,7 +32,7 @@ export function savedStage(ctx:any,role:string,validate:(value:any)=>any,allowRe
     if(receipt.stopReason!=='completed'||receipt.requestedReasoning!==settings?.reasoningEffort||receipt.executionRoute?.configurationSha256!==ctx.job.profile?.executionRoute?.configurationSha256||prompt.contract!==PROMPT_CONTRACT||prompt.system!==request.system||prompt.input!==request.text)continue;
    }
    const text=readFileSync(file,'utf8'),parsed=parseModelJson(text);
-   const selected=role==='scene-space'&&receipt.toolsContract===SPACE_CONSTRUCTION;
+   const selected=role==='scene-space'&&(SPACE_CONSTRUCTION_VERSIONS as readonly string[]).includes(receipt.toolsContract);
    if(selected&&receipt.stopReason!=='completed')continue;
    const value=validate(selected?selectedSpaceValue(folder,parsed,source):parsed);
    if(receipt.requestedModel!==ctx.job.modelSettings?.model)throw Error('恢复输出的模型来源不一致');
@@ -43,9 +43,9 @@ export function savedStage(ctx:any,role:string,validate:(value:any)=>any,allowRe
  return null;
 }
 export function persistStageReuse(ctx:any,role:string,saved:any){
- const resolved=role==='scene-space'&&saved.receipt.toolsContract===SPACE_CONSTRUCTION;
+ const resolved=role==='scene-space'&&(SPACE_CONSTRUCTION_VERSIONS as readonly string[]).includes(saved.receipt.toolsContract);
  // A new recovery artifact may store canonical data; the original selection and its receipt stay untouched at source.
- const receipt=resolved?{...saved.receipt,toolsContract:null,kind:'reused-canonical-space',sourceToolsContract:SPACE_CONSTRUCTION,sourceResponseSha256:digest(saved.text)}:saved.receipt;
+ const receipt=resolved?{...saved.receipt,toolsContract:null,kind:'reused-canonical-space',sourceToolsContract:saved.receipt.toolsContract,sourceResponseSha256:digest(saved.text)}:saved.receipt;
  save(join(ctx.dir,role+'-response.txt'),resolved?saved.value:parseModelJson(saved.text));save(join(ctx.dir,role+'-receipt.json'),receipt);
  if(saved.prompt)save(join(ctx.dir,role+'-prompt.json'),saved.prompt);
  save(join(ctx.dir,role+'-reuse.json'),{...saved.proof,...(resolved?{normalization:'selected-checkpoint-to-canonical-space',canonicalSha256:digest(JSON.stringify(saved.value))}:{})});

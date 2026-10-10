@@ -39,11 +39,14 @@ export class VoxelLandmarkCoverageError extends Error{
 }
 
 /** A fresh lattice space proves component identities, not geometry or visual quality. */
-export function validateVoxelLandmarkCoverage(space:any,observation:any){
+/** partial checks only the landmarks bound so far. Ownership conflicts can only grow as
+ * more landmarks are bound, so every partial violation is also a final violation. */
+export function validateVoxelLandmarkCoverage(space:any,observation:any,options:{partial?:boolean}={}){
  if(space?.voxelLattice===undefined)return {version:VOXEL_LANDMARK_COVERAGE,applicable:false,quality:'not-assessed' as const};
  fail(space.voxelLattice&&space.voxelLattice.version===STRICT_VOXEL_CONSTRUCTION,'未知或无效的严格体素空间版本');
- const landmarks=strictLandmarks(observation),bindings=space.observedBindings,instances=space.program?.instances,templates=space.program?.templates;
- fail(Array.isArray(bindings)&&bindings.length===landmarks.length&&new Set(bindings.map(b=>b.landmarkId)).size===bindings.length,'每个原图地标须有唯一实例绑定');
+ const all=strictLandmarks(observation),bindings=space.observedBindings,instances=space.program?.instances,templates=space.program?.templates;
+ fail(Array.isArray(bindings)&&new Set(bindings.map(b=>b.landmarkId)).size===bindings.length&&bindings.every(b=>all.some(l=>l.id===b.landmarkId))&&(options.partial||bindings.length===all.length),'每个原图地标须有唯一实例绑定');
+ const landmarks=options.partial?all.filter(l=>bindings.some(b=>b.landmarkId===l.id)):all;
  fail(Array.isArray(instances)&&instances.every(i=>typeof i.id==='string'&&i.id.trim())&&new Set(instances.map(i=>i.id)).size===instances.length&&Array.isArray(templates)&&templates.every(t=>typeof t.id==='string'&&t.id.trim())&&new Set(templates.map(t=>t.id)).size===templates.length,'空间实例或模板身份无效');
  const instanceMap=new Map<string,any>(instances.map(i=>[i.id,i])),templateMap=new Map<string,any>(templates.map(t=>[t.id,t]));
  const rows=landmarks.map(landmark=>{

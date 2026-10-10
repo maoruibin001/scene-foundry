@@ -68,7 +68,7 @@ export async function refineWithEvidence(job:any,plan:any,images:any[],dir:strin
    }
   }
  }
- const geometryBudget=repairGeometryBudget(source.program,job.complexity);
+ const geometryBudget=repairGeometryBudget(source.program,job.complexity,!!source.voxelLattice);
  const previousRepairs=repairHistory(job,originalSource,refs);save(join(folder,'repair-history.json'),previousRepairs);
  const priorRoundAudits=previousRepairs.attempts.map(attempt=>attempt.roundAudit);
  event(job,'repair-history','整体修正已读取 '+previousRepairs.attempts.length+' 份已核验历史；包括从当前保留候选出发但未被选优的尝试');

@@ -5,8 +5,8 @@ import {stable} from '../validated-cache';
 import {failureDisposition,preserveOutput,saveDelivery} from '../output-delivery';
 import {externalProviderBlock} from '../provider-external-block';
 import {assertStorageAvailable} from '../storage-preflight';
-import {complexityPolicy} from '../complexity';
-import {SPACE_CONSTRUCTION} from './space-construction';
+import {sceneBudget} from '../complexity';
+import {SPACE_CONSTRUCTION_VERSIONS} from './space-construction';
 import {completeObservedSpacePlan,bindObservedSpace} from './reference-observations';
 import {validateSpace} from './layout-stages';
 import {validateScene} from './scene-contract';
@@ -43,7 +43,7 @@ export function rangeCage(bounds:{min:number[];max:number[]}){
 }
 export function spaceDraftScene(snapshot:any,ctx:any){
  const {checksum,...body}=snapshot??{};
- assert(checksum===digest(stable(body))&&body.version===SPACE_CONSTRUCTION,'检查点内容或版本不符');
+ assert(checksum===digest(stable(body))&&(SPACE_CONSTRUCTION_VERSIONS as readonly string[]).includes(body.version),'检查点内容或版本不符');
  assert(body.jobId===ctx.job.id&&body.rootJobId===(ctx.job.executionRecoveryRoot??ctx.job.id),'检查点不属于当前执行根');
  assert(body.core&&/^[a-f0-9]{64}$/.test(body.inputKey),'没有有效的当前核心规划');
  const partial={...body.core,version:'scene-space-plan-v2',spatialOpenings:body.spatialOpenings??[],spatialContacts:body.spatialContacts??[]};
@@ -57,7 +57,7 @@ export function spaceDraftScene(snapshot:any,ctx:any){
    templates:space.program.templates.map((t:any)=>({id:t.id,parts:[{...pose,id:'range',material:'blockout',shape:rangeCage(t.bounds)}]}))},
   lighting:{direction:[.4,-.6,-.7],color:[1,1,1],intensity:1.8,ambientColor:[1,1,1],ambientIntensity:.65,points:[]}},ctx.plan,ctx.images.length);
  const compiled=compileGeometryProgram(scene.program,{});
- assert(compiled.meshes.length<=complexityPolicy(ctx.job.complexity,true).maxParts,'范围显示超过原部件预算');
+ assert(compiled.meshes.length<=sceneBudget(ctx.job.complexity,space,true).maxParts,'范围显示超过原部件预算');
  return scene;
 }
 /** At most one local render attempt per job. This never starts a model, accepts space or repairs geometry. */

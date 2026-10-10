@@ -1,4 +1,4 @@
-import {COMPLEXITIES,type Complexity} from '../complexity';
+import {sceneBudget,type Complexity} from '../complexity';
 
 export const ASSET_STEP_LIMITS={templates:16,parts:64};
 
@@ -15,7 +15,7 @@ export function assetPartCapacity(layout:any,brief:any){
  * are dispatched. This derives capacity; it never edits the frozen spatial plan. */
 export function surfacePartBudget(layout:any,level:Complexity){
  const templates=layout.program.templates.map((t:any)=>({...assetPartCapacity(layout,t),instances:layout.program.instances.filter((i:any)=>i.template===t.id).length}));
- const before=templates.reduce((n:number,t:any)=>n+t.plannedMaxParts*t.instances,0),after=templates.reduce((n:number,t:any)=>n+t.maxParts*t.instances,0),limit=COMPLEXITIES[level].maxParts;
+ const before=templates.reduce((n:number,t:any)=>n+t.plannedMaxParts*t.instances,0),after=templates.reduce((n:number,t:any)=>n+t.maxParts*t.instances,0),limit=sceneBudget(level,layout,true).maxParts;
  if(after>limit)throw Error('SURFACE_PART_CAPACITY_EXCEEDED：必需材质槽合并后的展开部件预算 '+after+' 超过场景上限 '+limit+'；请协调材质槽与几何规划，不删除可见材质差异或放宽总上限');
  return {version:'surface-part-budget-v1',before,after,limit,templates,adjustments:templates.filter((t:any)=>t.maxParts!==t.plannedMaxParts),spatialPlanUnchanged:true};
 }

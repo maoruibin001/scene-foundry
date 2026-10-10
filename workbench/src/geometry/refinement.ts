@@ -25,7 +25,7 @@ import {readFileSync,existsSync,mkdirSync} from 'node:fs';
 import {join,relative} from 'node:path';
 import {callValidated} from '../contracts';
 import {read,save,digest,runDir,event} from '../store';
-import {COMPLEXITIES,complexityPolicy} from '../complexity';
+import {COMPLEXITIES,complexityPolicy,sceneBudget} from '../complexity';
 import {sceneSchema,validateScene,type SceneInput} from './scene-contract';
 import {compileGeometryProgram} from './program';
 import {GEOMETRY_RULES,uvTransformSchema,uvProjectionSchema} from './program-schema';
@@ -128,7 +128,7 @@ export function applyRefinement(source:SceneInput,patch:any,plan:any,references:
  upsert(p.instances,fitScreenTargets(next,targets).instances);
  validateScene(next,plan,references);
  for(const t of p.templates)assertAssetOpenings(next,t.id);
- const budget=complexityPolicy(level,references>0&&Array.isArray((source as any).observedBindings)),entities=next.entities.filter(e=>e.role!=='ground'),parts=p.instances.reduce((n,i)=>n+p.templates.find(t=>t.id===i.template)!.parts.length,0);
+ const budget=sceneBudget(level,source,references>0&&Array.isArray((source as any).observedBindings)),entities=next.entities.filter(e=>e.role!=='ground'),parts=p.instances.reduce((n,i)=>n+p.templates.find(t=>t.id===i.template)!.parts.length,0);
  require(parts<=budget.maxParts&&p.materials.length<=budget.maxMaterials,'修正后的部件或材质超过原复杂度预算：展开部件 '+parts+'/'+budget.maxParts+'；材质 '+p.materials.length+'/'+budget.maxMaterials+'；替换已有部件或先移除有证据的冗余部分，不追加上限');
  require(entities.length>=budget.minEntities&&entities.length<=budget.maxEntities&&new Set(entities.map(e=>e.category)).size>=budget.minKinds,'修正后未满足原复杂度');
  require(digest(JSON.stringify({...next,assumptions:[]}))!==digest(JSON.stringify({...source,assumptions:[]})),'没有任何可执行的场景变化');
@@ -167,7 +167,7 @@ export async function refineScene(job:any,plan:any,images:{path:string;mime:stri
  const [textureEvidence,reusableTextureEvidence]=await Promise.all([repairTextureEvidence(source,textures,folder,signal,images),repairReusableTextureEvidence(refs,folder,signal)]);
  const requirementFeedback=repairRequirementFeedback(plan,review,source,visibility.context,previousRepairs);save(join(folder,'requirement-feedback.json'),requirementFeedback);
  const inputImages=[...images,...frameNames.map((name:string)=>({path:join(sourceDir,'runtime',name),mime:'image/png'})),...visibility.images,...textureEvidence.images,...reusableTextureEvidence.images];
- const editBudget=repairBudget(job.complexity),geometryBudget=repairGeometryBudget(source.program,job.complexity);
+ const editBudget=repairBudget(job.complexity),geometryBudget=repairGeometryBudget(source.program,job.complexity,!!source.voxelLattice);
  const recovered=from?null:restoreRepairAttempt(job,sourceId,source,plan,refs,folder);
  const remainingCalls=callBudget(job.modelSettings?.model).remaining;
  if(remainingCalls!==null&&remainingCalls<(recovered?2:3))throw Error('修复剩余调用不足；需保留独立评审，已保存候选不重复生成');

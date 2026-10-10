@@ -1,5 +1,5 @@
 import {test,expect} from 'bun:test';
-import {complexityOf,complexityPolicy,generationBrief,inspectComplexity,exportBudget} from './complexity';
+import {complexityOf,complexityPolicy,generationBrief,inspectComplexity,exportBudget,voxelComplexityPolicy,sceneBudget,voxelGenerationBrief} from './complexity';
 import {compileIR,validateIR,solveIR} from './scene-ir';
 import {validateRecipe} from './recipe';
 import {evidenceSpans} from './grounding';
@@ -58,4 +58,11 @@ test('reference guidance is frozen without adding invented user requirements or 
  expect(a.originalPrompt).toBe(original);expect(b.originalPrompt).toBe(original);
  expect(a.budget.nonGroundEntities).toEqual([1,8]);expect(b.budget.nonGroundEntities).toEqual([17,28]);
  expect(b.planningMethod.zones).toContain('至少三个');expect(b.planningMethod.evidence).toContain('不是用户关键需求');
+});
+test('严格体素规划与体素最终报告共用一个预算来源，普通任务上限不变',()=>{
+ expect(sceneBudget('complex',{},true)).toEqual(complexityPolicy('complex',true));
+ expect(sceneBudget('complex',{voxelLattice:{version:'voxel-lattice-v1'}},true)).toEqual(voxelComplexityPolicy('complex'));
+ expect(voxelComplexityPolicy('complex')).toMatchObject({minEntities:1,maxEntities:64,maxParts:2048,maxMaterials:64});
+ const brief=voxelGenerationBrief(generationBrief('原图','complex',true),'complex');
+ expect(brief.budget).toMatchObject({nonGroundEntities:[1,63],maximumMeshParts:2048,maximumMaterials:64,totalInstanceSlotsIncludingGround:64});
 });

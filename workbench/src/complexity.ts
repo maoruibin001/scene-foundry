@@ -1,4 +1,5 @@
 import {GENERATION_REFERENCE} from './spec';
+import {VOXEL_LIMITS} from './voxel/limits';
 /** One contract for the selector, generation brief and acceptance budget. */
 export const COMPLEXITIES = {
  simple: {id:'simple',label:'简单',minEntities:1,maxEntities:8,minKinds:1,maxParts:192,maxMaterials:32,description:'突出主体，少量环境；优先快速验证。',guidance:'围绕原始要求生成主体和少量必要环境。避免无意义堆砌，优先保证轮廓、空间关系和画面可读性。'},
@@ -11,6 +12,13 @@ export function complexityPolicy(level:Complexity,imageGrounded=false){
  const p=COMPLEXITIES[level];
  return imageGrounded?{...p,minEntities:1,minKinds:1,guidance:'保留参考图中可观察的对象、数量和空间关系；仅做必要且有说明的隐藏结构补全，不为复杂度增加物件或分区。'}:p;
 }
+/** Strict lattice scenes are bounded by the voxel final-output contract; planning must not use
+ * the smaller ordinary tier caps, or required independent components become unplannable. */
+export function voxelComplexityPolicy(level:Complexity){return {...complexityPolicy(level,true),maxEntities:VOXEL_LIMITS.entities,maxParts:VOXEL_LIMITS.boxes,maxMaterials:VOXEL_LIMITS.palette};}
+/** The strict voxel planner sees the same caps its validators enforce, not the ordinary tier caps. */
+export function voxelGenerationBrief(brief:any,level:Complexity){const p=voxelComplexityPolicy(level);return {...brief,budget:{...brief?.budget,nonGroundEntities:[p.minEntities,p.maxEntities-1],maximumMeshParts:p.maxParts,maximumMaterials:p.maxMaterials,totalInstanceSlotsIncludingGround:p.maxEntities}};}
+/** One budget authority for a scene or plan: strict voxel lattices use the voxel contract. */
+export function sceneBudget(level:Complexity,scene:any,imageGrounded:boolean){return scene?.voxelLattice?voxelComplexityPolicy(level):complexityPolicy(level,imageGrounded);}
 export function complexityOf(value:unknown):Complexity {
  if(value===undefined)return 'simple';
  if(typeof value!=='string'||!Object.hasOwn(COMPLEXITIES,value))throw Error('复杂度须为 simple、medium 或 complex');
