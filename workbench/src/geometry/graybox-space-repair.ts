@@ -20,7 +20,7 @@ import {createGrayboxSpacePreview} from './graybox-space-preview';
 import {validateScene} from './scene-contract';
 import {spatialInstances} from './spatial-order';
 import {grayboxPartEditSchema,applyGrayboxLocalParts,buildGrayboxPartScene} from './graybox-local-parts';
-import {referenceComposition,NEXT_REFERENCE_COMPOSITION} from './reference-composition';
+import {referenceComposition,PART_REFERENCE_COMPOSITION} from './reference-composition';
 import {observedBindingRule} from './observed-binding-scope';
 
 export const GRAYBOX_SPACE_REPAIR='graybox-space-repair-v8';
@@ -96,7 +96,8 @@ export async function repairGrayboxSpace(space:any,ctx:any,sourceFolder:string,f
  const frameNames=runtime.referenceFrames.map(f=>f.file);
  const projection=await ensureProjectionEvidence(source,ctx.images,ctx.images.map((i:any)=>digest(readFileSync(i.path))),sourceFolder,runtime,folder,ctx.signal);
  const evidence=prepareVisibilityEvidence(source,{},folder,projection.sourceFolder,projection.runtime,frameNames);
- const composition=referenceComposition(source,ctx.observation,read(join(folder,'visibility.json')),observedBindingRule(ctx.job)?{version:NEXT_REFERENCE_COMPOSITION}:{});
+ // Policy jobs measure parts, which the saved instance-only visibility cannot carry.
+ const composition=observedBindingRule(ctx.job)?referenceComposition(source,ctx.observation,undefined,{version:PART_REFERENCE_COMPOSITION}):referenceComposition(source,ctx.observation,read(join(folder,'visibility.json')));
  save(join(folder,'reference-composition.json'),composition);
  const canonical=read(join(sourceFolder,'scene.json')),rejected=spatialRejectedFeedback(ctx,sourceFolder,folder);
  const buildScene=(next:any,patch:any)=>assertNotRejectedSpatialScene(rejected.attempts,buildGrayboxPartScene(canonical,next,patch,ctx.plan,ctx.images.length));
