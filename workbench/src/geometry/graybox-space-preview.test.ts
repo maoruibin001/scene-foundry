@@ -384,3 +384,18 @@ test('v15使用v5部件构图并沿用来源分配；v14保留v4构图',async()=
   expect(measured.referenceComposition.version).toBe(PART_REFERENCE_COMPOSITION);expect(measured.jointFit.passed).toBe(true);
  }finally{f.close();}
 });
+
+test('template-bounds-v1 仅在当前契约开放扩展模板bounds，部件可移入新范围；旧契约与无策略证据不能混用',async()=>{
+ const f=fixture();try{
+  const grow={id:'tree',description:'冠层向上延伸',origin:'根部',bounds:{min:[-1,-1,0],max:[1,1,5]}};
+  const p={...f.patch(),templates:[grow],parts:[{templateId:'tree',partId:'crown',position:[0,0,3.5],rotation:[0,0,0],scale:[1,1,1]}]};
+  const options={...f.options,contractVersion:GRAYBOX_SPACE_PREVIEW,templateBounds:true,schema:grayboxSpaceRepairSchema({templateBounds:true}),apply:(x:any)=>applyGrayboxSpaceRepair(f.options.space,x,v=>v,{templateBounds:true})};
+  const t=createGrayboxSpacePreview(options);expect(t.kit.definitions[0].inputSchema.properties.templates.maxItems).toBe(2);expect(t.kit.instructions).toContain('template-bounds-v1');
+  const r=await t.kit.call('measure_graybox_space',p);expect(r.isError).not.toBe(true);expect(f.renders()).toBe(0);
+  // Without the bound growth the same part move escapes the frozen brief.
+  await expect(t.kit.call('measure_graybox_space',{...p,templates:[]})).rejects.toThrow();
+  const plain=createGrayboxSpacePreview({...f.options,folder:join(f.folder,'plain'),contractVersion:GRAYBOX_SPACE_PREVIEW});expect(plain.kit.definitions[0].inputSchema.properties.templates.maxItems).toBe(0);await expect(plain.kit.call('measure_graybox_space',p)).rejects.toThrow('templates');
+  expect(()=>createGrayboxSpacePreview({...options,templateBounds:false})).toThrow('契约');
+  const old=createGrayboxSpacePreview({...options,folder:join(f.folder,'v4'),contractVersion:'graybox-space-preview-v4'});await expect(old.kit.call('preview_graybox_space',{patchJson:JSON.stringify(p)})).rejects.toThrow('templates必须为空');
+ }finally{f.close();}
+});

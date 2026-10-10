@@ -22,17 +22,18 @@ import {spatialInstances} from './spatial-order';
 import {grayboxPartEditSchema,applyGrayboxLocalParts,buildGrayboxPartScene} from './graybox-local-parts';
 import {referenceComposition,PART_REFERENCE_COMPOSITION} from './reference-composition';
 import {observedBindingRule} from './observed-binding-scope';
+import {templateBoundsRule,GRAYBOX_REPAIR_POLICY,GRAYBOX_TEMPLATE_BOUND_EDITS,GRAYBOX_TEMPLATE_BOUNDS_PROMPT} from './graybox-repair-policy';
 
 export const GRAYBOX_SPACE_REPAIR='graybox-space-repair-v8';
 const object=(properties:any)=>({type:'object',properties,required:Object.keys(properties),additionalProperties:false});
 const subset=(properties:any,keys:string[])=>Object.fromEntries(keys.map(k=>[k,properties[k]]));
 const list=(items:any,maxItems:number)=>({type:'array',items,maxItems});
 /** Derive coordinates and brief fields from the full space contract; identities remain frozen. */
-export function grayboxSpaceRepairSchema(options:{voxel?:boolean;voxelLattice?:VoxelLattice}={}){
+export function grayboxSpaceRepairSchema(options:{voxel?:boolean;voxelLattice?:VoxelLattice;templateBounds?:boolean}={}){
  const full=structuredClone(spaceSchema()).properties,p=full.program.properties;if(options.voxelLattice){p.instances.items.properties.rotation.items={type:"number",enum:QUARTER_TURNS};p.instances.items.properties.scale.items={type:"number",enum:[1]};}
  return object({version:{type:'string',enum:[GRAYBOX_SPACE_REPAIR]},reason:{type:'string',minLength:20,maxLength:1800},
   instances:list(object(subset(p.instances.items.properties,['id','position','rotation','scale'])),12),
-  templates:{...list(object(subset(p.templates.items.properties,['id','description','origin','bounds'])),0)},
+  templates:{...list(object(subset(p.templates.items.properties,['id','description','origin','bounds'])),options.templateBounds?GRAYBOX_TEMPLATE_BOUND_EDITS:0)},
   parts:grayboxPartEditSchema(options),
   groups:list(object({templateId:{type:'string'},parts:compactBlockoutSchema(options).properties.templates.items.properties.parts}),3),
   cameras:list({...object(subset(full.cameras.items.properties,['name','position','target','fov'])),properties:{...subset(full.cameras.items.properties,['name','position','target','fov']),orthographicHeight:full.cameras.items.properties.orthographicHeight}},6),
@@ -47,13 +48,13 @@ function keys(value:any,allowed:string[],label:string){
 }
 const vector=(v:any)=>Array.isArray(v)&&v.length===3&&v.every(Number.isFinite);
 function rows(value:any,max:number,label:string){fail(Array.isArray(value)&&value.length<=max,label+'超出本次局部补丁额度');}
-/** The patch cannot delete objects, relabel requirements, change relationships or lower budgets. */
-export function applyGrayboxSpaceRepair(space:any,patch:any,validate:(space:any)=>any){
+/** The patch cannot delete objects, relabel requirements, change relationships or lower budgets; template bounds may only grow under the policy. */
+export function applyGrayboxSpaceRepair(space:any,patch:any,validate:(space:any)=>any,options:{templateBounds?:boolean}={}){
  keys(patch,['version','reason','instances','templates','parts','cameras','contacts','checks',...(Object.hasOwn(patch,'groups')?['groups']:[])],'补丁');
  if(patch.groups!==undefined){fail([GRAYBOX_SPACE_REPAIR,'graybox-space-repair-v7','graybox-space-repair-v6','graybox-space-repair-v5','graybox-space-repair-v4'].includes(patch.version),'历史局部补丁不能重建组群');rows(patch.groups,3,'组群');}
  fail([GRAYBOX_SPACE_REPAIR,'graybox-space-repair-v7','graybox-space-repair-v6','graybox-space-repair-v5','graybox-space-repair-v4','graybox-space-repair-v3','graybox-space-repair-v2'].includes(patch.version),'版本无效');fail(typeof patch.reason==='string'&&patch.reason.trim().length>=20&&patch.reason.length<=1800,'需写明可见差距与修正依据');
  fail(patch.version!=='graybox-space-repair-v2'||!patch.parts?.some(p=>Object.hasOwn(p,'shape')),'旧姿态契约不能替换轮廓');
- rows(patch.instances,12,'实例');rows(patch.templates,0,'模板');rows(patch.parts,24,'部件');rows(patch.cameras,6,'机位');rows(patch.contacts,8,'连接');rows(patch.checks,6,'检查');
+ rows(patch.instances,12,'实例');rows(patch.templates,options.templateBounds?GRAYBOX_TEMPLATE_BOUND_EDITS:0,'模板');rows(patch.parts,24,'部件');rows(patch.cameras,6,'机位');rows(patch.contacts,8,'连接');rows(patch.checks,6,'检查');
  if(![GRAYBOX_SPACE_REPAIR,'graybox-space-repair-v7','graybox-space-repair-v6'].includes(patch.version)&&[...(patch.parts??[]),...(patch.groups??[]).flatMap(g=>g.parts??[])].some(p=>p.shape?.type==='grid'))throw Error('历史灰模补丁契约不支持粗曲面grid');
  if(patch.version!==GRAYBOX_SPACE_REPAIR&&[...(patch.parts??[]),...(patch.groups??[]).flatMap(g=>g.parts??[])].some(p=>p.shape?.type==='voxelVolume'))throw Error('历史灰模补丁契约不支持原生体素构造');
  const next=structuredClone(space),changed:any={instances:[],templates:[],cameras:[],contacts:[]};
@@ -67,6 +68,8 @@ export function applyGrayboxSpaceRepair(space:any,patch:any,validate:(space:any)
     fail([edit.description,edit.origin].every(v=>typeof v==='string'&&v.trim()&&v.length<=1800),'模板需保留简洁轮廓与原点依据');keys(edit.bounds,['min','max'],'bounds');
     fail(vector(edit.bounds.min)&&vector(edit.bounds.max),'模板边界坐标无效');
     fail(edit.bounds.max.every((n,k)=>{const span=n-edit.bounds.min[k],old=current.bounds.max[k]-current.bounds.min[k];return span>.001&&span/old>=.5&&span/old<=2;}),'单轮局部边界跨度须为来源的0.5至2倍');
+    // Growing only keeps every existing part, contact and opening inside the brief it was validated against.
+    if(options.templateBounds)fail(edit.bounds.min.every((n,k)=>n<=current.bounds.min[k])&&edit.bounds.max.every((n,k)=>n>=current.bounds.max[k]),'模板边界只能扩展：新bounds须包含原bounds');
    }
    if(name==='cameras')fail(vector(edit.position)&&vector(edit.target)&&Number.isFinite(edit.fov),'机位参数无效');
    if(name==='cameras'&&Object.hasOwn(edit,'orthographicHeight')){
@@ -92,6 +95,7 @@ branchCrown由系统构造枝叶，模型仅选结构参数；不手工逐叶、
 
 export async function repairGrayboxSpace(space:any,ctx:any,sourceFolder:string,feedback:any,folder:string,validate:(space:any)=>any){
  mkdirSync(folder,{recursive:true});
+ const templateBounds=templateBoundsRule(ctx.job),apply=(patch:any)=>applyGrayboxSpaceRepair(space,patch,validate,{templateBounds});
  const runtime=read(join(sourceFolder,'runtime/runtime.json')),source=read(join(sourceFolder,'render-scene.json'));
  const frameNames=runtime.referenceFrames.map(f=>f.file);
  const projection=await ensureProjectionEvidence(source,ctx.images,ctx.images.map((i:any)=>digest(readFileSync(i.path))),sourceFolder,runtime,folder,ctx.signal);
@@ -113,22 +117,22 @@ export async function repairGrayboxSpace(space:any,ctx:any,sourceFolder:string,f
    checkpoint={sourceJobId:sourceJob.id,sourceFolder:previous,sourceAuditSha256:digest(readFileSync(audit)),originalModelCompleted:false,modelCalls:0,quality:'not-assessed'};
   }
  }
- const preview=createGrayboxSpacePreview({space,sourceScene:canonical,observation:ctx.observation,images:ctx.images,folder:join(folder,'preview'),signal:ctx.signal,voxel:ctx.job.sceneKind==='voxel',schema:grayboxSpaceRepairSchema({voxel:ctx.job.sceneKind==='voxel',voxelLattice:space.voxelLattice}),
-  apply:patch=>applyGrayboxSpaceRepair(space,patch,validate),
+ const preview=createGrayboxSpacePreview({space,sourceScene:canonical,observation:ctx.observation,images:ctx.images,folder:join(folder,'preview'),signal:ctx.signal,voxel:ctx.job.sceneKind==='voxel',templateBounds,schema:grayboxSpaceRepairSchema({voxel:ctx.job.sceneKind==='voxel',voxelLattice:space.voxelLattice,templateBounds}),
+  apply,
   buildScene});
  const saved=checkpoint?preview.onlyReviewedCheckpoint():null;
  if(checkpoint&&!saved)throw Error('GRAYBOX_CHECKPOINT_REJECTED：需要唯一已核验的实拍候选；多个或未完成候选不能自动选择');
  if(saved){save(join(folder,'timeout-checkpoint-recovery.json'),{...checkpoint,preview:saved.preview,scope:saved.scope});event(ctx.job,'graybox-checkpoint-reused','模型最终选择超时；唯一合法实拍候选已核验，复用检查点继续独立空间评分，不重新制作或标记模型完成');}
- const result=saved?{value:saved.patch,receipt:{kind:'verified-graybox-timeout-checkpoint',...checkpoint}}:await callValidated({role:'scene-space',modelSettings:ctx.job.modelSettings,signal:ctx.signal,maxTokens:6500,schemaContext:{grayboxRepair:true,voxel:ctx.job.sceneKind==='voxel',voxelLattice:space.voxelLattice},
+ const result=saved?{value:saved.patch,receipt:{kind:'verified-graybox-timeout-checkpoint',...checkpoint}}:await callValidated({role:'scene-space',modelSettings:ctx.job.modelSettings,signal:ctx.signal,maxTokens:6500,schemaContext:{grayboxRepair:true,voxel:ctx.job.sceneKind==='voxel',voxelLattice:space.voxelLattice,...(templateBounds?{templateBounds}:{})},
   tools:preview.kit,
   images:[...ctx.images,...frameNames.map(f=>({path:join(sourceFolder,'runtime',f),mime:'image/png'})),...rejected.images,...evidence.images],
-  system:GRAYBOX_REPAIR_PROMPT+(ctx.job.sceneKind==='voxel'?'\n'+voxelGeometryGuidance(space.voxelLattice):'')+'\n'+COMPACT_BLOCKOUT_RULES+'\n'+VISIBILITY_PROMPT+'\n'+preview.kit.instructions+'\n若输入有rejectedCandidates，额外图片在来源Engine画面之后、编号图之前，按rejectedEngineFrames排列。它们是已独立失败的改动和实拍，不是来源或新参考目标；比较其具体退步与当前较好来源，避免重复那些几何。只在当前来源上修正，不能累积失败候选或采信它的成功宣称。完全相同的失败几何和机位将在测量/渲染前拒绝。',
+  system:GRAYBOX_REPAIR_PROMPT+(templateBounds?'\n'+GRAYBOX_TEMPLATE_BOUNDS_PROMPT:'')+(ctx.job.sceneKind==='voxel'?'\n'+voxelGeometryGuidance(space.voxelLattice):'')+'\n'+COMPACT_BLOCKOUT_RULES+'\n'+VISIBILITY_PROMPT+'\n'+preview.kit.instructions+'\n若输入有rejectedCandidates，额外图片在来源Engine画面之后、编号图之前，按rejectedEngineFrames排列。它们是已独立失败的改动和实拍，不是来源或新参考目标；比较其具体退步与当前较好来源，避免重复那些几何。只在当前来源上修正，不能累积失败候选或采信它的成功宣称。完全相同的失败几何和机位将在测量/渲染前拒绝。',
   text:JSON.stringify({input:ctx.job.prompt,plan:ctx.plan,previousSpace:space,sharedInterfaces:blockoutSharedInterfaces(space),actualGraybox:source.program,observation:ctx.observation,referenceComposition:composition,feedback,rejectedCandidates:rejected.context,visibility:evidence.context,
    diagnosedStrategy:ctx.job.spatialDiagnosis?.reason??null,imageOrder:{references:ctx.images.length,engineFrames:runtime.referenceFrames,rejectedEngineFrames:rejected.attempts.flatMap(a=>a.frames.map(f=>({jobId:a.jobId,round:a.round,file:f.file,referenceIndex:f.referenceIndex,sha256:f.sha256}))),diagnosticMaps:evidence.context.diagnosticImages},
-   source:{spaceSha256:digest(JSON.stringify(space)),renderSceneSha256:digest(readFileSync(join(sourceFolder,'render-scene.json'))),runtimeDigest:runtime.distManifestDigest}})},folder,patch=>{applyGrayboxSpaceRepair(space,patch,validate);preview.assertReviewed(patch);return patch;});
- const applied=applyGrayboxSpaceRepair(space,result.value,validate),local=applyGrayboxLocalParts(canonical,applied.value,result.value.parts,result.value.groups??[]),scene=buildScene(applied.value,result.value);
+   source:{spaceSha256:digest(JSON.stringify(space)),renderSceneSha256:digest(readFileSync(join(sourceFolder,'render-scene.json'))),runtimeDigest:runtime.distManifestDigest}})},folder,patch=>{apply(patch);preview.assertReviewed(patch);return patch;});
+ const applied=apply(result.value),local=applyGrayboxLocalParts(canonical,applied.value,result.value.parts,result.value.groups??[]),scene=buildScene(applied.value,result.value);
  if(!Object.values(applied.changes).some((r:any)=>r.length)&&!local.changed.length)throw Error('NO_ACTIONABLE_CHANGE：部件姿态也没有实际修改');
  applied.changes.parts=local.changed;save(join(folder,'patch.json'),result.value);save(join(folder,'applied-space.json'),applied.value);save(join(folder,'reviewed-scene.json'),scene);
- save(join(folder,'repair-receipt.json'),{contract:GRAYBOX_SPACE_REPAIR,...applied,value:undefined,sourceFolder,sourceEngineFrames:evidence.context.diagnosticImages,preview:preview.assertReviewed(result.value),modelReceipt:result.receipt});
+ save(join(folder,'repair-receipt.json'),{contract:GRAYBOX_SPACE_REPAIR,...(templateBounds?{policy:GRAYBOX_REPAIR_POLICY}:{}),...applied,value:undefined,sourceFolder,sourceEngineFrames:evidence.context.diagnosticImages,preview:preview.assertReviewed(result.value),modelReceipt:result.receipt});
  return {value:applied.value,scene,folder,receipt:result.receipt,changes:applied.changes};
 }

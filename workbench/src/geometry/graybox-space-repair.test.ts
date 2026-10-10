@@ -49,3 +49,17 @@ test('同scene-space角色仅补丁请求采用紧凑schema，初始规划保持
  const schema=grayboxSpaceRepairSchema();expect(schema.properties.version.enum).toEqual([GRAYBOX_SPACE_REPAIR]);expect(schema.properties.instances.items.properties.requirementIds).toBeUndefined();
  expect(modelSchema('scene-space',{grayboxRepair:true})).toEqual(schema);expect(modelSchema('scene-space').properties.version.enum).toEqual(['scene-space-v1']);
 });
+test('template-bounds-v1 仅对策略任务开放：最多2模板、只扩展、每轴不超过2倍；其余仍冻结',()=>{
+ const grow={id:'tree',description:'连续立面延伸到檐口',origin:'根部',bounds:{min:[-1,-1,0],max:[1,1.5,5]}},on={templateBounds:true};
+ const next=applyGrayboxSpaceRepair(space(),{...patch(),templates:[grow]},v=>v,on);
+ expect(next.value.program.templates[0].bounds).toEqual(grow.bounds);expect(next.changes.templates).toEqual(['tree']);
+ expect(next.value.program.templates[0].maxParts).toBe(32);
+ expect(()=>applyGrayboxSpaceRepair(space(),{...patch(),templates:[grow]},v=>v)).toThrow('额度');
+ expect(()=>applyGrayboxSpaceRepair(space(),{...patch(),templates:[{...grow,bounds:{min:[-1,-1,.5],max:[1,1,3.2]}}]},v=>v,on)).toThrow('只能扩展');
+ expect(()=>applyGrayboxSpaceRepair(space(),{...patch(),templates:[{...grow,bounds:{min:[-1,-1,0],max:[1,1,6.5]}}]},v=>v,on)).toThrow('2倍');
+ expect(()=>applyGrayboxSpaceRepair(space(),{...patch(),templates:[{...grow,id:'new'}]},v=>v,on)).toThrow('只能修改已有');
+ expect(()=>applyGrayboxSpaceRepair(space(),{...patch(),templates:[grow,grow,grow]},v=>v,on)).toThrow('额度');
+ expect(grayboxSpaceRepairSchema().properties.templates.maxItems).toBe(0);
+ expect(grayboxSpaceRepairSchema(on).properties.templates.maxItems).toBe(2);
+ expect(modelSchema('scene-space',{grayboxRepair:true,templateBounds:true})).toEqual(grayboxSpaceRepairSchema(on));
+});

@@ -38,6 +38,7 @@ import {prepareAssetEvidence} from './asset-evidence';
 import {repairReusableTextureEvidence} from './repair-texture-evidence';
 import {assetCache,assetKey} from './asset-cache';
 import {observedBindingRule,validateCriticalViewExclusive,OBSERVED_BINDING_GUIDANCE} from './observed-binding-scope';
+import {templateBoundsRule} from './graybox-repair-policy';
 export type GenerationContext={job:any;plan:any;images:{path:string;mime:string}[];dir:string;signal:AbortSignal;referencePixelSizes?:ReturnType<typeof referencePixelSizes>;textureSourceEvidence?:any[];readyAt?:number;requiresAssetPreview?:boolean;assetSceneContext?:AssetSceneContext;acceptedScene?:any;spatialRepairSeed?:any;reusableAsset?:any;onProgress?:(phase:string)=>void;stage?:(name:string,work:()=>Promise<any>)=>Promise<any>;observation?:any;acceptSpace?:(space:any)=>Promise<any>;preserveSpaceDraft?:(snapshot:any,error:unknown)=>Promise<any>;revision?:{previousAsset:any;feedback:string;frames:{path:string;mime:string;name:string}[]}};
 export async function generateLayout(ctx:GenerationContext){
  const {job,plan,images,dir,signal}=ctx;mkdirSync(dir,{recursive:true});
@@ -55,7 +56,7 @@ export async function generateLayout(ctx:GenerationContext){
    return bindingScope(bindObservedSpace(validateSpace(v,plan,images.length,job.complexity,{strictVoxel}),ctx.observation));
   };
   const construction=PROVIDER==='codex-cli'?createSpaceConstruction({folder:join(dir,'space-construction'),jobId:job.id,rootJobId:job.executionRecoveryRoot??job.id,
-   inputKey:digest(stable({prompt:job.prompt,plan,images:images.map(i=>({sha256:digest(readFileSync(i.path)),mime:i.mime})),observation:ctx.observation,complexity:job.complexity,generationBrief:job.generationBrief,modelSettings:job.modelSettings,policy:job.policy,optimizationPolicy:job.optimizationPolicy,profile:job.profile,...(strictVoxel?{voxelConstructionVersion:job.voxelConstructionVersion}:{}),...(observedBindingRule(job)?{observedBindingPolicy:job.observedBindingPolicy}:{})})),
+   inputKey:digest(stable({prompt:job.prompt,plan,images:images.map(i=>({sha256:digest(readFileSync(i.path)),mime:i.mime})),observation:ctx.observation,complexity:job.complexity,generationBrief:job.generationBrief,modelSettings:job.modelSettings,policy:job.policy,optimizationPolicy:job.optimizationPolicy,profile:job.profile,...(strictVoxel?{voxelConstructionVersion:job.voxelConstructionVersion}:{}),...(observedBindingRule(job)?{observedBindingPolicy:job.observedBindingPolicy}:{}),...(templateBoundsRule(job)?{grayboxRepairPolicy:job.grayboxRepairPolicy}:{})})),
    requirementIds:plan.requirements.map((r:any)=>r.id),signal,strictVoxel,observation:ctx.observation,validate:validateNewSpace}):null;
   return withInitialSpaceDraft(()=>callValidated({modelSettings:job.modelSettings,role:'scene-space',signal,maxTokens:9000,images,tools:construction?.kit,
    system:(construction?spaceConstructionPrompt(construction.kit.instructions,construction.kit.version):SPACE_PROMPT)+'\n'+matchingGuidance(job)+(job.sceneKind==='voxel'?'\n'+(strictVoxel?VOXEL_STRICT_SPACE_GUIDANCE:VOXEL_SPACE_GUIDANCE):'')+(observedBindingRule(job)?'\n'+OBSERVED_BINDING_GUIDANCE:''),
