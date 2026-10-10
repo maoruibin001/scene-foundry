@@ -35,3 +35,12 @@ test('non-critical rows contribute to camera means but never to per-row critical
  const r=jointFitCheck({rows:[row('a',1,.09,-.01),row('b',1,.09,-.01),row('far',2,.1,0),row('c',2,.1,0),row('bg',2,.15,.05,{critical:false})]},source);
  expect(r.violations.map((v:any)=>v.kind)).toEqual(['camera-mean-regression']);
 });
+test('v4 exclusive subsets count as measured coverage; a critical measured-identity change is never selectable',()=>{
+ const subset=(id:string,i:number,e:number,d:number|null,extra:any={})=>row(id,i,e,d,{comparisonScope:'exclusive-instance-subset',measuredInstanceIds:[id],...extra});
+ const src={rows:[subset('a',1,.1,null),subset('b',1,.1,null)]};
+ const ok=jointFitCheck({rows:[subset('a',1,.09,-.01),subset('b',1,.1,0)]},src);
+ expect(ok.passed).toBe(true);expect(ok.cameras[0].criticalCoverage).toEqual({source:{measured:2,unverified:0},candidate:{measured:2,unverified:0}});
+ const changed=jointFitCheck({rows:[subset('a',1,.05,null,{sourceDelta:{edgeResidual:null,wasVisible:true,isVisible:true,visibilityLost:false,identityChanged:true}}),subset('b',1,.1,0)]},src);
+ expect(changed.violations).toEqual([{kind:'critical-target-identity-changed',landmarkId:'a',referenceIndex:1}]);expect(()=>assertJointFit(changed)).toThrow('GRAYBOX_JOINT_FIT_REGRESSION');
+ expect(jointFitCheck({rows:[subset('a',1,.05,null,{critical:false,sourceDelta:{edgeResidual:null,identityChanged:true}}),subset('b',1,.1,0)]},src).violations.map((v:any)=>v.kind)).not.toContain('critical-target-identity-changed');
+});

@@ -11,6 +11,7 @@ import {modelTimeoutPolicy} from '../model-selection';
 import {callCodex} from '../codex-provider';
 import {applyGrayboxLocalParts} from './graybox-local-parts';
 import {compileGeometryProgram} from './program';
+import {COMPOSITION_SUBSET_PROMPT,NEXT_REFERENCE_COMPOSITION,REFERENCE_COMPOSITION} from './reference-composition';
 
 function fixture(){
  const folder=mkdtempSync(join(tmpdir(),'graybox-preview-')),controller=new AbortController();
@@ -339,7 +340,7 @@ test('v13实际预览若使参考机位退步则不可最终选择；改善候�
  const setup=(f:any)=>{f.options.space.cameras[0].referenceIndex=1;f.options.sourceScene.cameras[0].referenceIndex=1;f.options.sourceScene.observedBindings=[{landmarkId:'L1',instanceIds:['front']}];
   f.options.observation={landmarks:[{id:'L1',label:'近景',critical:true,views:[{referenceIndex:1,box:[.25,.25,.75,.75],extent:'occluded',evidence:'原图遮挡但仍有可见边缘'}]}],cameras:[{referenceIndex:1,contentRect:[0,0,1,1]}]};};
  const f=fixture();try{setup(f);
-  const options={...f.options,contractVersion:GRAYBOX_SPACE_PREVIEW},t=createGrayboxSpacePreview(options),worse=f.patch(1.5),better=f.patch(.5);
+  const options={...f.options,contractVersion:'graybox-space-preview-v13'},t=createGrayboxSpacePreview(options),worse=f.patch(1.5),better=f.patch(.5);
   expect(t.kit.instructions).toContain('跨机位联合门槛');
   const measured=JSON.parse((await t.kit.call('measure_graybox_space',worse)).content[0].text);
   expect(measured.jointFit.passed).toBe(false);expect(measured.jointFit.violations.map((v:any)=>v.kind)).toContain('camera-mean-regression');
@@ -357,5 +358,19 @@ test('v13实际预览若使参考机位退步则不可最终选择；改善候�
   const legacy={...f.options,folder:join(f.folder,'v12'),contractVersion:'graybox-space-preview-v12'},old=createGrayboxSpacePreview(legacy);
   const oldShown=JSON.parse((await old.kit.call('preview_graybox_space',worse)).content[0].text);
   expect(oldShown.jointFit).toBeUndefined();expect(()=>old.assertReviewed(worse)).not.toThrow();expect(old.kit.instructions).not.toContain('跨机位联合门槛');
+ }finally{f.close();}
+});
+test('v14使用v4独有子集构图并告知子集语义；v13保留v3构图',async()=>{
+ const f=fixture();try{
+  f.options.space.cameras[0].referenceIndex=1;f.options.sourceScene.cameras[0].referenceIndex=1;f.options.sourceScene.observedBindings=[{landmarkId:'L1',instanceIds:['front']}];
+  f.options.observation={landmarks:[{id:'L1',label:'近景',critical:true,views:[{referenceIndex:1,box:[.25,.25,.75,.75],extent:'occluded',evidence:'原图遮挡但仍有可见边缘'}]}],cameras:[{referenceIndex:1,contentRect:[0,0,1,1]}]};
+  expect(GRAYBOX_SPACE_PREVIEW).toBe('graybox-space-preview-v14');
+  const next=createGrayboxSpacePreview({...f.options,contractVersion:GRAYBOX_SPACE_PREVIEW});
+  expect(next.kit.instructions).toContain(COMPOSITION_SUBSET_PROMPT);expect(next.kit.instructions).toContain('跨机位联合门槛');
+  const measured=JSON.parse((await next.kit.call('measure_graybox_space',f.patch(.5))).content[0].text);
+  expect(measured.referenceComposition.version).toBe(NEXT_REFERENCE_COMPOSITION);expect(measured.jointFit.passed).toBe(true);
+  const old=createGrayboxSpacePreview({...f.options,folder:join(f.folder,'v13'),contractVersion:'graybox-space-preview-v13'});
+  expect(old.kit.instructions).not.toContain(COMPOSITION_SUBSET_PROMPT);
+  expect(JSON.parse((await old.kit.call('measure_graybox_space',f.patch(.5))).content[0].text).referenceComposition.version).toBe(REFERENCE_COMPOSITION);
  }finally{f.close();}
 });

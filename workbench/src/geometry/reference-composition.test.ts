@@ -1,5 +1,5 @@
 import {test,expect} from 'bun:test';
-import {referenceComposition,compositionContext,LEGACY_REFERENCE_COMPOSITION,PREVIOUS_REFERENCE_COMPOSITION,REFERENCE_COMPOSITION} from './reference-composition';
+import {referenceComposition,compositionContext,LEGACY_REFERENCE_COMPOSITION,PREVIOUS_REFERENCE_COMPOSITION,REFERENCE_COMPOSITION,NEXT_REFERENCE_COMPOSITION,COMPOSITION_SUBSET_PROMPT} from './reference-composition';
 import {sceneVisibility} from './visibility';
 import {stable} from '../validated-cache';
 
@@ -104,4 +104,41 @@ test('正交构图使用真实平行投影；历史透视算法保留来源版�
  expect(current.source.visibilitySha256).not.toBe(old.source.visibilitySha256);
  expect(current.rows[0].visible).not.toEqual(old.rows[0].visible);
  expect(()=>compositionContext(current,old)).toThrow('版本');
+});
+
+const v4={version:NEXT_REFERENCE_COMPOSITION};
+const paint=(f:any,cells:[number,number,number][])=>{f.labels.fill(0);for(const [x,y,n] of cells)f.labels[y*8+x]=n;f.report.views[0].labelsBase64=Buffer.from(f.labels.buffer).toString('base64');};
+const square=(x0:number,x1:number,n:number)=>{const out:[number,number,number][]=[];for(let y=2;y<6;y++)for(let x=x0;x<x1;x++)out.push([x,y,n]);return out;};
+test('v4共用实例时只测本地标独有子集；独有子集为空仍未验证；v3输出不变',()=>{
+ const f=fixture();paint(f,[...square(2,6,1),...square(6,8,2)]);
+ f.scene.observedBindings.push({landmarkId:'group',instanceIds:['a','b']});
+ f.observation.landmarks.push({id:'group',label:'组合',critical:true,views:[{referenceIndex:1,box:[.7,.2,1,.8],extent:'partial'}]});
+ const before=stable(f),old=referenceComposition(f.scene,f.observation,f.report),report=referenceComposition(f.scene,f.observation,f.report,v4);
+ expect(old.rows.every((r:any)=>r.comparisonScope==='unverified-binding-scope'&&r.measuredInstanceIds===undefined)).toBe(true);
+ expect(report.version).toBe(NEXT_REFERENCE_COMPOSITION);expect(report.limitations).toContain(COMPOSITION_SUBSET_PROMPT);expect(old.limitations).not.toContain(COMPOSITION_SUBSET_PROMPT);
+ const [main,group]=report.rows;
+ expect(main.comparisonScope).toBe('unverified-binding-scope');expect(main.edgeResidual).toBeNull();expect(main.warnings.join()).toContain('没有本地标独有');
+ expect(group).toMatchObject({comparisonScope:'exclusive-instance-subset',instanceIds:['a','b'],measuredInstanceIds:['b'],visible:[.75,.25,1,.75],pixels:8,status:'measured-visible-extent'});
+ expect(group.warnings.join()).toContain('不是整个地标范围');expect(report.unverified).toHaveLength(1);expect(stable(f)).toBe(before);
+});
+test('v4同机位多框按实例可见重心逐框分配；不可见实例不分配',()=>{
+ const f=fixture();paint(f,[...square(2,6,1),...square(6,8,2)]);f.scene.observedBindings[0].instanceIds=['b','a'];
+ f.observation.landmarks[0].views=[{referenceIndex:1,box:[.25,.25,.75,.75],extent:'partial'},{referenceIndex:1,box:[.75,.25,1,.75],extent:'partial'}];
+ expect(referenceComposition(f.scene,f.observation,f.report).rows.every((r:any)=>r.edgeResidual===null)).toBe(true);
+ const rows=referenceComposition(f.scene,f.observation,f.report,v4).rows;
+ expect(rows.map((r:any)=>r.measuredInstanceIds)).toEqual([['a'],['b']]);expect(rows.map((r:any)=>r.edgeResidual)).toEqual([0,0]);
+ paint(f,square(2,6,1));const hidden=referenceComposition(f.scene,f.observation,f.report,v4).rows;
+ expect(hidden[0].measuredInstanceIds).toEqual(['a']);expect(hidden[1].comparisonScope).toBe('unverified-binding-scope');
+});
+test('v4来源对照：相同测量子集给出残差变化；子集或逐框分配改变则标为身份改变而不比较',()=>{
+ const f=fixture();paint(f,[...square(2,6,1),...square(6,8,2)]);f.scene.observedBindings[0].instanceIds=['a','b'];
+ f.observation.landmarks[0].views=[{referenceIndex:1,box:[.25,.25,.75,.75],extent:'partial'},{referenceIndex:1,box:[.75,.25,1,.75],extent:'partial'}];
+ const source=referenceComposition(f.scene,f.observation,f.report,v4);
+ paint(f,[...square(3,6,1),...square(6,8,2)]);const shifted=compositionContext(referenceComposition(f.scene,f.observation,f.report,v4),source);
+ expect(shifted.rows[0].sourceDelta.edgeResidual).toBeGreaterThan(0);expect(shifted.rows[0].sourceDelta.identityChanged).toBeUndefined();expect(shifted.rows[1].sourceDelta.edgeResidual).toBe(0);
+ // b moves into the first box: both boxes change their measured identity.
+ paint(f,[...square(2,5,1),...square(5,6,2)]);const moved=compositionContext(referenceComposition(f.scene,f.observation,f.report,v4),source);
+ expect(moved.rows[0].measuredInstanceIds).toEqual(['a','b']);expect(moved.rows[1].comparisonScope).toBe('unverified-binding-scope');
+ for(const row of moved.rows)expect(row.sourceDelta).toMatchObject({edgeResidual:null,identityChanged:true,visibilityLost:false});
+ expect(()=>compositionContext(moved,referenceComposition(f.scene,f.observation,f.report))).toThrow('版本');
 });

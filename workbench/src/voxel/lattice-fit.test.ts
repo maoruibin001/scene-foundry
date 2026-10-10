@@ -108,3 +108,12 @@ test('来源身份、轴数、步长和有限工作量入口校验',()=>{
   (f:any)=>f.maxEvaluations=25,(f:any)=>f.maxEvaluations=0,(f:any)=>f.basePatch.instances=[pose('unrelated')],
  ]){const f=fixture();change(f);expect(()=>fitVoxelLattice(f)).toThrow('体素整数布局拟合');}
 });
+test('v4独有子集目标按实际测量实例计算；子集改变或超出完整绑定不能制造改善',()=>{
+ const subset=(offset:number,measured=['bridge'],all=['bridge','water'])=>({...row('bridge-target','bridge',offset),comparisonScope:'exclusive-instance-subset',instanceIds:all,measuredInstanceIds:measured});
+ const f=fixture();f.measure=patch=>report([subset(.03+(patch.instances.find(i=>i.id==='bridge')?.position[0]??0))]);
+ const ok=fitVoxelLattice(f);expect(ok.report.improved).toBe(true);expect(ok.report.integerOffsets.bridge).toEqual([-2,0,0]);
+ for(const corrupt of [()=>subset(0,['water']),()=>subset(0,['bridge'],['water','wall'])]){
+  const g=fixture();let calls=0;g.measure=()=>report([calls++===0?subset(.05):corrupt()]);
+  const result=fitVoxelLattice(g);expect(result.report.improved).toBe(false);expect(result.patch).toEqual(g.basePatch);
+ }
+});

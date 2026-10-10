@@ -25,9 +25,11 @@ const fail=(ok:any,message:string)=>{if(!ok)throw Error('体素整数布局拟�
 const stable=(value:any):string=>JSON.stringify(value,(_key,v)=>v&&typeof v==='object'&&!Array.isArray(v)?Object.fromEntries(Object.keys(v).sort().map(k=>[k,v[k]])):v);
 const hash=(value:any)=>createHash('sha256').update(stable(value)).digest('hex');
 const rectangle=(r:any)=>vector(r,4)&&r.every((n:number)=>n>=0&&n<=1)&&r[0]<r[2]&&r[1]<r[3];
-const ids=(row:any)=>Array.isArray(row?.instanceIds)&&row.instanceIds.length>0&&row.instanceIds.every((id:any)=>typeof id==='string'&&id.length)&&new Set(row.instanceIds).size===row.instanceIds.length?row.instanceIds.toSorted():null;
+const list=(v:any)=>Array.isArray(v)&&v.length>0&&v.every((id:any)=>typeof id==='string'&&id.length)&&new Set(v).size===v.length?v.toSorted():null;
+// v4 subset rows key on the instances actually measured; the full binding must contain them.
+const ids=(row:any)=>{const all=list(row?.instanceIds);if(row?.comparisonScope!=='exclusive-instance-subset')return all;const part=list(row.measuredInstanceIds);return all&&part&&part.every((id:string)=>all.includes(id))?part:null;};
 function target(row:any):Target|null{
- if(row?.status!=='measured-visible-extent'||row.comparisonScope!=='bound-instance-union'||typeof row.targetId!=='string'||!row.targetId.length)return null;
+ if(row?.status!=='measured-visible-extent'||!['bound-instance-union','exclusive-instance-subset'].includes(row.comparisonScope)||typeof row.targetId!=='string'||!row.targetId.length)return null;
  const bindings=ids(row);
  if(!bindings||!rectangle(row.expected)||!rectangle(row.visible)||!finite(row.edgeResidual)||row.edgeResidual<0||!vector(row.centreDelta,2)||!vector(row.spanRatio,2)||row.spanRatio.some((n:number)=>n<=0)||!finite(row.pixels)||row.pixels<8)return null;
  const delta=row.visible.map((n:number,k:number)=>n-row.expected[k]);
