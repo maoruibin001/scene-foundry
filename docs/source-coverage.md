@@ -13,7 +13,9 @@ The newly synchronized areas include:
 - Source-pinned PBR material catalogs and provisioning, emission and reflection support, procedural structures, contact and composition checks, asset inspection cameras, and bounded graybox feedback.
 - Provider hard-stop precedence, continuation provenance, storage/runtime preflight, production and sidebar timing, preview lifecycle, and explicit validation-round boundaries with append-only execution audits.
 
-See [the current synchronization validation record](local-source-sync-2026-10-08.md) for checks on this source and [the previous record](local-source-sync-2026-09-29.md) for the earlier baseline. These checks do not certify a model-backed generation run or visual quality.
+The 2026-10-10 synchronization adds the release candidate `v1-rc.227` validation boundary in state and the create form, recorded graybox contact input with sealed spatial-assessment evidence, and the matching delivery and package checks.
+
+See [the current synchronization validation record](local-source-sync-2026-10-10.md) for checks on this source and [the 2026-10-08 record](local-source-sync-2026-10-08.md) and [the 2026-09-29 record](local-source-sync-2026-09-29.md) for the earlier baselines. These checks do not certify a model-backed generation run or visual quality.
 
 The public repository deliberately differs from the local working copy in these places:
 
