@@ -22,6 +22,7 @@ import {spatialInstances} from './spatial-order';
 import {grayboxPartEditSchema,applyGrayboxLocalParts,buildGrayboxPartScene} from './graybox-local-parts';
 import {referenceComposition,PART_REFERENCE_COMPOSITION} from './reference-composition';
 import {observedBindingRule} from './observed-binding-scope';
+import {jointFitRule} from './graybox-joint-fit';
 import {templateBoundsRule,GRAYBOX_REPAIR_POLICY,GRAYBOX_TEMPLATE_BOUND_EDITS,GRAYBOX_TEMPLATE_BOUNDS_PROMPT} from './graybox-repair-policy';
 
 export const GRAYBOX_SPACE_REPAIR='graybox-space-repair-v8';
@@ -93,6 +94,13 @@ export const GRAYBOX_REPAIR_PROMPT=CROWN_RULES+`
 sharedInterfaces按previousSpace中的来源实例位姿，为各模板全部连接实例推导spatialContacts/localPoints。它用于定位来源几何的接缝和承托，不代表接口已贴合；改变任何连接双方的实例位姿或contacts.points后须按新位姿重新核对两方局部接口，不能盲沿用来源localPoints或靠孤立补片补洞。此输入不自动新增或重生成模板，仍只允许本契约的已有部件或有限groups补丁。
 branchCrown由系统构造枝叶，模型仅选结构参数；不手工逐叶、材质或细节规划。按本次独立评审指出的真实失败关系同时看连接、空隙和轮廓，不以外接框改善替代实拍判断。reason说明原图差距、实际网格的定位依据和改动；checks引用原关系id，描述实拍证据与下一轮可见预期。不能声称尚未渲染的补丁已经通过。`;
 
+/** Evidence that a repair round produced only cross-camera regressions; feeds the next round without becoming its basis. */
+export function jointFitBlockedRound(folder:string,round:number,error:unknown){
+ const file=join(folder,'preview/graybox-preview-audit.json'),audit=existsSync(file)?read(file):{attempts:[]};
+ const candidates=audit.attempts.filter((r:any)=>r.status==='rendered').map((r:any)=>{const c=join(folder,'preview',String(r.index),'reference-composition.json');return {patchSha256:r.patchSha256,changes:r.changes,rows:existsSync(c)?read(c).rows.filter((x:any)=>x.critical&&x.sourceDelta?.edgeResidual>.01).map((x:any)=>({landmarkId:x.landmarkId,referenceIndex:x.referenceIndex,edgeResidualDelta:x.sourceDelta.edgeResidual})):[]};});
+ const blocked={round,folder,error:String(error).slice(0,1200),candidates,scope:'本轮候选均因跨机位退步不能采用；不是下一轮来源，避免重复相同退步'};
+ save(join(folder,'joint-fit-blocked.json'),blocked);return blocked;
+}
 export async function repairGrayboxSpace(space:any,ctx:any,sourceFolder:string,feedback:any,folder:string,validate:(space:any)=>any){
  mkdirSync(folder,{recursive:true});
  const templateBounds=templateBoundsRule(ctx.job),apply=(patch:any)=>applyGrayboxSpaceRepair(space,patch,validate,{templateBounds});
@@ -117,7 +125,7 @@ export async function repairGrayboxSpace(space:any,ctx:any,sourceFolder:string,f
    checkpoint={sourceJobId:sourceJob.id,sourceFolder:previous,sourceAuditSha256:digest(readFileSync(audit)),originalModelCompleted:false,modelCalls:0,quality:'not-assessed'};
   }
  }
- const preview=createGrayboxSpacePreview({space,sourceScene:canonical,observation:ctx.observation,images:ctx.images,folder:join(folder,'preview'),signal:ctx.signal,voxel:ctx.job.sceneKind==='voxel',templateBounds,schema:grayboxSpaceRepairSchema({voxel:ctx.job.sceneKind==='voxel',voxelLattice:space.voxelLattice,templateBounds}),
+ const preview=createGrayboxSpacePreview({space,sourceScene:canonical,observation:ctx.observation,images:ctx.images,folder:join(folder,'preview'),signal:ctx.signal,voxel:ctx.job.sceneKind==='voxel',templateBounds,jointFitNet:jointFitRule(ctx.job),schema:grayboxSpaceRepairSchema({voxel:ctx.job.sceneKind==='voxel',voxelLattice:space.voxelLattice,templateBounds}),
   apply,
   buildScene});
  const saved=checkpoint?preview.onlyReviewedCheckpoint():null;

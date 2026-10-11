@@ -1,5 +1,10 @@
 import {test,expect} from 'bun:test';
-import {jointFitCheck,assertJointFit,JOINT_FIT} from './graybox-joint-fit';
+import {mkdtempSync,mkdirSync,rmSync} from 'node:fs';
+import {join} from 'node:path';
+import {tmpdir} from 'node:os';
+import {read,save} from '../store';
+import {jointFitBlockedRound} from './graybox-space-repair';
+import {jointFitCheck,assertJointFit,JOINT_FIT,JOINT_FIT_NET,jointFitRule} from './graybox-joint-fit';
 
 const row=(landmarkId:string,referenceIndex:number,edgeResidual:number|null,delta:number|null,extra:any={})=>({landmarkId,referenceIndex,critical:true,comparisonScope:'bound-instance-union',edgeResidual,
  sourceDelta:delta===null?null:{edgeResidual:delta,wasVisible:true,isVisible:true,visibilityLost:false},...extra});
@@ -43,4 +48,28 @@ test('v4 exclusive subsets count as measured coverage; a critical measured-ident
  const changed=jointFitCheck({rows:[subset('a',1,.05,null,{sourceDelta:{edgeResidual:null,wasVisible:true,isVisible:true,visibilityLost:false,identityChanged:true}}),subset('b',1,.1,0)]},src);
  expect(changed.violations).toEqual([{kind:'critical-target-identity-changed',landmarkId:'a',referenceIndex:1}]);expect(()=>assertJointFit(changed)).toThrow('GRAYBOX_JOINT_FIT_REGRESSION');
  expect(jointFitCheck({rows:[subset('a',1,.05,null,{critical:false,sourceDelta:{edgeResidual:null,identityChanged:true}}),subset('b',1,.1,0)]},src).violations.map((v:any)=>v.kind)).not.toContain('critical-target-identity-changed');
+});
+test('joint-fit-net-v1 只在策略任务容忍同机位净改善下的单个有界关键退步（dc1c3f48 r2形态）',()=>{
+ const shape={rows:[row('a',1,.09,-.01),row('b',1,.1,0),row('far',2,.12505,.02505),row('c',2,.05,-.05)]};
+ const strict=jointFitCheck(shape,source);expect(strict.passed).toBe(false);expect(strict.tolerated).toBeUndefined();
+ const net=jointFitCheck(shape,source,{net:true});expect(net.version).toBe(JOINT_FIT_NET);expect(net.passed).toBe(true);expect(net.violations).toEqual([]);
+ expect(net.tolerated).toEqual([{kind:'critical-row-regression',landmarkId:'far',referenceIndex:2,edgeResidualDelta:.02505,limit:.01}]);
+ // Beyond the cap, a second regressing row, or a camera without net gain stays blocking.
+ expect(jointFitCheck({rows:[row('a',1,.09,-.01),row('b',1,.1,0),row('far',2,.135,.035),row('c',2,.04,-.06)]},source,{net:true}).passed).toBe(false);
+ expect(jointFitCheck({rows:[row('a',1,.09,-.01),row('b',1,.1,0),row('far',2,.12,.02),row('c',2,.12,.02),row('d',2,.0,-.1)]},source,{net:true}).passed).toBe(false);
+ const noGain=jointFitCheck({rows:[row('a',1,.09,-.01),row('b',1,.1,0),row('far',2,.12,.02),row('c',2,.075,-.025)]},source,{net:true});
+ expect(noGain.passed).toBe(false);expect(noGain.tolerated).toEqual([]);
+ // Other violation kinds are never tolerated.
+ expect(jointFitCheck({rows:[row('a',1,.09,-.01),unverified('b',1),row('far',2,.12,.02),row('c',2,.04,-.06)]},source,{net:true}).violations.map((v:any)=>v.kind)).toEqual(['critical-coverage-reduced']);
+ expect(jointFitRule({jointFitPolicy:JOINT_FIT_NET})).toBe(true);expect(jointFitRule({})).toBe(false);expect(jointFitRule({jointFitPolicy:null})).toBe(false);
+});
+test('跨机位阻断轮只保存拒绝证据，列出越限关键目标，不成为下一轮来源',()=>{
+ const dir=mkdtempSync(join(tmpdir(),'jf-blocked-'));try{
+  mkdirSync(join(dir,'preview/1'),{recursive:true});
+  save(join(dir,'preview/graybox-preview-audit.json'),{attempts:[{index:1,status:'rendered',patchSha256:'a'.repeat(64),changes:{parts:['p']}},{index:2,status:'failed',patchSha256:'b'.repeat(64)}]});
+  save(join(dir,'preview/1/reference-composition.json'),{rows:[row('far',2,.13,.03),row('c',2,.05,-.05),row('bg',2,.2,.1,{critical:false})]});
+  const v=jointFitBlockedRound(dir,2,Error('GRAYBOX_JOINT_FIT_REGRESSION：x'));
+  expect(v.candidates).toEqual([{patchSha256:'a'.repeat(64),changes:{parts:['p']},rows:[{landmarkId:'far',referenceIndex:2,edgeResidualDelta:.03}]}]);
+  expect(read(join(dir,'joint-fit-blocked.json'))).toEqual(v);expect(v.scope).toContain('不是下一轮来源');
+ }finally{rmSync(dir,{recursive:true,force:true});}
 });

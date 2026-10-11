@@ -2,7 +2,8 @@ import {voxelGeometryGuidance} from '../voxel/construction-guidance';
 import {selectSpatialCandidate,spatialCandidateProof,spatialSelectionRule,type SpatialCandidate} from './blockout-selection';
 import {referenceComposition,PART_REFERENCE_COMPOSITION} from './reference-composition';
 import {observedBindingRule} from './observed-binding-scope';
-import {repairGrayboxSpace} from './graybox-space-repair';
+import {repairGrayboxSpace,jointFitBlockedRound} from './graybox-space-repair';
+import {jointFitRule,JOINT_FIT_NET} from './graybox-joint-fit';
 import {persistReviewedGrayboxGeometry} from './graybox-reviewed-geometry';
 import {compactBlockoutSchema,COMPACT_BLOCKOUT_RULES,blockoutSharedInterfaces} from './blockout-contract';
 import {bindReferenceFrames} from './reference-framing';
@@ -48,6 +49,19 @@ export async function acceptSpatialLayout(initial:any,ctx:any,command:any,stage:
   sealSpatialAssessment(job,join(ctx.dir,'..'),'generation/blockout/'+round);preserveOutput(job,join(ctx.dir,'..'),'generation/blockout/'+round,'graybox');saveDelivery(job,join(ctx.dir,'..'));
   if(value.passed){job.blockout.space=space;saveJob(job);save(join(ctx.dir,'space.json'),space);return space;}
   feedback=best.gate.review;if(ctx.existingScene)throw Error('SPATIAL_GATE_FAILED：恢复候选空间未通过，保留证据；请先调整空间规划，不继续细化资产');const decision=qualityDecision(improvement.get(job.improvementId));if(decision.action==='diagnose'){job.blockout.status='stopped';job.blockout.stopReason=decision;saveJob(job);throw Error('SPATIAL_GATE_FAILED：'+decision.reason+'；转入原因分析与优化方案，详细资产尚未放行');}
-  improvement.reserveRepair(job.improvementId,'graybox',feedback.summary);job.blockout.status='repairing';job.blockout.currentRound=round+1;event(job,'spatial-repair','灰模未通过，先依据实际画面修正空间规划；资产尚未开始');round++;const repairDir=join(ctx.dir,'space-repair-'+round);mkdirSync(repairDir,{recursive:true});const next=await stage('space',()=>repairGrayboxSpace(best.space,ctx,best.folder,feedback,repairDir,validateRepair));space=next.value;reviewedFolder=next.folder;
+  let next:any=null;
+  while(!next){
+   improvement.reserveRepair(job.improvementId,'graybox',feedback.summary);job.blockout.status='repairing';job.blockout.currentRound=round+1;event(job,'spatial-repair','灰模未通过，先依据实际画面修正空间规划；资产尚未开始');round++;const repairDir=join(ctx.dir,'space-repair-'+round);mkdirSync(repairDir,{recursive:true});
+   try{next=await stage('space',()=>repairGrayboxSpace(best.space,ctx,best.folder,feedback,repairDir,validateRepair));}
+   catch(error){
+    // Under the policy a round whose every real preview regresses another camera is a non-gain round, not a failed job.
+    if(!jointFitRule(job)||signal.aborted||!String(error).includes('GRAYBOX_JOINT_FIT_REGRESSION'))throw error;
+    const blocked=jointFitBlockedRound(repairDir,round,error);(job.blockout.blockedRepairs??=[]).push(blocked);saveJob(job);event(job,'spatial-repair-blocked','本轮真实预览候选均未通过跨机位门槛；保留较好来源，记为无增益并带拒绝原因继续');
+    improvement.result(job.improvementId,{kind:'space',comparison:best.gate.protocol,jobId:job.id,round,score:best.gate.review.score*20,status:'failed',requiresDiagnosis:true,blocked:JOINT_FIT_NET});
+    feedback={...best.gate.review,jointFitBlocked:job.blockout.blockedRepairs.slice(-2)};
+    const stop=qualityDecision(improvement.get(job.improvementId));if(stop.action==='diagnose'){job.blockout.status='stopped';job.blockout.stopReason=stop;saveJob(job);throw Error('SPATIAL_GATE_FAILED：'+stop.reason+'；转入原因分析与优化方案，详细资产尚未放行');}
+   }
+  }
+  space=next.value;reviewedFolder=next.folder;
  }
 }

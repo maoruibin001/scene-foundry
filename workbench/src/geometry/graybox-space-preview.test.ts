@@ -399,3 +399,15 @@ test('template-bounds-v1 仅在当前契约开放扩展模板bounds，部件可�
   const old=createGrayboxSpacePreview({...options,folder:join(f.folder,'v4'),contractVersion:'graybox-space-preview-v4'});await expect(old.kit.call('preview_graybox_space',{patchJson:JSON.stringify(p)})).rejects.toThrow('templates必须为空');
  }finally{f.close();}
 });
+
+test('joint-fit-net-v1 只在当前契约与策略任务开放；审计契约区分，旧审计不能换成净门槛恢复',async()=>{
+ const f=fixture();try{
+  const options={...f.options,contractVersion:GRAYBOX_SPACE_PREVIEW,jointFitNet:true};
+  const t=createGrayboxSpacePreview(options);expect(t.kit.instructions).toContain('joint-fit-net-v1');
+  const r=JSON.parse((await t.kit.call('measure_graybox_space',f.patch())).content[0].text);expect(r.jointFit.version).toBe('joint-fit-net-v1');expect(r.jointFit.tolerated).toEqual([]);
+  expect(()=>createGrayboxSpacePreview({...options,jointFitNet:false})).toThrow('契约');
+  const plain=createGrayboxSpacePreview({...f.options,folder:join(f.folder,'plain'),contractVersion:GRAYBOX_SPACE_PREVIEW});expect(plain.kit.instructions).not.toContain('joint-fit-net-v1');
+  expect(JSON.parse((await plain.kit.call('measure_graybox_space',f.patch())).content[0].text).jointFit.version).toBe('joint-fit-v1');
+  const old=createGrayboxSpacePreview({...f.options,folder:join(f.folder,'v14'),contractVersion:'graybox-space-preview-v14',jointFitNet:true});expect(old.kit.instructions).not.toContain('joint-fit-net-v1');
+ }finally{f.close();}
+});
