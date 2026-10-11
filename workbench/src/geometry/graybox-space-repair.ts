@@ -23,6 +23,7 @@ import {grayboxPartEditSchema,applyGrayboxLocalParts,buildGrayboxPartScene} from
 import {referenceComposition,PART_REFERENCE_COMPOSITION} from './reference-composition';
 import {observedBindingRule} from './observed-binding-scope';
 import {jointFitRule} from './graybox-joint-fit';
+import {spaceFitRule} from './graybox-space-fit';
 import {templateBoundsRule,GRAYBOX_REPAIR_POLICY,GRAYBOX_TEMPLATE_BOUND_EDITS,GRAYBOX_TEMPLATE_BOUNDS_PROMPT} from './graybox-repair-policy';
 
 export const GRAYBOX_SPACE_REPAIR='graybox-space-repair-v8';
@@ -125,7 +126,7 @@ export async function repairGrayboxSpace(space:any,ctx:any,sourceFolder:string,f
    checkpoint={sourceJobId:sourceJob.id,sourceFolder:previous,sourceAuditSha256:digest(readFileSync(audit)),originalModelCompleted:false,modelCalls:0,quality:'not-assessed'};
   }
  }
- const preview=createGrayboxSpacePreview({space,sourceScene:canonical,observation:ctx.observation,images:ctx.images,folder:join(folder,'preview'),signal:ctx.signal,voxel:ctx.job.sceneKind==='voxel',templateBounds,jointFitNet:jointFitRule(ctx.job),schema:grayboxSpaceRepairSchema({voxel:ctx.job.sceneKind==='voxel',voxelLattice:space.voxelLattice,templateBounds}),
+ const preview=createGrayboxSpacePreview({space,sourceScene:canonical,observation:ctx.observation,images:ctx.images,folder:join(folder,'preview'),signal:ctx.signal,voxel:ctx.job.sceneKind==='voxel',templateBounds,jointFitNet:jointFitRule(ctx.job),spaceFit:spaceFitRule(ctx.job),schema:grayboxSpaceRepairSchema({voxel:ctx.job.sceneKind==='voxel',voxelLattice:space.voxelLattice,templateBounds}),
   apply,
   buildScene});
  const saved=checkpoint?preview.onlyReviewedCheckpoint():null;
