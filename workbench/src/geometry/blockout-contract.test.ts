@@ -55,3 +55,9 @@ test('无效grid在实际预览前拒绝，不静默截点、封口或修改总�
   const wire=value();wire.templates[0].parts[0].shape=shape;const before=JSON.stringify(wire);expect(()=>expandBlockoutGeometry(wire)).toThrow();expect(JSON.stringify(wire)).toBe(before);
  }
 });
+test('灰模部件 ID 在线契约与编译规则一致，中文或重复 ID 在模型侧和本地都直接指明',()=>{
+ const id=compactBlockoutSchema().properties.templates.items.properties.parts.items.properties.id;
+ expect(new RegExp(id.pattern).test('T16_side_wall')).toBe(true);expect(new RegExp(id.pattern).test('T16_推断_侧背墙')).toBe(false);
+ for(const ids of [['T16_推断_侧背墙'],['p0','p0'],['1body']]){const v=value(ids.length);ids.forEach((x,i)=>v.templates[0].parts[i].id=x);expect(()=>assertBlockoutGeneration(v)).toThrow('部件 ID 无效或重复：'+ids.at(-1));}
+ expect(()=>assertBlockoutGeneration(value(3))).not.toThrow();
+});

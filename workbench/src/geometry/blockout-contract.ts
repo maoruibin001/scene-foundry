@@ -6,6 +6,8 @@ import {assetContacts} from './contacts';
 
 export const BLOCKOUT_PART_LIMIT=8;
 export const BLOCKOUT_GRID_AXIS=9;
+/** Same identity rule as the geometry compiler; stated on the wire so a model cannot spend a correction on it. */
+export const BLOCKOUT_PART_ID=/^[a-zA-Z][a-zA-Z0-9_-]{0,55}$/;
 /** Camera-independent local geometry includes the shared interfaces derived from instance poses. */
 export function blockoutTemplateInput(space:any,brief:any){const ids=new Set(space.program.instances.filter(i=>i.template===brief.id).map(i=>i.id));return {contract:'local-graybox-v2',...(space.voxelLattice?{voxelLattice:space.voxelLattice}:{}),brief:{...brief,maxParts:Math.min(BLOCKOUT_PART_LIMIT,brief.maxParts),materialIds:['blockout']},spatialOpenings:(space.spatialOpenings??[]).filter(o=>ids.has(o.instanceId)),spatialContacts:assetContacts(space,brief.id)};}
 /** Repair receives the same interface derivation, including every use of a shared template. */
@@ -17,6 +19,7 @@ export function compactBlockoutSchema(options:{voxel?:boolean;voxelLattice?:Voxe
  schema.items.properties.parts.minItems=1;schema.items.properties.parts.maxItems=BLOCKOUT_PART_LIMIT;
  for(const k of ['material','uvProjection','uvTransform','smoothAngle','uvScale'])delete part.properties[k];
  part.required=Object.keys(part.properties);
+ part.properties.id={type:'string',pattern:BLOCKOUT_PART_ID.source};
  part.properties.shape.anyOf=part.properties.shape.anyOf.filter((s:any)=>types.has(s.properties.type.enum[0]));
  for(const s of part.properties.shape.anyOf){
   if(s.properties.type.enum[0]==='voxelVolume'){s.properties.dimensions.items.maximum=64;s.properties.operations.maxItems=48;}
@@ -35,6 +38,8 @@ export function assertBlockoutGeneration(value:any){
  if(!Array.isArray(value?.templates))throw Error('灰模需要templates数组');
  for(const t of value.templates){
   if(!Array.isArray(t.parts)||!t.parts.length||t.parts.length>BLOCKOUT_PART_LIMIT)throw Error(`灰模每模板仅允许1–${BLOCKOUT_PART_LIMIT}个轮廓部件；不制作逐叶或逐花细节`);
+  const ids=t.parts.map((p:any)=>p?.id),bad=ids.filter((id:any,i:number)=>typeof id!=='string'||!BLOCKOUT_PART_ID.test(id)||ids.indexOf(id)!==i);
+  if(bad.length)throw Error(`灰模模板 ${t.id} 部件 ID 无效或重复：${bad.map(String).join('、')}；部件 ID 须以英文字母开头、仅含英文字母数字下划线或连字符且模板内唯一，中文只写在说明中`);
   for(const p of t.parts){
    const s=p.shape;
    if(!s||!types.has(s.type))throw Error('灰模仅允许box、tube、lathe、extrusion、cushion、branchCrown、有界grid及voxelVolume构造；详细资产阶段保留完整几何能力');
