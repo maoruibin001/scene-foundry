@@ -1,7 +1,7 @@
 import {test,expect} from 'bun:test';
 import {selectSpatialCandidate,spatialCandidateProof} from './blockout-selection';
 
-const candidate=(score:number,failed=['rear'],changes:any={})=>({jobId:'own-root',round:0,folder:'actual-frame-folder',space:{spatialRelations:[{id:'rear',critical:true},{id:'path',critical:true}]},gate:{protocol:'spatial-composition-v3',threshold:{space:3.5,critical:3,confidence:.6},passed:false,failed,review:{score,confidence:.9},runtimeDigest:'exact-dist',...changes}});
+const candidate=(score:number,failed=['rear'],changes:any={},relations:any[]=[])=>({jobId:'own-root',round:0,folder:'actual-frame-folder',space:{spatialRelations:[{id:'rear',critical:true},{id:'path',critical:true},{id:'roof',critical:true},{id:'wall',critical:true}]},gate:{protocol:'spatial-composition-v3',threshold:{space:3.5,critical:3,confidence:.6},passed:false,failed,review:{score,confidence:.9,relations},runtimeDigest:'exact-dist',...changes}});
 
 test('3.2来源后出现3.0及2.9退步，几何/截图/反馈一起保留来源且原评估不改',()=>{
  const source=candidate(3.2),worse={...candidate(3,['rear','path']),folder:'worse-actual'},before=JSON.stringify([source,worse]);
@@ -27,4 +27,13 @@ test('只有实际独立通过才能放行；低置信度、同分、不同协�
 test('没有外部来源时首个实际候选保留，未评估数字拒绝',()=>{
  const first=candidate(2.9);expect(selectSpatialCandidate(null,first).candidate).toBe(first);
  expect(()=>selectSpatialCandidate(first,candidate(NaN))).toThrow('完整独立评估');
+});
+test('净关闭关键阻断：关闭两项、新增一项临界且分数提高时作为下一轮来源；新增项过低或净数不减仍保留来源',()=>{
+ const source=candidate(2.7,['rear','path','roof']);
+ const net=candidate(2.9,['rear','wall'],{},[{id:'wall',score:2.8}]);const net_off=selectSpatialCandidate(source,net);expect(net_off.candidate).toBe(source);
+ const selected=selectSpatialCandidate(source,net,{netClosure:true});
+ expect(selected.candidate).toBe(net);expect(selected.eligible).toBe(true);expect(selected.reason).toContain('net-closure-v1');expect(net.gate.passed).toBe(false);
+ expect(selectSpatialCandidate(source,candidate(2.9,['rear','wall'],{},[{id:'wall',score:2.4}]),{netClosure:true}).candidate).toBe(source);
+ expect(selectSpatialCandidate(source,candidate(2.9,['rear','path','wall'],{},[{id:'wall',score:2.9}]),{netClosure:true}).candidate).toBe(source);
+ expect(selectSpatialCandidate(source,candidate(2.7,['rear','wall'],{},[{id:'wall',score:2.9}]),{netClosure:true}).candidate).toBe(source);
 });
