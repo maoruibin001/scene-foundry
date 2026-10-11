@@ -1,11 +1,14 @@
-export const SPATIAL_SELECTION='net-closure-v1';
+export const SPATIAL_SELECTION_V1='net-closure-v1';
+export const SPATIAL_SELECTION='net-closure-v2';
 export const SPATIAL_NET_CLOSURE_MARGIN=.5;
-/** Only jobs created under the policy select by net closure; historical rounds replay under their original rule. */
-export function spatialSelectionRule(job:any){return job?.spatialSelectionPolicy===SPATIAL_SELECTION;}
+/** Only jobs created under a policy select by net closure; historical rounds replay under their original rule. */
+export function spatialSelectionRule(job:any){return job?.spatialSelectionPolicy===SPATIAL_SELECTION_V1||job?.spatialSelectionPolicy===SPATIAL_SELECTION;}
+/** v2 also takes an even swap: as many critical blocks closed as marginal ones opened, with a higher verified score. */
+export function spatialSwapRule(job:any){return job?.spatialSelectionPolicy===SPATIAL_SELECTION;}
 export type SpatialCandidate={jobId:string;round:number;folder:string;space:any;gate:any};
 
 /** Select the next repair's geometry, screenshots and feedback together. Never promote a failed graybox. */
-export function selectSpatialCandidate(previous:SpatialCandidate|null,current:SpatialCandidate,options:{netClosure?:boolean}={}){
+export function selectSpatialCandidate(previous:SpatialCandidate|null,current:SpatialCandidate,options:{netClosure?:boolean,swap?:boolean}={}){
  const g=current.gate;
  if(!Number.isFinite(g.review?.score)||!Number.isFinite(g.review?.confidence))throw Error('空间候选缺少完整独立评估');
  if(!previous)return {candidate:current,eligible:true,changed:true,reason:'首个完整评估候选'};
@@ -17,8 +20,9 @@ export function selectSpatialCandidate(previous:SpatialCandidate|null,current:Sp
   // A repair that closes more critical blocks than it opens, scores higher, and only opens marginal ones is a better next basis.
   const marginal=added.every((id:string)=>(g.review.relations??[]).find((r:any)=>r.id===id)?.score>=g.threshold.critical-SPATIAL_NET_CLOSURE_MARGIN);
   const closed=(old.failed??[]).filter((id:string)=>!(g.failed??[]).includes(id));
-  if(!(options.netClosure===true&&marginal&&closed.length>added.length&&g.review.score>old.review.score))return {candidate:previous,eligible:false,changed:false,reason:'新增关键空间阻断：'+added.join('、')};
-  return {candidate:current,eligible:true,changed:true,reason:SPATIAL_SELECTION+' 净关闭关键阻断：关闭'+closed.join('、')+'，新增临界'+added.join('、')+'，空间分提高'};
+  const net=closed.length>added.length,swap=options.swap===true&&closed.length===added.length;
+  if(!(options.netClosure===true&&marginal&&(net||swap)&&g.review.score>old.review.score))return {candidate:previous,eligible:false,changed:false,reason:'新增关键空间阻断：'+added.join('、')};
+  return {candidate:current,eligible:true,changed:true,reason:(swap?SPATIAL_SELECTION+' 等量交换关键阻断：':SPATIAL_SELECTION_V1+' 净关闭关键阻断：')+'关闭'+closed.join('、')+'，新增临界'+added.join('、')+'，空间分提高'};
  }
  if((g.passed&&!old.passed)||g.review.score>old.review.score)return {candidate:current,eligible:true,changed:true,reason:g.passed?'独立空间门槛通过':'空间分提高且没有新增关键阻断'};
  return {candidate:previous,eligible:true,changed:false,reason:'未超过来源空间分，下一轮沿用已评估较好几何及其截图'};

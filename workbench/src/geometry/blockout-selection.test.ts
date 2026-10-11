@@ -1,5 +1,5 @@
 import {test,expect} from 'bun:test';
-import {selectSpatialCandidate,spatialCandidateProof} from './blockout-selection';
+import {selectSpatialCandidate,spatialCandidateProof,spatialSelectionRule,spatialSwapRule} from './blockout-selection';
 
 const candidate=(score:number,failed=['rear'],changes:any={},relations:any[]=[])=>({jobId:'own-root',round:0,folder:'actual-frame-folder',space:{spatialRelations:[{id:'rear',critical:true},{id:'path',critical:true},{id:'roof',critical:true},{id:'wall',critical:true}]},gate:{protocol:'spatial-composition-v3',threshold:{space:3.5,critical:3,confidence:.6},passed:false,failed,review:{score,confidence:.9,relations},runtimeDigest:'exact-dist',...changes}});
 
@@ -36,4 +36,17 @@ test('净关闭关键阻断：关闭两项、新增一项临界且分数提高�
  expect(selectSpatialCandidate(source,candidate(2.9,['rear','wall'],{},[{id:'wall',score:2.4}]),{netClosure:true}).candidate).toBe(source);
  expect(selectSpatialCandidate(source,candidate(2.9,['rear','path','wall'],{},[{id:'wall',score:2.9}]),{netClosure:true}).candidate).toBe(source);
  expect(selectSpatialCandidate(source,candidate(2.7,['rear','wall'],{},[{id:'wall',score:2.9}]),{netClosure:true}).candidate).toBe(source);
+});
+test('net-closure-v2等量交换：关闭一项、新增一项临界且分数提高时作为来源；v1、新增过低、分数不升或零关闭仍保留来源',()=>{
+ const source=candidate(3.1,['rear','path']),swap=candidate(3.2,['wall','path'],{},[{id:'wall',score:2.5}]);
+ expect(selectSpatialCandidate(source,swap,{netClosure:true}).candidate).toBe(source);
+ const selected=selectSpatialCandidate(source,swap,{netClosure:true,swap:true});
+ expect(selected.candidate).toBe(swap);expect(selected.eligible).toBe(true);expect(selected.reason).toContain('net-closure-v2');
+ expect(selectSpatialCandidate(source,candidate(3.2,['wall','path'],{},[{id:'wall',score:2.4}]),{netClosure:true,swap:true}).candidate).toBe(source);
+ expect(selectSpatialCandidate(source,candidate(3.1,['wall','path'],{},[{id:'wall',score:2.8}]),{netClosure:true,swap:true}).candidate).toBe(source);
+ expect(selectSpatialCandidate(source,candidate(3.3,['rear','path','wall'],{},[{id:'wall',score:2.8}]),{netClosure:true,swap:true}).candidate).toBe(source);
+ // v1 net closure still names its own policy.
+ expect(selectSpatialCandidate(candidate(2.7,['rear','path','roof']),candidate(2.9,['rear','wall'],{},[{id:'wall',score:2.8}]),{netClosure:true,swap:true}).reason).toContain('net-closure-v1');
+ expect(spatialSelectionRule({spatialSelectionPolicy:'net-closure-v1'})).toBe(true);expect(spatialSwapRule({spatialSelectionPolicy:'net-closure-v1'})).toBe(false);
+ expect(spatialSelectionRule({spatialSelectionPolicy:'net-closure-v2'})).toBe(true);expect(spatialSwapRule({spatialSelectionPolicy:'net-closure-v2'})).toBe(true);expect(spatialSelectionRule({})).toBe(false);
 });
