@@ -9,12 +9,13 @@ import {validateSpace} from './layout-stages';
 import {bindObservedSpace} from './reference-observations';
 import {spatialInstances} from './spatial-order';
 import {templateBoundsRule} from './graybox-repair-policy';
+import {jointFitRule} from './graybox-joint-fit';
 
 /** Re-open the actual selection evidence for normal handoff and later checkpoint recovery. */
 export function reviewedGrayboxGeometry(repairFolder:string,ctx:any){
  const receipt=read(join(repairFolder,'repair-receipt.json')),source=read(join(receipt.sourceFolder,'scene.json')),space=read(join(receipt.sourceFolder,'space.json')),patch=read(join(repairFolder,'patch.json'));
  const contractVersion=read(join(repairFolder,'preview/graybox-preview-audit.json')).version,templateBounds=templateBoundsRule(ctx.job);
- const preview=createGrayboxSpacePreview({space,sourceScene:source,observation:contractVersion==='graybox-space-preview-v2'?undefined:ctx.observation,contractVersion,images:ctx.images,folder:join(repairFolder,'preview'),signal:ctx.signal,voxel:ctx.job.sceneKind==='voxel',templateBounds,schema:grayboxSpaceRepairSchema({voxel:ctx.job.sceneKind==='voxel',templateBounds}),
+ const preview=createGrayboxSpacePreview({space,sourceScene:source,observation:contractVersion==='graybox-space-preview-v2'?undefined:ctx.observation,contractVersion,images:ctx.images,folder:join(repairFolder,'preview'),signal:ctx.signal,voxel:ctx.job.sceneKind==='voxel',templateBounds,jointFitNet:jointFitRule(ctx.job),schema:grayboxSpaceRepairSchema({voxel:ctx.job.sceneKind==='voxel',templateBounds}),
   apply:p=>applyGrayboxSpaceRepair(space,p,v=>{const s=validateSpace(v,ctx.plan,ctx.images.length,ctx.job.complexity);return ctx.observation?bindObservedSpace(s,ctx.observation):s;},{templateBounds}),buildScene:(s,p)=>buildGrayboxPartScene(source,s,p,ctx.plan,ctx.images.length),render:async()=>{throw Error('read-only geometry verification cannot render');}});
  const selected=preview.assertReviewed(patch),scene=read(join(repairFolder,'reviewed-scene.json'));
  if(stable(selected)!==stable(receipt.preview)||digest(stable(scene))!==selected.canonicalSceneSha256)throw Error('灰模部件保存与真实预览摘要不符');
