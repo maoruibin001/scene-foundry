@@ -1,4 +1,5 @@
 import {assessmentOnly} from '../assessment-kind';
+import {isAtomicQuality} from '../atomic-criteria';
 import {candidateProgress,candidateEvidence} from './candidate-selection';
 import {assess} from '../assessment';
 import {scoreControlEvidence} from './score-controls';
@@ -39,7 +40,7 @@ export function repairOutcome(input:any){
  const closedFailure=scored&&selection.eligible&&selection.closed.length>0;
  const signals:any[]=[];if(!selection.eligible)signals.push({kind:'protected_dimension_regression',evidence:selection.reasons,next:'保留此前候选，定位退步项的实际几何、机位、材质变化，下一轮先修正退步。'});
  if(!scored)signals.push({kind:'comparison_unverified',evidence:'缺少同契约前后评分，禁止计算提分。',next:'先核对原图、模型、评分契约和原始产物，再比较。'});
- if(!['scene-quality-v6','scene-quality-v7'].includes(after?.policy?.version)&&scored&&frozenCoverage&&requirements.some((r:any)=>r.after==='partial'))signals.push({kind:'coverage_quantization',evidence:{unchangedVerdicts:true,rawCoverageBefore:rawCoverage?.rawBefore,rawCoverageAfter:rawCoverage?.rawAfter},next:'需求分使用完成/部分/缺失离散档位；检查具体缺项和图像，不自动补分，也不据此判定评分错误。'});
+ if(!isAtomicQuality(after?.policy?.version)&&scored&&frozenCoverage&&requirements.some((r:any)=>r.after==='partial'))signals.push({kind:'coverage_quantization',evidence:{unchangedVerdicts:true,rawCoverageBefore:rawCoverage?.rawBefore,rawCoverageAfter:rawCoverage?.rawAfter},next:'需求分使用完成/部分/缺失离散档位；检查具体缺项和图像，不自动补分，也不据此判定评分错误。'});
  if(templateIds.length>=budget?.templates||editUse.some((b:any)=>b.partLimit!==null&&b.parts>=b.partLimit||b.removalLimit!==null&&b.removedParts>=b.removalLimit))signals.push({kind:'edit_limit_reached',evidence:{selectedTemplates:templateIds.length,templateLimit:budget?.templates,editUse},next:'达到编辑上限只是限制信号；核对暂缓目标或校验拒绝是否阻止必要改动。确认后扩展范围或表达能力，保留运行与质量检查。'});
  const unresolved=requirements.filter((r:any)=>r.selectedGoalIds.length&&r.after!=='met');
  if(unresolved.length)signals.push({kind:'selected_requirements_unresolved',evidence:unresolved.map((r:any)=>({id:r.id,goals:r.selectedGoalIds,reason:r.reasonAfter})),next:'逐项对照修复计划、实际补丁、编译场景及新截图，区分修改不足、渲染丢失、原需求复合粒度和评审依据；不能用发生编辑代替验收完成。'});
@@ -53,10 +54,10 @@ export function repairOutcome(input:any){
  if(controls.length)signals.push({kind:'score_repeatability',evidence:input.scoreControls,next:'相同画面的重复评分已有变化；小涨幅需结合需求完成及图像证据，不能用调整分数或挑选最高复评成绩证明改善。'});
  // The delivery policy owns progress in both automatic and cross-job repair paths.
  // Formal-score repeatability remains diagnostic evidence; it cannot override raw/basic70 progress.
- const basic=input.policy?.deliveryStandard==='basic70';
+ const standard=input.policy?.deliveryStandard??'strict',basic=standard==='basic70'||standard==='profile70';
  const insufficient=basic?!selection.meaningful:!closedFailure&&(gainOverBest!<2||allSelectedUnresolved||(gainOverControl!==null&&gainOverControl<2));
  const scoreSignal=!scored?'not_comparable':basic?(selection.meaningful?'effective_gain':(rawDelta??selection.rawGain??0)<0?'regression':'insufficient_gain'):(gainOverControl!==null&&gainOverControl<2&&gainOverBest!>=2?'uncertain_gain':gainOverBest!>=2?'effective_gain':gainOverBest!<0?'regression':'insufficient_gain');
- return {version:'repair-outcome-v6',deliveryStandard:basic?'basic70':'strict',deliveryStatus:input.deliveryAfter?.status??null,selection,sourceJobId:input.sourceJobId,jobId:input.jobId,comparison:{comparable:scored,scoreBefore:before?.score??null,scoreAfter:after?.score??null,delta,rawBefore:Number.isFinite(rawBefore)?rawBefore:null,rawAfter:Number.isFinite(rawAfter)?rawAfter:null,rawDelta,bestObservedBefore:bestBefore,gainOverBest,minMeaningfulGain:2,historicalBest,bestControl,gainOverControl,scoreControls:input.scoreControls??null},scoreSignal,requiresDiagnosis:!selection.eligible||!scored||insufficient||!!after?.hardFailures?.length||!!input.executionFailure,visualImprovement:'需核对真实截图；分差不单独证明视觉改善或统计显著性',dimensions,requirements,editUse,selectedTemplates:templateIds,deferred:goals?.deferred??[],signals,
+ return {version:'repair-outcome-v6',deliveryStandard:standard,deliveryStatus:input.deliveryAfter?.status??null,selection,sourceJobId:input.sourceJobId,jobId:input.jobId,comparison:{comparable:scored,scoreBefore:before?.score??null,scoreAfter:after?.score??null,delta,rawBefore:Number.isFinite(rawBefore)?rawBefore:null,rawAfter:Number.isFinite(rawAfter)?rawAfter:null,rawDelta,bestObservedBefore:bestBefore,gainOverBest,minMeaningfulGain:2,historicalBest,bestControl,gainOverControl,scoreControls:input.scoreControls??null},scoreSignal,requiresDiagnosis:!selection.eligible||!scored||insufficient||!!after?.hardFailures?.length||!!input.executionFailure,visualImprovement:'需核对真实截图；分差不单独证明视觉改善或统计显著性',dimensions,requirements,editUse,selectedTemplates:templateIds,deferred:goals?.deferred??[],signals,
   nextAction:after?.hardFailures?.length?'先修复运行失败，不能用分数上升作为交付依据':input.executionFailure?(scored?'保留本轮已评候选；后续执行已中断，是否继续须有新的诊断依据':'先诊断执行错误并复用已保存产物恢复；本轮尚无可比较评分'):!selection.eligible?'保留此前最佳候选，针对退步项诊断后再继续':!scored?'先补齐比较证据':insufficient?'先诊断上述信号，再提出有证据的新机制；禁止只提高推理强度或重复相同局部策略':'保留有效结果；核对画面改善和退步项后，再选择剩余需求',
   boundaries:'这是确定性复盘，不修改分数、门槛或历史；信号不是根因结论。强模型应能使用已验证的引擎能力，编辑上限与压缩策略须接受实际证据检验。'};
 }
@@ -68,7 +69,7 @@ export function repairOutcomeContext(r:any){return {version:r.version,deliverySt
 
 /** 当前复盘与历史规划共用来源验收，不把任务后来保留的候选混入原始轮次。 */
 export function repairBaselineDelivery(job:any,meta:any,baselineReview:any,locate=runDir){
- if(job.policy?.deliveryStandard!=='basic70')return undefined;
+ if(!['basic70','profile70'].includes(job.policy?.deliveryStandard))return undefined;
  const root=locate(meta.sourceJobId),sourceDir=join(root,...(meta.sourceIteration==null?[]:['iterations',String(meta.sourceIteration)]));
  const original=read(join(root,'job.json'));
  const fields=meta.sourceIteration==null?{}:read(join(sourceDir,'candidate.json')).fields;

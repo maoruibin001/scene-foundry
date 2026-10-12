@@ -1,6 +1,7 @@
 import {assessImageReconstruction} from './image-reconstruction';
 import {basicDelivery,deliveryStandard} from './delivery-standard';
-import {qualityGate} from './quality';
+import {qualityGate,PROFILE_QUALITY_VERSION} from './quality';
+import {profileDelivery,projectedBenchmark} from './weighted-reassessment';
 import {specGate} from './spec';
 export function assess(job:any,review:any,runtime:any){
  const reconstruction=assessImageReconstruction(job,review,runtime);
@@ -16,6 +17,11 @@ export function assess(job:any,review:any,runtime:any){
  let status=[quality.status,spec.status].includes('failed')?'failed':[quality.status,spec.status].includes('needs_review')||countContradictions.length||objections.length||geometryReview?'needs_review':'passed';
  if(job.partialOutput){status='needs_review';if(spec.status==='passed')spec.status='needs_review';}
  if(countContradictions.length&&spec.status==='passed')spec.status='needs_review';
+ if(deliveryStandard(job.policy)==='profile70'){
+  if(job.policy.version!==PROFILE_QUALITY_VERSION)throw Error('profile70必须使用独立六维scene-quality-v8评审');
+  const selected=profileDelivery(job,review,runtime,quality,spec,countContradictions,objections),benchmark=projectedBenchmark(job,review,runtime,quality,spec,countContradictions,objections);
+  return {...reconstruction,quality,spec,countContradictions,objections,...selected,defaultBenchmarkAssessment:benchmark,strictStatus:benchmark.strictStatus,status:selected.deliveryAssessment.status,realizationStatus:selected.deliveryAssessment.status};
+ }
  if(deliveryStandard(job.policy)==='basic70'){const delivery=basicDelivery(job,review,runtime,quality,spec,status,countContradictions,objections);return {...reconstruction,quality,spec,countContradictions,objections,strictStatus:status,deliveryAssessment:delivery,status:delivery.status,realizationStatus:delivery.status};}
  return {...reconstruction,quality,spec,countContradictions,objections,status,realizationStatus:job.partialOutput?'needs_review':quality.status};
 }

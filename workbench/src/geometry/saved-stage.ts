@@ -12,6 +12,7 @@ export function savedStage(ctx:any,role:string,validate:(value:any)=>any,allowRe
  let id=ctx.job.spatialRepairSource?.jobId??ctx.job.recoverySourceJobId;const seen=new Set<string>();
  while(id){if(seen.has(id)||seen.size>=32)throw Error('恢复来源链无效');seen.add(id);const source=read(join(runDir(id),'job.json'));
   if(ctx.job.reuseMode==='fresh'&&(source.reuseMode!=='fresh'||(source.executionRecoveryRoot??source.id)!==(ctx.job.executionRecoveryRoot??ctx.job.id)))return null;
+  if((source.pipelinePlan?.id??null)!==(ctx.job.pipelinePlan?.id??null))return null;
   if(source.prompt!==ctx.job.prompt||JSON.stringify((source.images??[]).map(i=>i.id))!==JSON.stringify((ctx.job.images??[]).map(i=>i.id))||JSON.stringify(source.plan)!==JSON.stringify(ctx.plan)||JSON.stringify(source.modelSettings)!==JSON.stringify(ctx.job.modelSettings))return null;
   const generation=join(runDir(id),'generation'),folders=[generation];
   if(role==='scene-space'&&existsSync(generation))folders.unshift(...readdirSync(generation).filter(n=>/^space-repair-\d+$/.test(n)).sort((a,b)=>Number(b.split('-').at(-1))-Number(a.split('-').at(-1))).map(n=>join(generation,n)));

@@ -5,7 +5,7 @@ import {join,resolve,relative} from 'node:path';
 import {DATA,read,save,digest,listJobs} from './store';
 export const IMPROVEMENT_LIMITS={repairs:2,calls:100,noGain:2,minGain:2};
 /** 比较键代表相同评审契约；实验名称只用于审计，不能隔离质量历史。 */
-export function qualityComparison(job:any){return digest(JSON.stringify([job.policy,job.modelSettings,job.profile.assessmentProtocolSha256]));}
+export function qualityComparison(job:any){return digest(JSON.stringify([job.policy,job.modelSettings,job.profile.assessmentProtocolSha256,...(job.pipelinePlan?[job.pipelinePlan.id]:[])]));}
 /** Historical scope comes only from the immutable assessment receipt, never the latest mutable job. */
 export function storedAssessmentScope(r:any){
  if(!/^[a-f0-9-]{36}$/.test(r.jobId??'')||!/^[a-f0-9-]{36}$/.test(r.assessmentId??''))return null;

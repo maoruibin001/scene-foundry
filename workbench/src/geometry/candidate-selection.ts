@@ -5,7 +5,9 @@ export function candidateSelection(before:any,after:any){
  const reasons:string[]=[];
  if((before.deliveryStandard??'strict')!==(after.deliveryStandard??'strict'))reasons.push('交付标准不同，不能自动选优');
  if(before.policyVersion&&after.policyVersion&&before.policyVersion!==after.policyVersion)reasons.push('评分版本不同，不能自动选优');
- for(const key of ['dimensions','rawDimensions'])for(const id of ['spatial','coverage','material']){
+ if((before.pipelinePlanId||after.pipelinePlanId)&&before.pipelinePlanId!==after.pipelinePlanId)reasons.push('冻结制作计划不同，不能自动选优');
+ if(before.dimensionWeights&&after.dimensionWeights&&JSON.stringify(before.dimensionWeights)!==JSON.stringify(after.dimensionWeights))reasons.push('评分权重不同，不能自动选优');
+ for(const key of ['dimensions','rawDimensions'])for(const id of (after.deliveryStandard==='profile70'?['spatial','coverage','shape']:['spatial','coverage','material'])){
   const a=before[key]?.find((d:any)=>d.id===id),b=after[key]?.find((d:any)=>d.id===id);
   if(Number.isFinite(a?.score)&&Number.isFinite(b?.score)&&a.score-b.score>.3+1e-9)reasons.push((key==='rawDimensions'?'原始维度 ':'')+id+' 退步超过 0.3/5');
  }
@@ -26,7 +28,7 @@ export function candidateProgress(before:any,after:any){
  if(!before)return {...selection,meaningful:true,progressReasons:['首个真实候选'],closed};
  if(before.status==='passed')return {...selection,meaningful:false,progressReasons:[],closed};
  if(after.status==='passed')return {...selection,meaningful:true,progressReasons:['已通过全部验收门槛'],closed};
- const basic=after.deliveryStandard==='basic70';
+ const basic=after.deliveryStandard==='basic70'||after.deliveryStandard==='profile70';
  if(basic){
   // Only stable gates emitted by the actual delivery assessment count. Review prose may
   // change wording without resolving a defect, and strict critical-partial items are warnings here.
@@ -47,4 +49,4 @@ export function candidateProgress(before:any,after:any){
  if(!basic&&Number.isFinite(before.score)&&Number.isFinite(after.score)&&after.score-before.score>=selection.minGain-1e-9)reasons.push('正式分提升至少 '+selection.minGain);
  return {...selection,meaningful:reasons.length>0,progressReasons:reasons,closed,rawGain};
 }
-export function candidateEvidence(job:any){return {deliveryStandard:job.policy?.deliveryStandard??'strict',deliveryStatus:job.deliveryAssessment?.status,deliveryReasons:job.deliveryAssessment?.reasons,assessmentScope:job.partialOutput?'partial':'scene',status:job.status,score:job.quality?.score??null,dimensions:job.quality?.dimensions,rawDimensions:job.review?.dimensions,criteria:job.review?.criteria,criticalMissing:job.quality?.criticalMissing,hardFailures:job.quality?.hardFailures,specRules:job.spec?.rules,dimensionWeights:job.policy?.dimensionWeights,dimensionFloor:job.policy?.dimensionFloor,policyVersion:job.policy?.version};}
+export function candidateEvidence(job:any){return {...(job.pipelinePlan?{pipelinePlanId:job.pipelinePlan.id}:{}),deliveryStandard:job.policy?.deliveryStandard??'strict',deliveryStatus:job.deliveryAssessment?.status,deliveryReasons:job.deliveryAssessment?.reasons,assessmentScope:job.partialOutput?'partial':'scene',status:job.status,score:job.quality?.score??null,dimensions:job.quality?.dimensions,rawDimensions:job.review?.dimensions,criteria:job.review?.criteria,criticalMissing:job.quality?.criticalMissing,hardFailures:job.quality?.hardFailures,specRules:job.spec?.rules,dimensionWeights:job.policy?.dimensionWeights,dimensionFloor:job.policy?.dimensionFloor,policyVersion:job.policy?.version};}
