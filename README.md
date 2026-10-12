@@ -12,6 +12,8 @@ The [image reconstruction goal and acceptance guide](docs/image-reconstruction-g
 
 For agent coordination, the [ordinary and voxel pipeline handoff](docs/scene-pipeline-handoff-2026-10-10.md) records the verified source and service snapshot, acceptance results, blockers, evidence locations, and suggested task boundaries as of October 10, 2026. Local ports and process IDs in that document must be rechecked before use.
 
+The [ordinary pipeline overview](docs/scene-pipeline-overview.md) walks through every stage from uploaded images to delivery and the gates that keep output within the acceptance standard. The [graybox repair improvements](docs/graybox-repair-improvements-2026-10-12.md) explain the October 2026 repair-loop changes, why each raises the pass rate, and what real web runs have shown.
+
 For a clean installation and the browser acceptance procedure, follow the [from-zero runbook](docs/run-from-zero.md). The [latest fresh-clone validation record](docs/clean-run-validation-2026-09-24.md) distinguishes the checks that passed from the model-backed generation step that remains blocked.
 
 ## Layout
