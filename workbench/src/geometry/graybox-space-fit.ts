@@ -12,11 +12,27 @@ export type GrayboxSpaceFitOptions={
  jointFit:(report:any)=>any;
  signal?:AbortSignal;
  maxEvaluations?:number;
+ occlusion?:boolean;
 };
 export const GRAYBOX_SPACE_FIT='graybox-space-fit-v1';
 export const GRAYBOX_SPACE_FIT_LIMITS={calls:2,evaluationsPerCall:160,evaluations:320,timeLimitMs:60000,instances:6,cameras:2};
 /** Only ordinary jobs created under the policy get the numeric fit; historical repairs replay without it. */
 export function spaceFitRule(job:any){return job?.grayboxFitPolicy===GRAYBOX_SPACE_FIT;}
+export const GRAYBOX_FIT_OCCLUSION='graybox-fit-occlusion-v1';
+/** Only ordinary jobs under the occlusion policy add the occlusion-overflow term and depth guidance; historical replay unchanged. */
+export function fitOcclusionRule(job:any){return job?.grayboxFitOcclusionPolicy===GRAYBOX_FIT_OCCLUSION;}
+export const GRAYBOX_OCCLUSION_WEIGHT=0.15;
+export const GRAYBOX_DEPTH_GUIDANCE='graybox-fit-occlusion-v1 纵深与遮挡：深街道、长廊、室内进深场景不要压成一面宽大平直墙。按原图把后退层次拆成多段错落、逐级后退的体量，前排遮挡后排，保留窄高、退台与深处的开口与通道；该被遮住的设备、箱体、折道只露出原图可见的局部斜段，不要把整板正面大面积暴露。用已有模板的位置/进深/边界表达这些层次，不新增需求或物体，不靠单一背板充数；最终以真实预览对照原图的遮挡与纵深为准。';
+/** How much a candidate exposes beyond where the original photo shows an occluded/partial landmark.
+ *  Uses the measured fraction of the landmark's visible pixels that fall OUTSIDE its reference box
+ *  plus any visible span larger than expected. 0 when nothing is over-exposed. Only meaningful for
+ *  targets the original marks occluded/partial — a full-extent target is not penalised for being seen. */
+export function occlusionOvershoot(row:any){
+ if(!row||!['occluded','partial'].includes(row.extent))return 0;
+ const outside=finite(row.outsideTargetFraction)?Math.max(0,row.outsideTargetFraction):0;
+ const span=Array.isArray(row.spanRatio)?row.spanRatio.reduce((s:number,r:number)=>s+(finite(r)?Math.max(0,r-1):0),0)/row.spanRatio.length:0;
+ return outside+span;
+}
 export const GRAYBOX_SPACE_FIT_PROMPT='graybox-space-fit-v1 本任务另可调用fit_graybox_space：先写出依据原图的完整basePatch（可只含reason/checks与parts/groups/templates等结构改动，instances/cameras可为空），再列出最多6个与阻塞关系直接相关的已有实例和最多2个referenceIndex参考机位。程序用零Engine编译几何测量，对所列实例的位置（0.5米步长起逐步减半）、统一缩放（来源0.5至2倍内）及所列参考机位的位置、偏航、俯仰与fov作有界坐标下降，目标是降低各机位已测目标平均边缘残差之和，每个被采用的候选都须通过jointFit，已测目标丢失的候选不采用。手工逐项微调每机位只能改善约0.01时应先用它；关键关系的占幅、纵深、交接错位时建议在第一次真实预览前拟合。每轮最多2次拟合、合计320次测量、每次60秒，失败与无改善也计入，重试与恢复不重置。它只拟合可测范围，不改变实体、模板、需求或原图目标，unverified目标不进入目标函数也不能因此视为已对齐。返回patch只是几何预测：须把该完整patch交给preview_graybox_space看真实画面，对照原图确认没有遮挡主体、穿插或借机位隐藏结构，最终只选择真实预览过的摘要。';
 const EPSILON=1e-4;
 const finite=(v:any)=>typeof v==='number'&&Number.isFinite(v);
@@ -37,16 +53,16 @@ function compared(report:any){
  }
  return rows;
 }
-function score(keys:string[],rows:Map<string,any>){
+function score(keys:string[],rows:Map<string,any>,occlusion=false){
  const cameras=new Map<number,number[]>();
- for(const key of keys){const row=rows.get(key);if(!row)return null;if(!cameras.has(row.referenceIndex))cameras.set(row.referenceIndex,[]);cameras.get(row.referenceIndex)!.push(row.edgeResidual);}
+ for(const key of keys){const row=rows.get(key);if(!row)return null;if(!cameras.has(row.referenceIndex))cameras.set(row.referenceIndex,[]);cameras.get(row.referenceIndex)!.push(row.edgeResidual+(occlusion?GRAYBOX_OCCLUSION_WEIGHT*occlusionOvershoot(row):0));}
  const means=[...cameras].sort((a,b)=>a[0]-b[0]).map(([referenceIndex,v])=>({referenceIndex,targets:v.length,meanEdgeResidual:v.reduce((a,b)=>a+b,0)/v.length}));
  return {objective:means.reduce((s,c)=>s+c.meanEdgeResidual,0),cameras:means.map(c=>({...c,meanEdgeResidual:round(c.meanEdgeResidual)}))};
 }
 
 /** Source-relative bounded descent over listed instance poses and reference cameras. Predictions still require the normal actual preview and independent gates. */
 export function fitGrayboxSpace(options:GrayboxSpaceFitOptions){
- const {signal,measure,jointFit,space}=options,maxEvaluations=options.maxEvaluations??GRAYBOX_SPACE_FIT_LIMITS.evaluationsPerCall;
+ const {signal,measure,jointFit,space}=options,maxEvaluations=options.maxEvaluations??GRAYBOX_SPACE_FIT_LIMITS.evaluationsPerCall,occlusion=options.occlusion===true;
  signal?.throwIfAborted();
  fail(Array.isArray(options.instanceIds)&&options.instanceIds.length<=GRAYBOX_SPACE_FIT_LIMITS.instances&&new Set(options.instanceIds).size===options.instanceIds.length,'最多6个不重复的已有实例');
  fail(Array.isArray(options.referenceIndices)&&options.referenceIndices.length<=GRAYBOX_SPACE_FIT_LIMITS.cameras&&new Set(options.referenceIndices).size===options.referenceIndices.length,'最多2个不重复的参考机位');
@@ -93,7 +109,7 @@ export function fitGrayboxSpace(options:GrayboxSpaceFitOptions){
  // An unchanged basePatch measures as the source itself; any other invalid base is rejected before budget is spent.
  let baseReport:any;evaluations++;seen.add(hash(base));
  try{baseReport=measure(structuredClone(base));}catch(error){signal?.throwIfAborted();if(!String(error).includes('NO_ACTIONABLE_CHANGE'))throw Error('灰模数值拟合：basePatch无法测量，先修正后再拟合；'+String(error).slice(0,600));baseReport=options.sourceReport();}
- const keys=[...compared(baseReport).keys()],baseScore=score(keys,compared(baseReport))!,baseFit=jointFit(baseReport);
+ const keys=[...compared(baseReport).keys()],baseScore=score(keys,compared(baseReport),occlusion)!,baseFit=jointFit(baseReport);
  const baseline={patch:base,objective:baseScore.objective,cameras:baseScore.cameras,jointFit:baseFit};
  attempts.push({index:1,objective:round(baseScore.objective),passed:baseFit.passed,baseline:true});
  let best=baseline,x=vars.map(()=>0);
@@ -104,7 +120,7 @@ export function fitGrayboxSpace(options:GrayboxSpaceFitOptions){
    const patch=candidate(y);if(!patch)return null;const patchSha256=hash(patch);if(seen.has(patchSha256))return null;seen.add(patchSha256);evaluations++;
    const row:any={index:evaluations};attempts.push(row);
    let report:any;try{report=measure(structuredClone(patch));}catch(error){signal?.throwIfAborted();row.status='invalid';row.error=String(error).slice(0,300);return null;}
-   const s=score(keys,compared(report));if(!s){row.status='target-lost';return null;}
+   const s=score(keys,compared(report),occlusion);if(!s){row.status='target-lost';return null;}
    const check=jointFit(report);row.objective=round(s.objective);row.passed=check.passed;
    return {patch,objective:s.objective,cameras:s.cameras,jointFit:check};
   };
