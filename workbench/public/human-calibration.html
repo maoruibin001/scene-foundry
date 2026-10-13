@@ -1,0 +1,87 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>人工打分与动态校准</title>
+<style>
+ body{font:14px/1.5 system-ui,sans-serif;max-width:860px;margin:24px auto;padding:0 16px;color:#1a1a1a;background:#fff}
+ h1{font-size:19px} h2{font-size:15px;margin-top:24px}
+ select,input,textarea,button{font:inherit} label{display:inline-block;min-width:92px}
+ table{border-collapse:collapse;width:100%;margin:8px 0} th,td{border:1px solid #ddd;padding:4px 8px;text-align:left}
+ .row{margin:6px 0} .muted{color:#666} .big{font-size:17px;font-weight:600}
+ .card{border:1px solid #e2e2e2;border-radius:8px;padding:12px 16px;margin:12px 0}
+ .pill{display:inline-block;padding:1px 8px;border-radius:10px;font-size:12px}
+ .on{background:#e5f5e8;color:#146c2e} .off{background:#fde7e7;color:#9a2a2a}
+ button{padding:5px 12px;border:1px solid #888;border-radius:6px;background:#f6f6f6;cursor:pointer}
+</style>
+<h1>人工打分与动态校准 <span class="muted" style="font-size:13px">human-calibration-v1</span></h1>
+<p class="muted">人工打分是可选的。累计到足够样本后，系统按人工分对评审的维度分做仿射校准（<code>scale×分+bias</code>，有界并夹到 0–5），让机器分贴近人工判断。样本不足时为恒等变换，不改变现有评分。此页仅用于本地验证。</p>
+
+<div class="card">
+ <div class="row"><label>选择任务</label><select id="job"></select> <button id="reload">刷新列表</button></div>
+ <div id="judge" class="muted">—</div>
+</div>
+
+<div class="card">
+ <h2 style="margin-top:0">提交人工维度分（0–5）</h2>
+ <div id="inputs"></div>
+ <div class="row"><label>评分人</label><input id="reviewer" size="18" placeholder="anonymous"></div>
+ <div class="row"><label>说明(选填)</label><input id="reason" size="48" placeholder="与原图相比的理由"></div>
+ <button id="submit">提交人工分并重建校准</button>
+ <div id="submitMsg" class="muted"></div>
+</div>
+
+<div class="card">
+ <h2 style="margin-top:0">校准效果预览（当前任务）</h2>
+ <div id="preview">—</div>
+</div>
+
+<div class="card">
+ <h2 style="margin-top:0">当前校准模型</h2>
+ <div id="model">—</div>
+</div>
+
+<script>
+const DIMS=['coverage','spatial','shape','material','readability'];
+const LABELS={coverage:'需求实现',spatial:'空间构图',shape:'主体形态',material:'材质色彩',readability:'可读性'};
+const $=s=>document.querySelector(s);
+async function api(p,opt){const r=await fetch(p,opt);const t=await r.text();let j;try{j=JSON.parse(t)}catch{throw Error(t.slice(0,200))}if(!r.ok)throw Error(j.error||t.slice(0,200));return j;}
+
+function inputsHTML(){return DIMS.map(d=>`<div class="row"><label>${LABELS[d]}</label><input type="number" min="0" max="5" step="0.1" id="in-${d}" style="width:70px"></div>`).join('');}
+$('#inputs').innerHTML=inputsHTML();
+
+async function loadJobs(){
+ const s=await api('/api/jobs');
+ const jobs=(s.items||s.jobs||s).filter(j=>j.quality||['passed','failed','needs_review'].includes(j.status));
+ $('#job').innerHTML=jobs.map(j=>`<option value="${j.id}">${(j.plan?.name||j.prompt||j.id).slice(0,40)} · ${j.status}</option>`).join('')||'<option>（没有已评分任务）</option>';
+ if(jobs.length)selectJob();
+}
+async function selectJob(){
+ const id=$('#job').value; if(!id)return;
+ const d=await api('/api/jobs/'+id+'/human-score');
+ $('#judge').innerHTML=d.judge?('评审维度分（原始）：'+d.judge.map(x=>`${LABELS[x.id]} <b>${x.score}</b>`).join(' · ')):'此任务无评审维度分';
+ if(d.score)for(const dim of DIMS)$('#in-'+dim).value=d.score.dimensions[dim];
+ renderPreview(await api('/api/jobs/'+id+'/calibration-preview'));
+ renderModel(d.model);
+}
+function renderPreview(p){
+ const pr=p.preview; if(!pr||!pr.rows.length){$('#preview').innerHTML='—';return;}
+ $('#preview').innerHTML=`<div class="row"><span class="pill ${pr.applied?'on':'off'}">${pr.applied?'已应用到评分':'样本不足·仅预览'}</span></div>`+
+  `<table><tr><th>维度</th><th>原始分</th><th>校准后</th></tr>`+
+  pr.rows.map(r=>`<tr><td>${LABELS[r.id]||r.id}</td><td>${r.base}</td><td>${r.calibrated}</td></tr>`).join('')+`</table>`+
+  `<div class="row big">综合分：${pr.rawComposite} → ${pr.calibratedComposite}</div>`;
+}
+function renderModel(m){
+ if(!m){$('#model').innerHTML='—';return;}
+ $('#model').innerHTML=`<div class="row">样本数 <b>${m.dimensionSamples??m.samples??0}</b> · 应用阈值 ${m.minApply} · <span class="pill ${m.applied?'on':'off'}">${m.applied?'生效中':'未生效'}</span> · 总体平均偏差(人工-机器) ${m.overallMae??'—'}</div>`+
+  `<table><tr><th>维度</th><th>样本</th><th>scale</th><th>bias</th><th>相关</th><th>偏差MAE</th></tr>`+
+  DIMS.map(d=>{const x=m.dimensions?.[d]||{};return `<tr><td>${LABELS[d]}</td><td>${x.n??0}</td><td>${x.scale??1}</td><td>${x.bias??0}</td><td>${x.corr??'—'}</td><td>${x.mae??'—'}</td></tr>`;}).join('')+`</table>`;
+}
+$('#submit').onclick=async()=>{
+ const id=$('#job').value; const dimensions={};
+ for(const d of DIMS){const v=parseFloat($('#in-'+d).value);if(!(v>=0&&v<=5)){$('#submitMsg').textContent='请为每个维度填 0–5 的分数：'+LABELS[d];return;}dimensions[d]=v;}
+ try{const r=await api('/api/jobs/'+id+'/human-score',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({dimensions,reviewer:$('#reviewer').value,reason:$('#reason').value})});
+  $('#submitMsg').textContent='已提交，校准模型已重建。';renderPreview(r);renderModel(r.model);
+ }catch(e){$('#submitMsg').textContent='提交失败：'+e.message;}
+};
+$('#reload').onclick=loadJobs; $('#job').onchange=selectJob;
+loadJobs().catch(e=>$('#judge').textContent='加载失败：'+e.message);
+</script>

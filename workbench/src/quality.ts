@@ -30,7 +30,7 @@ export function modeOf(prompt:string,image?:unknown):Mode {
  if(!prompt.trim()&&!image)throw Error('请输入 prompt 或选择参考图片');
  return image ? prompt.trim()?'image_prompt':'image' : 'prompt';
 }
-export function qualityGate(plan:any,review:any,hard:Record<string,boolean>,policy=DEFAULT_POLICY){
+export function qualityGate(plan:any,review:any,hard:Record<string,boolean>,policy=DEFAULT_POLICY,calibrate:(id:string,score:number)=>number=(_id,s)=>s){
  if(!Array.isArray(plan.requirements)||!plan.requirements.length)throw Error('需求基线缺失');
  if(!Array.isArray(review.requirements)||!Array.isArray(review.dimensions))throw Error('评估格式无效');
  if(review.dimensions.length!==DIMENSIONS.length||new Set(review.dimensions.map((d:any)=>d.id)).size!==DIMENSIONS.length)throw Error('评估维度重复或缺失');
@@ -40,7 +40,7 @@ export function qualityGate(plan:any,review:any,hard:Record<string,boolean>,poli
  const atomic=isAtomicQuality(policy.version)?aggregateCriteria(plan,review,policy.version):null;
  let totalWeight=0,coverage=0;const criticalMissing:string[]=[];
  for(const req of plan.requirements){const v=verdicts.get(req.id);if(!v)throw Error('评估缺少需求 '+req.id);const w=req.weight??1;totalWeight+=w;coverage+=w*(v.verdict==='met'?1:v.verdict==='partial'?0.5:0);if(req.critical&&v.verdict!=='met')criticalMissing.push(req.id);}
- const dimensions=dimensionsFor(policy).map(d=>{const v=review.dimensions.find((v:any)=>v.id===d.id);if(!v||!Number.isFinite(v.score)||v.score<0||v.score>5||!Array.isArray(v.frames)||!v.frames.length||!v.reason)throw Error('维度评估无效 '+d.id);const a=atomic?.dimensions.find(x=>x.id===d.id),score=a?a.score:d.id==='coverage'?5*coverage/totalWeight:v.score;return {...d,score,reason:a?.reason??v.reason,frames:a?.frames??v.frames,points:score/5*d.weight};});
+ const dimensions=dimensionsFor(policy).map(d=>{const v=review.dimensions.find((v:any)=>v.id===d.id);if(!v||!Number.isFinite(v.score)||v.score<0||v.score>5||!Array.isArray(v.frames)||!v.frames.length||!v.reason)throw Error('维度评估无效 '+d.id);const a=atomic?.dimensions.find(x=>x.id===d.id),base=a?a.score:d.id==='coverage'?5*coverage/totalWeight:v.score,score=Math.min(5,Math.max(0,calibrate(d.id,base)));return {...d,score,rawScore:Math.round(base*100)/100,reason:a?.reason??v.reason,frames:a?.frames??v.frames,points:score/5*d.weight};});
  if(atomic)criticalMissing.splice(0,criticalMissing.length,...atomic.criticalMissing as string[]);
  const score=Math.round(dimensions.reduce((n,d)=>n+d.points,0)*10)/10;
  const hardFailures=HARD_CHECKS.filter(k=>hard[k]!==true),lowDimensions=dimensions.filter(d=>d.score<policy.dimensionFloor).map(d=>d.id);

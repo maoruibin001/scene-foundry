@@ -2,12 +2,15 @@ import {assessImageReconstruction} from './image-reconstruction';
 import {basicDelivery,deliveryStandard} from './delivery-standard';
 import {qualityGate} from './quality';
 import {specGate} from './spec';
+import {humanCalibrationRule,calibrator,currentCalibrationModel} from './human-calibration';
 export function assess(job:any,review:any,runtime:any){
  const reconstruction=assessImageReconstruction(job,review,runtime);
  const hard=assessmentHardChecks(job,runtime);
  const frames=new Set(runtime.images);
  for(const v of [...review.requirements??[],...review.dimensions??[],...review.specRules??[],...review.criteria??[]])if(!Array.isArray(v.frames)||v.frames.some((f:string)=>!frames.has(f)))throw Error('评估引用了不存在的运行截图');
- const quality=qualityGate(job.plan,review,hard,job.policy),spec=specGate(review,runtime,job.plan,job.structure);
+ const calibration=humanCalibrationRule(job)?currentCalibrationModel():null;
+ const quality=qualityGate(job.plan,review,hard,job.policy,calibration?calibrator(calibration):undefined),spec=specGate(review,runtime,job.plan,job.structure);
+ if(calibration)quality.calibration={version:calibration.version,applied:!!calibration.applied,samples:calibration.dimensionSamples??calibration.samples,overallMae:calibration.overallMae,note:calibration.applied?'已按人工评分校准数值分（非门禁副作用，仅调整维度分使之贴近人工）':'人工样本不足，暂未应用，仅观测'};
  const kinds=Object.keys(job.structure.semanticCounts).filter(k=>job.structure.semanticCounts[k]>0);
  if(!Array.isArray(review.entityCounts)||review.entityCounts.length!==kinds.length||kinds.some(k=>review.entityCounts.filter((c:any)=>c.kind===k&&Number.isInteger(c.visibleMin)&&Number.isInteger(c.visibleMax)&&c.visibleMin>=0&&c.visibleMax>=c.visibleMin).length!==1))throw Error('视觉计数缺少标准语义类别');
  const countContradictions=review.entityCounts.filter((c:any)=>{const actual=job.structure.semanticCounts[c.kind];return actual<c.visibleMin||actual>c.visibleMax;});

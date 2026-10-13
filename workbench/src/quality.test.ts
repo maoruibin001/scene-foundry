@@ -27,7 +27,7 @@ test('材质权重提升后正确重算，历史版本与续跑保留原权重',
  const v4={...DEFAULT_POLICY,version:'scene-quality-v4'};delete v4.dimensionWeights;
  expect(qualityGate(plan,r,hard,v4)).toMatchObject({score:78.4,status:'failed',policy:{dimensionWeights:{coverage:32,spatial:40,shape:12,material:8,readability:8}}});
  expect(JSON.stringify(r)).toBe(before);
- expect(scoringGuidance(DEFAULT_POLICY).dimensions).toEqual(current.dimensions.map(({score,reason,frames,points,...d})=>d));
+ expect(scoringGuidance(DEFAULT_POLICY).dimensions).toEqual(current.dimensions.map(({score,rawScore,reason,frames,points,...d})=>d));
 });
 
 test('评分版本拒绝权重篡改或未知版本，低权重维度仍必须过底线',()=>{
