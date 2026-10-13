@@ -12,7 +12,7 @@ export function restoreRepairAttempt(job:any,sourceJobId:string,source:any,plan:
  if(['running','queued','passed'].includes(prior.status))throw Error('只能恢复已经结束的未完成修复');
  const meta=read(join(folder,'source.json')),batches=read(join(folder,'repair-batches.json')).batches;
  const same=(a:any,b:any)=>stable(a)===stable(b);
- if(meta.sourceJobId!==sourceJobId||(iteration?prior.id!==sourceJobId:prior.reuseSceneFrom!==sourceJobId||meta.sourceIteration!=null)||!same(meta.referenceSha256,refs)||!same(read(join(priorDir,'plan.json')),plan)||!same(prior.policy,job.policy)||!same(prior.modelSettings,job.modelSettings)||!comparableAssessment(prior,job))throw Error('恢复工具预览的输入、来源或评估契约不一致');
+ if(meta.sourceJobId!==sourceJobId||(iteration?prior.id!==sourceJobId:prior.reuseSceneFrom!==sourceJobId||meta.sourceIteration!=null)||!same(meta.referenceSha256,refs)||!same(read(join(priorDir,'plan.json')),plan)||!same(prior.policy,job.policy)||!same(prior.modelSettings,job.modelSettings)||(prior.pipelinePlan?.id??null)!==(job.pipelinePlan?.id??null)||!comparableAssessment(prior,job))throw Error('恢复工具预览的输入、来源、制作计划或评估契约不一致');
  if(iteration){
   const goals=read(join(folder,'repair-goals.json')),parsed=read(join(folder,'scene-repair-plan-parsed.json')),receipt=read(join(folder,'scene-repair-plan-receipt.json'));
   if((prior.executionRecoveryRoot??prior.id)!==(job.executionRecoveryRoot??job.id)||meta.sourceDigest!==digest(JSON.stringify(source))||!same(Object.fromEntries(Object.keys(parsed).map(k=>[k,goals[k]])),parsed)||!same(goals.modelReceipt,receipt)||receipt.requestedModel!==job.modelSettings?.model)throw Error('恢复规划的场景、执行根或模型证据不一致');

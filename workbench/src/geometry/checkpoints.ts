@@ -11,7 +11,7 @@ import {validateLayout,validateAsset,type SceneLayout,type AssetGeometry} from '
 
 const canonical=(v:any):any=>v===undefined?null:v===null||typeof v!=='object'?v:Array.isArray(v)?v.map(canonical):Object.fromEntries(Object.keys(v).sort().map(k=>[k,canonical(v[k])]));
 const hash=(v:any)=>digest(JSON.stringify(canonical(v)));
-export function checkpointInput(job:any){return {...freshCheckpointScope(job),...(job.voxelDetailPolicy?{voxelDetailPolicy:job.voxelDetailPolicy}:{}),prompt:job.prompt??'',complexity:job.complexity,images:(job.images??(job.image?[job.image]:[])).map((i:any)=>({id:i.id,mime:i.mime})),modelSettings:settingsOf(job)??null,provider:job.profile?.provider??null,engineSha:job.profile?.engineSha??null,generatorSha:job.profile?.generatorSha??null};}
+export function checkpointInput(job:any){return {...freshCheckpointScope(job),...(job.voxelDetailPolicy?{voxelDetailPolicy:job.voxelDetailPolicy}:{}),...(job.pipelinePlan?{pipelinePlanId:job.pipelinePlan.id,stageContracts:Object.fromEntries(job.pipelinePlan.stages.map((s:any)=>[s.id,s.contractId]))}:{}),prompt:job.prompt??'',complexity:job.complexity,images:(job.images??(job.image?[job.image]:[])).map((i:any)=>({id:i.id,mime:i.mime})),modelSettings:settingsOf(job)??null,provider:job.profile?.provider??null,engineSha:job.profile?.engineSha??null,generatorSha:job.profile?.generatorSha??null};}
 export type Registration={job:any;planFile:string;generationDir:string;textureFile:string;provenance?:any;evidence?:Record<string,string>;skipInvalidAssets?:boolean};
 /** Immutable generated payloads; restoring one never counts as a fresh generation. */
 export class CheckpointStore{

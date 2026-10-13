@@ -28,6 +28,12 @@ export const JUDGE_PROMPT=`你独立评估真实渲染的 ForgeaX 三维场景�
 每条输入的视觉规范使用原 ID，每条都须引用至少一个实际运行帧，包括 S10；仅偏好 S09 可不引用。引用只能用 frameNames 中的文件名。
 entityCounts.kind 必须来自输入 countKinds，每个类别恰有一条区间；potted_plant 是完整盆栽，不把植物和盆分成两个。综合多视角给出 visibleMin/visibleMax，不从单张遮挡图猜总数。高总分不能豁免失败条款。`;
 
+/** New six-dimension instructions never replace or reinterpret legacy prompts. */
+export function judgePromptFor(version:string){return version==='scene-quality-v8'?JUDGE_PROMPT
+ .replace('五维评分','六维评分').replace('五个维度','六个维度')
+ .replace("'material'|'readability'","'material'|'lighting'|'readability'")
+ +'\nscene-quality-v8将 lighting 与 material/readability 分开：材质评颜色、纹理、UV、粗糙度和法线；光照独立评原图对应的方向、明暗、阴影与层次；readability只评信息清晰与层次，不重复光照缺陷。六维即使权重为0也逐一给独立真实分数，不能为迎合目标权重改分。所选权重的实现度与原始视觉分均须70，旧固定70/80为单列基准。':JUDGE_PROMPT;}
+
 export function correctionPrompt(message:string,rejectedValue?:unknown){
  const context='\n上次输出未通过校验：'+message+'\n请按同一份原始输入和需求，返回完整的修正 JSON。不得削弱或遗漏需求。';
  // 完整携带可解析的失败候选，避免只给一个错误后从零重写；超长候选不截断成无效 JSON。

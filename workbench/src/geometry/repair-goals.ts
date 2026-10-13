@@ -7,7 +7,7 @@ import {VISIBILITY_PROMPT} from './visibility';
 
 export const REPAIR_GOALS_VERSION='scene-repair-goals-v1';
 const kinds=['layout','geometry','opening','surface','lighting','camera'];
-const dimensions=['coverage','spatial','shape','material','readability'];
+const dimensions=['coverage','spatial','shape','material','lighting','readability'];
 const obj=(properties:any)=>({type:'object',properties,required:Object.keys(properties),additionalProperties:false});
 const str={type:'string'},arr=(items:any,maxItems:number)=>({type:'array',items,maxItems});
 export type RepairGoalReferences=Record<'requirementIds'|'instanceIds'|'templateIds'|'materialIds'|'cameraNames'|'openingIds'|'frames',string[]>&{referenceCount:number};

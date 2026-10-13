@@ -1,6 +1,6 @@
 export function scoreComparison(job){
  const formal=job.quality?.score,weights=job.quality?.dimensions,raw=job.review?.dimensions;
- if(!Number.isFinite(formal)||!Array.isArray(weights)||!Array.isArray(raw)||weights.length!==5||raw.length!==5||new Set(raw.map(d=>d.id)).size!==5||Math.abs(weights.reduce((s,d)=>s+d.weight,0)-100)>1e-6)return null;
+ if(!Number.isFinite(formal)||!Array.isArray(weights)||!Array.isArray(raw)||weights.length!==(job.policy?.version==='scene-quality-v8'?6:5)||raw.length!==weights.length||new Set(raw.map(d=>d.id)).size!==weights.length||Math.abs(weights.reduce((s,d)=>s+d.weight,0)-100)>1e-6)return null;
  let score=0;for(const w of weights){const d=raw.find(d=>d.id===w.id);if(!d||!Number.isFinite(d.score)||d.score<0||d.score>5)return null;score+=d.score/5*w.weight;}
  return {formal,diagnostic:Math.round(score*100)/100,gap:Math.round((formal-score)*100)/100};
 }
