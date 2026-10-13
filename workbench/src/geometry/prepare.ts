@@ -1,9 +1,10 @@
+import {bindAreaLights,areaLightEntities} from './area-lights';
 import {bindPointShadows} from './point-shadows';
 import {voxelProjection} from '../voxel/projection';
 import {bindReflectionProbes,reflectionProbeEntities,REFLECTION_COMPONENT_BOOTSTRAP} from './reflection-probes';
 import {bindCameraOutput} from './camera-output';
 import {spotEntities,bindDirectionalShadow,directionalShadowFields} from './lighting';
-import {lstatSync,mkdirSync,readFileSync,writeFileSync,copyFileSync,existsSync,symlinkSync} from 'node:fs';
+import {lstatSync,mkdirSync,readFileSync,writeFileSync,copyFileSync,existsSync,symlinkSync,rmSync} from 'node:fs';
 import {join,resolve} from 'node:path';
 import {randomUUID,createHash} from 'node:crypto';
 import {compileGeometryProgram,type GeometryProgram,type Texture} from './program';
@@ -62,6 +63,7 @@ export function prepareGeometryProject(root:string,program:GeometryProgram,textu
   save(join(root,'lighting-export.json'),{version:'engine-lighting-v2',exportedDirectionalShadow:directionalShadowFields(options.scene.lighting),units:{localIntensity:'candela',range:'meters',cone:'half-angle-degrees'},authored:options.scene.lighting,exportedSpots:spots});
  }
  if(options){world=bindPointShadows(world,options.scene.lighting.points);save(join(root,'point-shadow-export.json'),{version:'point-shadow-v1',authored:options.scene.lighting.points.map(p=>p.shadow??null),scope:'Fixed Engine geometric point-light occlusion; no quality assertion'});}
+ if(options){world=bindAreaLights(world,options.scene.lighting.areaLights);if(options.scene.lighting.areaLights?.length)save(join(root,'area-light-export.json'),{version:'rect-area-light-v1',authored:options.scene.lighting.areaLights,entities:areaLightEntities(options.scene.lighting.areaLights),scope:'Fixed Engine single-sided LTC direct light; no area shadow, diffuse GI or transmission; not a quality assertion'});else rmSync(join(root,'area-light-export.json'),{force:true});}
  if(options){world=bindCameraOutput(world,options.scene.lighting.cameraOutput);save(join(root,'camera-output-export.json'),{version:'camera-output-v1',authored:options.scene.lighting.cameraOutput??null,legacyDefault:options.scene.lighting.cameraOutput==null,scope:'真实相机显示参数；不表示质量通过'});}
  if(options){world=bindReflectionProbes(world,options.scene.lighting.reflectionProbes);save(join(root,'reflection-probe-export.json'),{version:'local-reflection-probe-v1',authored:options.scene.lighting.reflectionProbes??null,entities:reflectionProbeEntities(options.scene.lighting.reflectionProbes),scope:'Fixed Engine static specular capture; no diffuse GI or new illumination; actual runtime publication required'});}
  writeFileSync(join(assets,'world.pack.ts'),world);
