@@ -1,6 +1,7 @@
 import type {VoxelLattice} from './voxel/scene-lattice';
 import {voxelSchema} from './voxel/schema';
 import {imageMatchSchema} from './image-reconstruction';
+import {pairwiseSchema} from './geometry/pairwise-compare';
 import {grayboxSpaceRepairSchema} from './geometry/graybox-space-repair';
 import {expandBlockoutGeometry} from './geometry/blockout-contract';
 import {observationSchema} from './geometry/reference-observations';
@@ -46,6 +47,7 @@ export function modelSchema(role:string,context?:ModelSchemaContext):any {
  if(role==='plan')return obj({name:str,summary:str,capabilities:arr(choice('mapping','consistency')),assumptions:arr(str),requirements:arr(obj({id:str,text:str,critical:bool,weight:num,source:choice('prompt','image','inferred'),evidence:arr(str),count:nullableNum})),...(['scene-quality-v6','scene-quality-v7'].includes(context?.qualityVersion??'')?{acceptanceCriteria:arr(obj({id:str,requirementId:str,dimension:choice('coverage','spatial','shape','material','readability'),description:str,source:choice('prompt','image','inferred'),evidence:arr(str),critical:bool,weight:num}))}:{})});
  if(role==='generate')return obj({name:str,entities:arr(obj({id:str,label:str,kind:choice(...KINDS),role:choice('subject','context','ground'),position:arr(num),size:arr(num),color:str,accent:str,rotation:num,requirementIds:arr(context?.requirementIds?.length?choice(...context.requirementIds):str)})),relations:arr(obj({type:choice('around','on','leftOf','rightOf'),subjects:arr(str),target:str,radius:nullableNum,gap:nullableNum}))});
  if(role==='judge')return obj({...context?.imageGoal?{referenceMatch:imageMatchSchema()}:{},confidence:num,summary:str,specRules:arr(obj({id:str,status:choice('passed','failed','needs_review'),reason:str,frames})),entityCounts:arr(obj({kind:str,visibleMin:num,visibleMax:num,reason:str})),requirements:arr(obj({id:str,verdict:choice('met','partial','missing'),reason:str,frames})),dimensions:arr(obj({id:choice('coverage','spatial','shape','material','readability'),score:num,reason:str,frames})),...(['scene-quality-v6','scene-quality-v7'].includes(context?.qualityVersion??'')?{criteria:arr(obj({id:str,score:num,verdict:choice('met','partial','missing'),reason:str,frames}))}:{})});
+ if(role==='scene-pairwise')return pairwiseSchema();
  if(role==='repair')return obj({reason:str,patches:arr(obj({id:str,field:choice('color','accent','size','position'),value:{anyOf:[str,arr(num)]}}))});
  throw Error('Unsupported model role: '+role);
 }
