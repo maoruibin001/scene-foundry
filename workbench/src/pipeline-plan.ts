@@ -66,6 +66,46 @@ export function compilePipelinePlan(input:any,context:{engineSha:string;generato
  };
  return {id:hash(body),...body};
 }
+/** A retry root records the original denominator; only actual reused work freezes a plan. */
+export function pipelineContinuationSourceId(options:any,checkpointSourceId?:string){
+ return options.pipelinePlanSourceJobId??options.spatialRepairSource?.jobId??options.recoverySourceJobId??options.reuseSceneFrom??options.reusePlanFrom??options.reuseAssessmentFrom??options.reuseFrom??(options.reuseCheckpoint?checkpointSourceId:undefined);
+}
+/** Verify the saved contract itself, rather than recompiling it with today's defaults. */
+export function validateFrozenPipelinePlan(value:any){
+ const fail=(reason:string):never=>{throw Error('PIPELINE_PLAN_INVALID：'+reason);};
+ if(!value||typeof value!=='object'||Array.isArray(value))fail('缺少已保存制作计划');
+ const {id,...body}=value;
+ if(!/^[a-f0-9]{64}$/.test(id??'')||hash(body)!==id)fail('已保存制作计划摘要不一致');
+ if(value.version!==PIPELINE_PLAN_VERSION||!Object.hasOwn(definitions,value.presetId))fail('未知冻结制作计划版本或预设');
+ validateScoreWeights(value.weights);
+ const text=(v:any)=>typeof v==='string'&&v.trim().length>0;
+ if(!/^[a-f0-9]{64}$/.test(value.compilerSha256??'')||!text(value.label)||!text(value.description)||!text(value.engineSha)||!text(value.generatorSha))fail('冻结制作计划来源不完整');
+ if(!value.resources||typeof value.resources.parallelSurface!=='boolean'||!Number.isInteger(value.resources.assetVisualChecks)||value.resources.assetVisualChecks<0||value.resources.assetVisualChecks>4||value.resources.assetPreviewCandidates!==2||value.resources.noGain!==2||value.resources.minGain!==2||!Object.hasOwn(value.resources,'modelSettings'))fail('冻结制作资源契约不完整');
+ if(value.scoring?.version!=='scene-quality-v8'||value.scoring.standard!=='profile70'||value.scoring.minimumScore!==70||value.scoring.rawMinimumScore!==70||value.scoring.independentDimensions!==true)fail('冻结评分契约不完整');
+ const stages=['plan','observe','space','blockout','surface','materials','assets','runtime','judge','repair'];
+ if(!Array.isArray(value.stages)||value.stages.length!==stages.length||value.stages.some((s:any,i:number)=>!s||s.id!==stages[i]||!text(s.label)||!text(s.reason)||!/^[a-f0-9]{64}$/.test(s.contractId??'')||!Array.isArray(s.dependsOn)||new Set(s.dependsOn).size!==s.dependsOn.length||s.dependsOn.some((d:string)=>!stages.slice(0,i).includes(d))||!Array.isArray(s.tools)||s.tools.some((t:string)=>!toolIds.includes(t))))fail('冻结阶段契约不完整');
+ if(!Array.isArray(value.tools)||value.tools.length!==toolIds.length||new Set(value.tools).size!==toolIds.length||toolIds.some(t=>!value.tools.includes(t))||!Array.isArray(value.capabilities)||toolIds.some(t=>value.capabilities.filter((c:any)=>c.id===t&&c.state==='ready'&&typeof c.version==='string'&&c.version).length!==1))fail('冻结工具契约不完整');
+ for(const check of ['complete-assets','critical-requirements','spatial-3.5','engine-hard-checks','trusted-evidence','required-specification','no-count-contradictions'])if(!Array.isArray(value.commonChecks)||!value.commonChecks.includes(check))fail('冻结共同底线缺失：'+check);
+ const surface=value.stages.find((s:any)=>s.id==='surface');
+ if(hash(surface.dependsOn)!==hash([value.resources.parallelSurface?'space':'blockout'])||!value.stages.find((s:any)=>s.id==='assets').dependsOn.includes('blockout'))fail('冻结阶段依赖与制作资源不一致');
+ return structuredClone(value) as NonNullable<PipelinePlan>;
+}
+/** New jobs compile; continuations keep the whole saved plan, including an older compiler digest. */
+export function selectPipelinePlan(input:any,context:{engineSha:string;generatorSha:string;modelSettings?:any},source?:any){
+ if(source===undefined)return compilePipelinePlan(input,context);
+ const choice=pipelineChoice(input);
+ if(!source?.pipelinePlan){
+  if(choice||source?.pipelinePreset||source?.scoreWeights)throw Error('PIPELINE_PLAN_MIGRATION_REQUIRED：历史任务没有冻结制作计划，续接不能注入新预设；请明确新建场景');
+  return undefined;
+ }
+ const plan=validateFrozenPipelinePlan(source.pipelinePlan);
+ if(source.policy?.version!==plan.scoring.version||source.policy?.deliveryStandard!==plan.scoring.standard||source.policy?.score!==plan.scoring.minimumScore||hash(source.policy?.dimensionWeights)!==hash(plan.weights)||source.policy?.dimensionFloor!==0||!Number.isFinite(source.policy?.confidenceFloor)||source.policy.confidenceFloor<.65||source.policy.confidenceFloor>1||!Number.isFinite(source.policy?.minSubmittedFps)||source.policy.minSubmittedFps<10)throw Error('PIPELINE_PLAN_POLICY_MISMATCH：来源评分门槛与冻结制作计划不一致；不能自动重造或放宽');
+ if(!choice||choice.pipelinePreset!==plan.presetId||hash(choice.scoreWeights)!==hash(plan.weights)||source.pipelinePreset!==plan.presetId||hash(validateScoreWeights(source.scoreWeights??plan.weights))!==hash(plan.weights))throw Error('PIPELINE_PLAN_INPUT_MISMATCH：续接预设或评分权重与冻结制作计划不一致');
+ if(plan.engineSha!==context.engineSha||plan.generatorSha!==context.generatorSha)throw Error('PIPELINE_PLAN_RUNTIME_MISMATCH：续接Engine或生成器与冻结制作计划不一致；不自动迁移');
+ if(hash(plan.resources.modelSettings??null)!==hash(context.modelSettings??null))throw Error('PIPELINE_PLAN_MODEL_MISMATCH：续接模型配置与冻结制作计划不一致；不自动覆盖');
+ if((source.matchingLevel??'standard')!==(input.matchingLevel??'standard'))throw Error('PIPELINE_PLAN_INPUT_MISMATCH：续接匹配级别与原任务不一致');
+ return plan;
+}
 export function pipelineGuidance(job:any){
  const p=job.pipelinePlan;if(!p)return '';
  return '本任务固定制作管线为'+p.label+'。实际重点：'+p.description+'。评分权重：'+JSON.stringify(p.weights)+'。所有主体、关键结构与运行检查必须通过。先独立观察与评审，再加权，不按权重猜分。外部GLB/生成工具未接入，不调用未知工具。成图与表面修正保留已验布局及全部参考机位，只有共同底线仍失败且有明确证据时才修结构。';
