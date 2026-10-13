@@ -2,7 +2,7 @@ import {test,expect} from 'bun:test';
 import {join} from 'node:path';
 import {mkdtempSync,mkdirSync,writeFileSync,rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
-import {fitGrayboxSpace,spaceFitRule,GRAYBOX_SPACE_FIT,GRAYBOX_SPACE_FIT_LIMITS} from './graybox-space-fit';
+import {fitGrayboxSpace,spaceFitRule,GRAYBOX_SPACE_FIT,GRAYBOX_SPACE_FIT_LIMITS,occlusionOvershoot,fitOcclusionRule} from './graybox-space-fit';
 import {createGrayboxSpacePreview,GRAYBOX_SPACE_PREVIEW} from './graybox-space-preview';
 import {applyGrayboxSpaceRepair,grayboxSpaceRepairSchema,GRAYBOX_SPACE_REPAIR} from './graybox-space-repair';
 import {applyGrayboxLocalParts} from './graybox-local-parts';
@@ -18,6 +18,32 @@ const measurer=(goal=2)=>(patch:any)=>{
  return {rows:[{targetId:'ta',referenceIndex:1,instanceIds:['a'],edgeResidual:ea,sourceDelta:{edgeResidual:ea-goal/10}},{targetId:'tb',referenceIndex:1,instanceIds:['b'],edgeResidual:eb,sourceDelta:{edgeResidual:eb}}]};
 };
 const jointFit=(r:any)=>({passed:r.rows[1].edgeResidual<.05});
+
+// Occluded target: moving 'a' in +x gives a tiny edge-residual gain but exposes the target (outsideTargetFraction grows).
+const occMeasurer=(patch:any)=>{
+ const a=patch.instances.find((i:any)=>i.id==='a')??space.program.instances.find(i=>i.id==='a');
+ const x=a.position[0],ea=Math.abs(x-2)/100,outside=Math.min(1,Math.max(0,x)/2);
+ return {rows:[{targetId:'ta',referenceIndex:1,instanceIds:['a'],extent:'occluded',edgeResidual:ea,outsideTargetFraction:outside,spanRatio:[1,1],sourceDelta:{edgeResidual:ea-0.02}}]};
+};
+test('遮挡项：开启后拒绝靠暴露被遮挡目标换取的边缘小改善',()=>{
+ const common={space,basePatch:base(),instanceIds:['a'],referenceIndices:[],measure:occMeasurer,sourceReport:()=>occMeasurer(base()),jointFit:()=>({passed:true})} as any;
+ const without=fitGrayboxSpace(common);
+ const withOcc=fitGrayboxSpace({...common,occlusion:true});
+ const xw=without.patch.instances.find((i:any)=>i.id==='a')?.position[0]??0;
+ const xo=withOcc.patch.instances.find((i:any)=>i.id==='a')?.position[0]??0;
+ expect(xw).toBeGreaterThan(0.5);              // without occlusion it moves to expose (lower edge residual)
+ expect(xo).toBeLessThan(xw);                  // occlusion keeps it from exposing the occluded target
+ expect(withOcc.report.improved).toBe(false);  // nothing beats the base once exposure is penalised
+});
+test('occlusionOvershoot 只罚遮挡/部分目标的超出暴露；fitOcclusionRule 由策略开关控制',()=>{
+ expect(occlusionOvershoot({extent:'full',outsideTargetFraction:0.9})).toBe(0);
+ expect(occlusionOvershoot({extent:'unknown',outsideTargetFraction:0.9})).toBe(0);
+ expect(occlusionOvershoot({extent:'occluded',outsideTargetFraction:0.5,spanRatio:[1,1]})).toBeCloseTo(0.5,5);
+ expect(occlusionOvershoot({extent:'partial',outsideTargetFraction:0.2,spanRatio:[1.4,1]})).toBeCloseTo(0.4,5);
+ expect(fitOcclusionRule({grayboxFitOcclusionPolicy:'graybox-fit-occlusion-v1'})).toBe(true);
+ expect(fitOcclusionRule({})).toBe(false);expect(fitOcclusionRule(null)).toBe(false);
+});
+
 
 test('数值拟合降低已测残差，每个采用候选通过jointFit，越过跨目标退步即停',()=>{
  const r=fitGrayboxSpace({space,basePatch:base(),instanceIds:['a'],referenceIndices:[],measure:measurer(),sourceReport:()=>measurer()(base()),jointFit});
