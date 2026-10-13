@@ -1,7 +1,7 @@
 import { callLog } from "./call-log";
 import { Reader, safeId } from "./reader";
-import { normalize, arr, timestamp, active, jobTiming } from "./model";
-import { statSync } from "node:fs";
+import { normalize, arr, timestamp, active, jobTiming, ASSET_MODEL_ROLES, assetAttemptArchives, assetModelAttemptFolders } from "./model";
+import { statSync, lstatSync } from "node:fs";
 import { assetPreviewSvg } from "./asset-preview";
 import { grayboxSnapshot } from "./graybox";
 const FIXED = [
@@ -19,7 +19,7 @@ const FIXED = [
   "materials/texture-provenance.json",
 ];
 const FILE =
-  /^(?:[a-zA-Z0-9_-]+-(?:execution|receipt|failure)\.json|space\.json|surface\.json|layout\.json|checkpoints\.json|repair-(?:goals|history)\.json)$/;
+  /^(?:[a-zA-Z0-9_-]+-(?:execution|receipt|failure|attempts|recovery)\.json|space\.json|surface\.json|layout\.json|checkpoints\.json|repair-(?:goals|history)\.json)$/;
 export class Source {
   reader: Reader;
   indexCache: any;
@@ -152,6 +152,7 @@ export class Source {
     const { kind, id, base } = this.locate(key),
       r = this.reader.session(),
       files: Record<string, any> = {};
+    const assetReaders: ReturnType<Reader["session"]>[] = [];
     const mediaReadStart = this.reader.mediaReadBytes;
     let job: any;
     if (kind === "run") job = r.json(`${base}/job.json`);
@@ -200,20 +201,49 @@ export class Source {
       files["generation/checkpoints.json"] ?? files["checkpoints.json"];
     for (const s of arr(checkpoint?.steps).slice(0, 32)) {
       if (!safeId(s.id)) continue;
+      // Independent, bounded evidence reads keep one template's retry history from starving another template.
+      const evidence = this.reader.session(512 * 1024);
+      assetReaders.push(evidence);
       for (const folder of ["generation/assets/", "assets/"]) {
-        for (const f of [
-          "checkpoint.json",
-          "input.json",
-          "geometry-asset-execution.json",
-          "geometry-asset-receipt.json",
-          "geometry-asset-failure.json",
-        ]) {
-          const rel = `${folder}${s.id}/${f}`,
-            value = r.json(`${base}/${rel}`);
+        const assetDir = `${folder}${s.id}`, checkpointPath = `${assetDir}/checkpoint.json`, assetCheckpoint = evidence.json(`${base}/${checkpointPath}`);
+        if (assetCheckpoint) files[checkpointPath] = assetCheckpoint;
+        const attemptFolders = assetModelAttemptFolders(assetCheckpoint).folders.filter(relative => {
+          try {
+            const stat = lstatSync(`${this.reader.root}/${base}/${assetDir}/${relative}`);
+            if (stat.isDirectory() && !stat.isSymbolicLink()) return true;
+            evidence.warnings.push(`${assetDir}/${relative}: 修正调用文件夹必须为模板内真实目录，不能为符号链接`);
+          } catch { evidence.warnings.push(`${assetDir}/${relative}: 修正调用文件夹暂不可读`); }
+          return false;
+        });
+        for (const relative of ["", ...attemptFolders]) {
+          const callDir = relative ? `${assetDir}/${relative}` : assetDir;
+          for (const f of [
+            ...ASSET_MODEL_ROLES.flatMap(role => ["attempts", "recovery", "execution", "receipt", "failure", "input-receipt", "invalid-receipt"].map(suffix => `${role}-${suffix}.json`)),
+          ]) {
+            const rel = `${callDir}/${f}`,
+              value = evidence.json(`${base}/${rel}`);
+            if (value) files[rel] = value;
+          }
+          for (const role of ASSET_MODEL_ROLES)
+            for (const archive of assetAttemptArchives(`${callDir}/${role}`, files))
+              for (const suffix of ["execution", "receipt", "failure", "input-receipt"]) {
+                const rel = `${archive}/${suffix}.json`, value = evidence.json(`${base}/${rel}`);
+                if (value) files[rel] = value;
+              }
+        }
+        for (const relative of ["", ...attemptFolders]) {
+          const rel = `${assetDir}/${relative ? relative + "/" : ""}input.json`, value = evidence.json(`${base}/${rel}`);
           if (value) files[rel] = value;
         }
       }
     }
+    // A standalone diagnostic can use the same entity role without an enclosing asset checkpoint.
+    for (const role of ASSET_MODEL_ROLES)
+      for (const archive of assetAttemptArchives(role, files))
+        for (const suffix of ["execution", "receipt", "failure", "input-receipt"]) {
+          const rel = `${archive}/${suffix}.json`, value = r.json(`${base}/${rel}`);
+          if (value) files[rel] = value;
+        }
     if (kind === "diagnostic") {
       const calls = Object.entries(files)
         .filter(([f]) => /-execution\.json$/.test(f))
@@ -226,6 +256,8 @@ export class Source {
           ? "space"
           : f.includes("scene-surface")
             ? "surface"
+            : ASSET_MODEL_ROLES.some(role => f.endsWith(`/${role}-execution.json`) || f === `${role}-execution.json`)
+              ? "assets"
             : f.replace(/-execution\.json$/, "");
         job.stages[stage] = {
           ...e,
@@ -320,8 +352,8 @@ export class Source {
         observedAt: new Date().toISOString(),
         adapterVersion: "scene-observer-v1",
       },
-      warnings: [...new Set([...r.warnings, ...model.adapterWarnings, ...graybox.warnings])],
-      io: { ...r.stats(), mediaReadBytes: this.reader.mediaReadBytes - mediaReadStart },
+      warnings: [...new Set([...r.warnings, ...assetReaders.flatMap(s => s.warnings), ...model.adapterWarnings, ...graybox.warnings])],
+      io: { readBytes: r.stats().readBytes + assetReaders.reduce((n,s) => n+s.stats().readBytes,0), reads: r.stats().reads + assetReaders.reduce((n,s) => n+s.stats().reads,0), mediaReadBytes: this.reader.mediaReadBytes - mediaReadStart },
     };
     if (this.detailCache.size >= 12)
       this.detailCache.delete(this.detailCache.keys().next().value!);
@@ -330,9 +362,14 @@ export class Source {
   }
   call(key: string, call: string, stream: string) {
     const detail = this.detail(key);
-    if (!detail.calls.some((entry: any) => entry.id === call)) throw Error("调用不属于当前记录");
+    const entry = detail.calls.find((entry: any) => entry.id === call);
+    if (!entry) throw Error("调用不属于当前记录");
     const { base } = this.locate(key);
-    return { key, call, observedAt: new Date().toISOString(), ...callLog(this.reader, base, call, stream) };
+    // Archived attempts use unprefixed filenames. Reuse the bounded log reader with this allowlisted path mapping.
+    const reader = entry.archiveDir ? { path: (rel: string) => this.reader.path(rel.replace(`${base}/${call}-`, `${base}/${entry.archiveDir}/`)) } as Reader : this.reader;
+    const result = callLog(reader, base, call, stream);
+    return { key, call, observedAt: new Date().toISOString(), ...result,
+      file: entry.archiveDir ? result.file.replace(`${call}-`, `${entry.archiveDir}/`) : result.file };
   }
   assetPreview(key: string, assetId: string) {
     if (!safeId(assetId)) throw Error("无效资产");

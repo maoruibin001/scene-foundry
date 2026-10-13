@@ -28,11 +28,11 @@ export function assetPreviewScene(value:any,brief:any,layout:any){
  const program={version:'geometry-v1',name:brief.label,materials,templates:[value.template],instances:[{id:'asset',label:brief.label,template:brief.id,position:[0,0,0],rotation:[0,0,0],scale:[1,1,1],requirementIds:[]}]},inspection=assetInspectionCameras(program,brief);
  return {version:'scene-v1',program,entities:[{instanceId:'asset',role:'subject',category:'asset-inspection'}],spatialOpenings:[],textures:layout.textures.filter((t:any)=>textures.has(t.id)),textureReuse:(layout.textureReuse??[]).filter((t:any)=>textures.has(t.textureId)),cameras:inspection.cameras,lighting:{direction:[.4,-.6,-.7],color:[1,1,1],intensity:1.8,ambientColor:[1,1,1],ambientIntensity:.5,points:[]},assumptions:['独立资产检查机位和辅助照明，不是参考图机位或最终场景效果',...(inspection.detail?['稀疏细长构件使用两个局部细节机位；整体关系仍须在完整场景验收中判断']:[])]};
 }
-export function createAssetReview(options:{brief:any;layout:any;textures:any;images:any[];folder:string;signal:AbortSignal;context?:AssetSceneContext;acceptedScene?:any;voxel?:boolean;render?:typeof renderRepairPreview}){
+export function createAssetReview(options:{brief:any;layout:any;textures:any;images:any[];folder:string;signal:AbortSignal;context?:AssetSceneContext;acceptedScene?:any;voxel?:boolean;validationIdentity?:string;validateCandidate?:(value:any)=>any;render?:typeof renderRepairPreview}){
  const {brief,layout,textures,folder,signal}=options;mkdirSync(folder,{recursive:true});
- const validate=(value:any)=>{assertProceduralHandoff(value,options.acceptedScene??options.context?.scene);return validateAllocatedAsset(value,brief,layout,textures);};
+ const validate=(value:any)=>{assertProceduralHandoff(value,options.acceptedScene??options.context?.scene);return options.validateCandidate?options.validateCandidate(value):validateAllocatedAsset(value,brief,layout,textures);};
  const contextContract=options.context?assetContextContract(layout,options.context):null;
- const contractInputs:any[]=[brief,layout.program.materials,options.images.map(i=>digest(readFileSync(i.path)))];if(contextContract)contractInputs.push(contextContract);
+ const contractInputs:any[]=[brief,layout.program.materials,options.images.map(i=>digest(readFileSync(i.path)))];if(contextContract)contractInputs.push(contextContract);if(options.validationIdentity)contractInputs.push(options.validationIdentity);
  const file=join(folder,'asset-preview-audit.json'),contract=digest(stable(contractInputs));
  const audit=existsSync(file)?read(file):{contract,attempts:[],used:0};if(audit.contract!==contract)throw Error('资产预览恢复契约发生变化');
  let busy=false;

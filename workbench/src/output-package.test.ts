@@ -4,7 +4,7 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {spawnSync} from 'node:child_process';
 
-const sidecars=['delivery-assessment.json','assessment-evidence.json','reconstruction-goal.json','image-reconstruction.json'];
+const sidecars=['voxel-detail-basis.json','voxel-detail-validation.json','delivery-assessment.json','assessment-evidence.json','reconstruction-goal.json','image-reconstruction.json'];
 function fixture(){
  const root=mkdtempSync(join(tmpdir(),'output-package-'));
  const job={id:'job',status:'failed',stages:{build:{status:'passed'}},profile:{engineSha:'engine'}};

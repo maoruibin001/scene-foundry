@@ -1,118 +1,143 @@
-# 体素场景"精修阶段"实现方案（交接文档）
+# 体素场景逐模板精修：本地实现与验收交接
 
-状态：**待实现**，交由其他 agent 完成。日期：2026-10-13。
-目标读者：接手体素管线的 agent。本文给出根因、设计、精确的代码落点、测试与验证约束，使其无需重新调查即可实现。
+状态：**本地实现与完整离线回归通过；未部署，未进行真实模型 + Engine 网页 E2E**。日期：2026-10-13。本轮文档和离线验证使用 **0 次真实模型调用、0 次真实 Engine 场景渲染**；测试总数及最终通过结果由本次交付报告记录，本文不预填尚未完成的统计。
 
-代码基线：公共仓库 `main`（当前 `fb575f4`）。所有路径相对 `workbench/`。相关背景见 [普通管线总览](scene-pipeline-overview.md) 与 [体素运行说明](voxel-scenes.md)。
+代码起点：公共仓库 `main` 的 `04b122e`。本文描述其上的本地工作树实现，不表示这些改动已经进入 `main`、运行中的服务或发布版本。下文源码路径相对 `workbench/`；背景见 [普通管线总览](scene-pipeline-overview.md) 与 [体素运行说明](voxel-scenes.md)。
 
----
+## 1. 问题与证据边界
 
-## 1. 问题与证据
+原稿针对已观察到的简陋体素产物提出逐实体精修，但把当前正常新任务误写成“一次模型调用生成全部实体”。源码审计纠正了这一前提：正常新体素任务已经有共享布局、真实灰模验收、逐模板详细资产制作和最终体素转换。
 
-体素场景产出"太过简陋"：一次真实渲染是一坨方块糊在底板上，几乎看不出场景。已完成体素作业的实测用量（预算在 `src/voxel/limits.ts`，`VOXEL_LIMITS`）：
+原稿的 `operations≤512`、`boxesPerEntity≤128` 和历史操作数/占用数来自旧 `VoxelProgram` 契约，不能直接用于衡量原生 `voxelVolume` 详细资产。使用更多预算、更多部件或更多占用格，也不能单独证明画面更精细或更接近原图。
 
-| 预算项 | 上限 | 实测（多份作业） |
+本次要解决的是：在已有逐模板制作位置提供明确的体素细节职责，把已接受种子、共同格网、边界、材料、预算、开口和所有权作为程序契约，并对独立工作者合并时才出现的精确冲突给出一次有界反馈。真实模型能否据此增加有依据的细节，尚待授权后的实际画面验证。
+
+## 2. 当前主路径与 legacy 分支
+
+`src/runner.ts` 的 `createJob` 冻结策略，`src/geometry/run.ts` 的 `runGeneralScene` 执行生成。
+
+| 分支 | 基线已有行为 | 本次变化 |
 |---|---|---|
-| entities | 64 | 9–10 |
-| operations | 512 | ~40–50 |
-| filledCells | 500000 | 13k–40k（2.6%–8%） |
-| boxesPerEntity | 128 | 很少 |
-| cellSize | 可选 0.025–1 米 | 多为 0.2 米（偏粗） |
+| 正常新体素任务 | 默认共同格网 `voxel-lattice-v1`；观察/空间规划 → 灰模验收 → 材料 → `collectAssetWorkers` 并发调用 `generateOneAsset` → 合并 → 最终体素转换 | 新任务默认 `voxelDetailPolicy='voxel-detail-v1'`；逐模板制作专门化为 `voxel-entity`，增加冻结分配和保留/合并校验 |
+| 历史原生体素任务 | 已有共享几何与逐模板资产流程 | 继承来源策略；来源没有该字段则保持 `null`，继续原有角色与行为 |
+| legacy 体素场景 | 缺少 `voxel-source-scene.json` 的旧来源复用分支，使用 `generateVoxelScene` / `voxel-scene` 全场景 `VoxelProgram` 调用及 `compileVoxelScene` | 保留 legacy 契约，不把它改造成新精修入口 |
+| 普通场景 | 逐模板 `geometry-asset` 制作 | 不启用体素精修策略 |
 
-预算用了不到十分之一。
-
-## 2. 根因
-
-**体素管线缺少普通管线的"逐资产精修"阶段**，整个多实体场景由**一次**模型调用全部产出。
-
-- 入口：`src/geometry/run.ts` 第 96 行（主路径）与第 209 行（视觉修正）各调用 `generateVoxelScene(...)` **一次**。
-- `src/voxel/generate.ts` 的 `generateVoxelScene`：单次 `callValidated({role:'voxel-scene', maxTokens:18000, ...})` 产出整份 `VoxelProgram`（全部 entities 及其 operations），随后 `compileVoxelScene` 直接编译为最终几何。文件里那个"逐实体"循环（第 24–30 行）只是把已生成的 program 打包成资产条目，**不是精修**。
-
-对比普通管线（`src/geometry/run.ts` 的 `assets` 阶段）：细节来自**每个模板一次聚焦的模型调用** `generateOneAsset`（`src/geometry/generate.ts:94`），带独立预览/评审。体素没有这一步，一次调用要画完所有实体，模型只能粗粗带过 → 简陋。
+“历史没有新策略字段”不等于“必然走整场景单次生成”。是否 legacy 由原有来源/构造版本分支决定，精修策略只控制已有资产制作位置的专门化。
 
 ## 3. 目标与验收标准
 
-给体素补上"逐实体（或逐组件组）精修"阶段。验收：
+- **机制正确**：新体素任务在正常逐模板资产入口使用 `voxel-entity`；同形实例共用模板，不再追加“整场景生成后再逐实体生成”的第二遍付费流程。
+- **结构保留**：已接受种子的身份、原生整数构造、填充/挖空顺序和姿态精确保留；新增细节在冻结边界、格网、材料和分配内，不能封堵既有净空或侵入其他实体。
+- **全局正确**：合并重新检查唯一模板预算、实例展开占用、实际世界格所有权和开口；局部验证通过不能代替合并验证。
+- **实际画面**：授权 E2E 后，按同一原图和参考机位比较结构、开口、层次与可读性；灰模空间门槛和原图对照继续独立判定。
+- **兼容和成本**：普通任务、历史无字段任务与 legacy 分支保留既有行为；调用、预览、并发和恢复仍受既有策略约束。
 
-- **预算利用显著提升**：entities 匹配规划所需独立组件数；operations/filledCells/boxes 用量相对基线（9–10 / 40–50 / 13–40k）大幅提高且在 `VOXEL_LIMITS` 内。
-- **视觉**：渲染不再是单块糊团，能看出各实体结构、开口、层次。
-- **门槛不回退**：体素灰模空间门槛（空间≥3.5、关键≥3、置信≥0.6）与原图对照不比精修前差。
-- **策略开关 + 向后兼容**：仅新体素任务启用；普通任务与历史体素任务行为不变；`compileVoxelScene` 的 64 实体/各项预算/单一所有者校验仍然生效。
+灰模空间闸门仍为整体 ≥3.5/5、关键关系各 ≥3/5、置信度 ≥0.6。代码和离线测试只证明相应约束能被执行；本次**不承诺格距变细、不承诺预算用满，也不承诺稳定达到 basic70 或原图还原通过**。
 
-## 4. 设计：逐实体精修阶段
+## 4. 已实现流程
 
-在"单次全场景生成"与"编译"之间插入阶段，镜像普通管线的 assets 阶段：
-
+```text
+现有原图观察与共同格网空间规划
+  → 现有真实灰模验收，保存已接受的 native voxelVolume 种子
+  → 冻结模板 bounds / 格距 / 材料表 / 实例与机位 / 预算分配
+  → 现有 collectAssetWorkers → generateOneAsset
+       voxel-detail-v1：voxel-entity，完整单模板 asset-geometry-v1
+       未开启策略：现有 geometry-asset
+  → 局部预算、种子交接、世界格所有权和开口保留检查
+  → 全局预算 + 新增世界格所有权 + 全部开口检查
+       精确新增冲突：冻结其他模板，最多一次协调修正
+  → 现有最终体素转换 / scene.vox / metrics / Engine 资源
+  → 现有 runtime / judge / gate / 有界质量修正与最佳候选保留
 ```
-coarse 全场景规划 → 冻结每实体格对齐 bounds/所有权 + 共同格距 + 调色板
-   → 逐实体聚焦精修（每实体一次调用，受冻结 bounds 约束，用满该实体预算）
-   → 合并为 VoxelProgram → compileVoxelScene 全场景校验（重叠/预算/占用）
-   → 现有编译/scene.vox/metrics/assets → 现有预览/runtime/judge/视觉修正
-```
 
-1. **Coarse（复用现有调用，改语义为"粗规划"）**：保留 `voxel-scene` 调用，但其产物只需定义：entities（id/label/role/requirementIds）、每实体**格对齐 bounds**（世界边界，整数倍 cellSize，含共同格网约束）、palette、cameras、lattice，以及**最小 operation 草图**（占位体量）。给 coarse 一个小的 per-entity 操作预算。
-2. **冻结**：按共同格网冻结每实体 bounds 与所有权区域、`cellSize`、palette。复用 `src/voxel/geometry-lattice.ts` 的格对齐与 `src/voxel/program.ts` 的所有权逻辑。
-3. **逐实体精修**：对每个实体（或按 `requirementIds`/区域分组）一次聚焦调用：
-   - 新 role `voxel-entity`（见第 6 节 schema/prompt），输出该实体的完整 `operations[]`（fill/erase/paint × box/ellipsoid/ramp），**坐标限制在该实体的冻结格 bounds 内**，用到该实体的 operation/box/filled 份额（`boxesPerEntity=128` 等）。
-   - 输入：原图（可裁到该实体在各参考机位的投影框）、实体 label/role/bounds、coarse 场景上下文、共同格距、冻结 palette。
-   - `validateFinal`：对该实体做"局部编译"校验——所有格落在冻结 bounds 内、不与已冻结的其他实体所有权冲突、不越预算。
-   - 并发：复用 `src/geometry/asset-workers.ts` 的 `collectAssetWorkers`（有界并发）。
-4. **合并与全场景校验**：把各实体 operations 合入 `VoxelProgram`，调用现有 `compileVoxelScene(program, plan, imageCount)`（`src/voxel/program.ts`）做最终校验：跨实体单一所有者、`overlap` 规则、`filledCells≤500000`、每实体非空、主体不被整体遮没。
-5. 其后与现状一致：`voxel-metrics.json`/`scene.vox`/assets，再走体素预览→runtime→judge→（现有整场景）视觉修正。
+`voxel-entity` 返回完整的 `asset-geometry-v1` 模板，部件使用原生 `voxelVolume`，内部为有序 `fill` / `erase` 和可选 `repeat`。它不是 literal v1 全场景 `entities[].operations`，也不是只返回一份裸 operations 列表。颜色使用冻结材料绑定；原生体积操作没有另加 `paint` 协议。
 
-## 5. 要镜像的现有模式（普通 assets 阶段锚点）
+strict native 当前要求 `textureId=null`，表面通过冻结 palette/material 的颜色、roughness、metallic、emission 等属性表达。本次不增加原图 PBR 贴图，也不因材料属性合法而宣称原图色彩、光照或材质还原通过。
 
-- 逐资产调度：`src/geometry/run.ts` assets 阶段用 `collectAssetWorkers(pending, concurrency, signal, worker, stopOn, {partialOnTimeout})`。
-- 单资产生成：`generateOneAsset(ctx, layout, brief, textures)`（`src/geometry/generate.ts:94`）——聚焦 prompt + 该资产证据 + `validateFinal` + 可选预览评审（`createAssetReview`）。
-- 重点挑选/预览名额：`prioritizeAssets` / `selectAssetPreviews`（`src/geometry/asset-priority.ts`）。
-- 体素几何指导：`voxelGeometryGuidance(lattice)` 与 `src/voxel/construction-guidance.ts` 的 `VOXEL_STRICT_SPACE_GUIDANCE` / 组件组指导字符串（可据此派生 per-entity 精修指导）。
+独立预览沿用已有重点模板选择、名额和候选上限。构造工具、预览、部分检查点与最终保存使用同一精修校验；新 role 复用已经审计的资产工具能力与模型路由，不增加新模型或权限。进度仍通过现有 `generation-progress` 的 phase/completed/total 表达，逐模板耗时归属 `assets` 阶段。
 
-## 6. 具体实现步骤
+## 5. 预算与保留契约
 
-1. **Schema/role**：在 `src/model-schema.ts` 加 role `voxel-entity`，返回"单实体 operations"schema（复用 `src/voxel/schema.ts` 的 operation 结构，但限定在传入 bounds 内、不含 entities 数组）。在 `normalizeModelValue` 按需透传。
-2. **构造指导**：在 `src/voxel/construction-guidance.ts` 新增 `VOXEL_ENTITY_DETAIL_GUIDANCE`——要求在冻结 bounds 内用有序 fill/erase/repeat 表达体量/斜坡/厚度/开口/层次，用满该实体预算，不得越界、不得改格距、不得封堵净空。
-3. **生成流程**：改 `src/voxel/generate.ts`：
-   - 抽出 coarse 调用与 per-entity 精修两段。
-   - 按策略分支：有 `job.voxelDetailPolicy` 走新流程；否则保持当前单次调用（历史/未开启不变）。
-   - per-entity 用 `collectAssetWorkers` 并发；每实体 `callValidated({role:'voxel-entity', schemaContext:{bounds, cellSize, palette, requirementIds}, ...}, dir, validateEntity)`。
-   - 合并后调用现有 `compileVoxelScene` 做权威校验（不要绕过）。
-4. **局部校验器**：在 `src/voxel/program.ts`（或新 `voxel/entity-detail.ts`）加 `compileEntityDetail(entity, frozenOwners, bounds, lattice, palette)`，供 per-entity `validateFinal`；跨实体合并仍以 `compileVoxelScene` 为准。
-5. **预算拆分**：coarse 小预算；per-entity 份额合计不超过 `VOXEL_LIMITS`（operations 512、boxes 2048、filledCells 500000）。在合并处断言总量。
-6. **策略开关**：`src/runner.ts createJob` 为新体素任务（`parsed.sceneKind==='voxel'`）设 `job.voxelDetailPolicy='voxel-detail-v1'`（source 继承、普通任务为 null、历史无此字段）。放在现有 `voxelConstructionVersion=` 一带，遵循既有 `job.*Policy` 模式。
-7. **进度/事件**：精修阶段发 `generation-progress` 事件（phase + completed/total），与普通管线一致，便于网页观察。
+预算权威是 `src/geometry/voxel-volume.ts` 的 `VOXEL_VOLUME_LIMITS`、现有资产/场景预算及 `src/voxel/entity-detail.ts` 的冻结分配。旧 v1 的 512 操作和 boxes 计数不替代这些数值。
 
-## 7. 向后兼容与策略门控
+| 指标 | 当前上限/计法 | 校验方式 |
+|---|---|---|
+| 唯一模板 native gridCells | 全程序 ≤4,000,000；单个 volume ≤2,000,000 | 各模板所有原生体积的 dimensions 乘积累计，含空格；同形实例不会重复算模板存储 |
+| 唯一模板 operationCells / writes | 全程序 ≤32,000,000；单个 volume ≤16,000,000 | 按 fill/erase 的 cuboid 大小及 repeat 次数累计写入，不因重叠或挖空返还预算 |
+| 实例展开 occupiedCells 上界 | 全场景 ≤500,000 | 先求有序操作后的实际占用，再按模板实例倍数累计；不以空 bounds 代替占用，也不靠重复交叠返还份额 |
+| 原生 volume 操作 | 每部件 ≤256 条，repeat ≤128，展开操作 ≤2048 | 仍服从现有部件数、轴长、实际网格/三角形与复杂度约束 |
+| 语义实体/实例 | 现有体素上限 ≤64，含 ground/context/subject | 合并和最终转换继续检查 |
 
-- 新 role、新 guidance、新流程**只在 `job.voxelDetailPolicy` 存在时生效**；历史体素任务（无此字段）走原单次调用，重放不变。普通（非体素）任务完全不受影响。
-- `compileVoxelScene` 作为最终权威校验保持不变——64 实体/预算/所有权/非空等硬约束继续兜底。
+`allocateVoxelEntityDetails` 先为每份已接受种子预留真实用量，再分配剩余容量。实例数会影响占用份额；总份额不能超过全局上限。种子本身超限时明确失败，不通过缩小种子、改格距或均分预算掩盖问题。maximum 是上限，不能作为生成无关细节的目标。
 
-## 8. 测试
+精修保留以下内容：
 
-- **单元（`bun test ./src`，纯/可离线）**：
-  - `compileEntityDetail` 的 bounds 约束、跨实体冲突、预算上限。
-  - 合并后 `compileVoxelScene` 对新路径产物仍通过既有断言。
-  - 预算拆分断言（coarse + 各实体 ≤ VOXEL_LIMITS）。
-  - 策略开关：有/无 `voxelDetailPolicy` 分别走新/旧路径（可用 mock 的 `callValidated` 注入假 program/entity 输出）。
-  - role `voxel-entity` 的 schema 形状。
-- **E2E（唯一算数的验收路径 = 网页用户路径）**：隔离服务 + 独立 DATA，用一个体素参考图场景走完整流程，核对第 3 节验收标准（预算利用、渲染非糊团、灰模/原图门槛不回退）。
+- **种子几何**：原 id、shape、操作顺序和 position/rotation/scale 精确交接；已有契约允许按冻结材料表调整材质/UV，不能借此改变几何。
+- **格网与边界**：共同 cellSize/origin、模板 bounds、实例位姿和参考机位冻结；详细资产严格位于原边界内，不使用普通几何的 5% 容差扩张。
+- **材料与需求**：使用冻结的材料 ID 和模板绑定；不能重划需求、所有权或新增无依据实体。
+- **所有权**：检查真实占用格经过部件与每个实例的世界变换后的所有者，包含重复实例与 90° 转换。历史灰模已有的同一占用关系不冒充新冲突，但新增细节不得侵入其他实体的已接受格。
+- **开口**：灰模检查中原本 clear 的采样点逐点保持 clear；合并再检查其他模板新增部件造成的遮挡，不以整体通过比例掩盖单点回退。
+
+## 6. 实现落点、合并反馈与证据
+
+| 源码 | 职责 |
+|---|---|
+| `runner.ts`、`voxel/entity-detail.ts` | 新任务默认策略、来源继承、模板预算分配、局部和全局 native 预算校验 |
+| `model-schema.ts`、`voxel/entity-schema.ts`、`voxel/construction-guidance.ts` | `voxel-entity` 完整单模板 schema，限制模板 ID、材料、部件数和原生构造；明确种子与净空保留职责 |
+| `geometry/generate.ts` | 在现有 `generateOneAsset` 中选择 role 和校验；沿用构造工具、证据、重点预览和最终保存 |
+| `voxel/detail-ownership.ts` | 局部种子/世界格/开口保留，以及独立工作者合并后的新增所有权与开口校验 |
+| `voxel/detail-merge.ts`、`geometry/run.ts` | 精确合并冲突反馈、单模板一次协调修正、全局复验和选中输出 |
+| `geometry/checkpoints.ts`、`geometry/asset-cache.ts`、`stage-contract.ts`、`validated-cache.ts` | 策略和校验依赖进入来源/复用契约；不同 accepted seed 或策略不能冒充同一缓存 |
+| `timing-snapshot.ts`、`process-observer/model.ts`、`process-observer/source.ts` | 新旧 role、结构尝试与供应商恢复证据，按实际目录读取调用，保留旧日志和未知用量 |
+
+独立验证通过的兄弟模板可能在新增格或开口上冲突。`mergeVoxelDetails` 仅对**明确的新增所有权冲突或新增部件封堵已接受开口**生成 `voxel-detail-merge-feedback-v1`：包含精确错误、目标模板和冻结的兄弟模板。预算不足、身份缺失、种子改变、取消或无可修正目标不被改写成可重试的冲突。
+
+最多一次协调修正，修正候选必须与所有冻结兄弟重新合并并通过全部检查，才能被选择。仍有冲突、调用/时间预算不足或被取消时明确停止，不能重新生成全场景、换目标或循环修正。
+
+修正调用保存到 `generation/assets/<template>/detail-repair-1/`，旧顶层 role 日志原样保留。主 checkpoint 在发起修正前声明 `modelAttemptFolders=['detail-repair-1']` 和 `detailRepair`，失败调用也可被观察；成功后才选择新 geometry/checkpoint。`modelAttemptFolders` 最多两个单层相对目录，禁止绝对路径、`../`、嵌套和符号链接，重复声明不会重复计数。
+
+证据包括 `generation/voxel-detail-allocation.json`、逐模板 `voxel-detail-input.json` / `voxel-detail-metrics.json`、`voxel-detail-assembly.json`、`voxel-detail-ownership.json`、冲突反馈及修正记录。耗时/调用数来自各目录自己的 receipt、execution、attempts 和 provider recovery，不从 global 账本差额推算；继承资产的新修正计本次调用，旧源调用标为历史。缺少证据时保留未知。
+
+## 7. 策略门控与后续质量修正
+
+新体素任务默认 `voxel-detail-v1`。恢复、检查点和来源任务继承来源策略；历史来源缺少字段时为 `null`。普通任务不启用，未知策略版本被拒绝；历史缺字段的契约指纹和 legacy `generateVoxelScene` / `compileVoxelScene` 行为保留。
+
+有界质量修正、候选快照、最佳候选恢复及最终保存也必须保留同一细节契约：校验 accepted seed、冻结 allocation、原边界/格网/材料、实例展开占用、开口和所有权，不能在首次合并后放松条件。后续修正仍按现有策略、调用账本、停止条件和真实重新渲染/评审执行；选中与下载必须对应同一候选。相关收口代码与测试以本次最终交付结果为准。
+
+成本按正常首轮的 **N 个模板主调用 + 原有有限结构纠错/供应商恢复/重点预览 + 至多一次合并协调修正入口** 计算。N 是唯一模板数，不是实例数。一次协调修正不是额外的一轮全场景生成；其内部已有纠错/恢复若实际发生，也必须计入总调用与授权预算，不能以“N+1”作为全部实际请求数的保证。
+
+## 8. 离线测试与待授权 E2E
+
+定向测试覆盖策略默认/继承、完整单模板 schema、实际 `generateOneAsset` 的 role 派发、原生预算分配与早期拒绝、种子精确保留、严格边界和共同格网、重复实例/世界格所有权、开口逐点保留、独立工作者合并冲突与一次协调反馈、工具/预览/部分检查点、后续质量修正和复用契约、调用观察与耗时去重。最终完整回归为 **1354 项通过、0 项失败、141746 个断言，225 个测试文件**；后端 244 模块和前端 22 模块构建通过。首轮回归曾因独立 DATA 缺少 Python 环境和固定材质目录出现 16 项失败；补齐只读 Python 环境入口、独立复制两项固定材质后，相关 48 项复核及最终全套回归通过。未复制历史 job、上传、调用账本或调度状态。mock 输出和 fixture 不计真实模型生成。
+
+授权后建议只做一轮隔离验证，固定候选提交、输入 SHA、模型路由、通过标准、总调用上限及停止条件：
+
+1. **一个新体素任务**：通过网页普通创建入口，使用固定的小场景参考输入，含明确门洞和重复构件，选择首次生成模式。核对新策略、逐模板 role、冻结分配、原生构造及最终 Engine 同机位画面；比较已接受灰模与最终画面的开口/层次，并读取正式评分和逐图原图对照。
+2. **一个普通路径 control**：通过同一网页入口选择普通场景方式，使用固定输入、相同复杂度和已授权模型配置，核对策略为 null、角色仍为 `geometry-asset`，正常运行和交付路径可用。它只作为本次相关兼容回归，不能代替稳定性统计。
+
+这两项是待授权的建议，不是本轮已执行结果。正常新任务的规划、灰模、资产和评分通常超过三次模型请求；若用户只授权 ≤3 次请求，不能宣称完成上述完整 E2E，也不能自动增加额度或用内部 API/文件注入绕过正常入口。单个体素成功也不足以证明“稳定70”。
 
 ## 9. 验证与环境约束（务必遵守）
 
-- **离线只能验证机制，验证不了"变精细了"**；"精细"必须真实模型 + Engine 跑网页流程才算数。
-- **本地 codex 订阅额度有限**：每次验证最多少量场景（历史约定 ≤3），需用户显式同意再消耗；网络曾中断过，先确认模型可达。
-- **不要动正在跑的体素服务**：worker 在 `127.0.0.1:19874`（独立进程/独立 DATA）。验证要用**自己的隔离 worktree + 独立 DATA/ledger/控制文件 + 独立端口**（可参照本会话 r11 的隔离起法：`git worktree add --detach`，补 `engine`/`scene-generator` 软链，plain `codex`，PIPELINE_DATA_DIR 指向独立 /tmp 目录）。历史体素 DATA 只读。
-- 公开默认模型入口保持 plain `codex`；不要把个人启动器/路径/凭证写进仓库或默认值。
-- 仅本地提交 + 推送需用户确认；不要擅自合入主干——改动大且需真实验证后再谈合入。
+- **离线只能验证机制，验证不了“变精细了”**；“精细”必须真实模型 + Engine 跑网页流程才算数。本轮当前为 0 次真实模型调用、0 次真实 Engine 场景渲染。
+- **本地 codex 订阅额度有限**：每次验证最多少量场景（历史约定 ≤3），需用户显式同意再消耗；网络曾中断过，先确认模型可达。授权必须同时写明总模型请求上限，短预检、纠错、恢复和修正全部计入；若授权上限是 ≤3 次请求，不能将其解释为可运行三个不限调用的场景。
+- **不要动既有体素服务或历史 DATA**：原交接记录的 worker 为 `127.0.0.1:19874`；实际起测前只读核对运行来源和占用端口。验证使用自己的隔离 worktree、独立 DATA/ledger/控制文件和独立端口，不能借用在运行的 worker。历史体素 DATA 只读。
+- 固定被测候选提交、对应依赖、通过标准、预计调用量和停止条件；网页必须执行正常创建/运行/查看结果路径。模型服务、预算或必需检查被权威证据阻断后停止依赖它的验证，不原样重跑、换凭证或换模型碰运气。
+- 公开默认模型入口保持 plain `codex` 和既有工具权限/路由策略；不得把个人启动器、路径或凭证写进仓库，也不得静默回退到未授权模型。
+- 提交、推送和合并遵循本任务已有授权及仓库治理。本地实现、定向测试、真实验收、合并和部署分开报告；本地实现不等于已修改线上或既有服务。
 
 ## 10. 风险与非目标
 
-- **成本**：per-entity 多次调用，成本随实体数上升——必须有界（限制实体/分组数、并发、超时），并与额度约束协调。
-- **跨实体冲突**：各实体独立精修后合并可能产生所有权冲突；合并处必须用 `compileVoxelScene` 校验并把冲突回喂重修（参考既有 64 实体/所有权冲突一次性反馈机制）。
-- **与严格共格机制的衔接**：`voxel-lattice-v1`（共同格网 + 分组规划）目前卡在空间规划阶段；per-entity bounds 必须尊重冻结的共同格网。若选择在其之上做精修，需先让分组空间规划跑通（原"方案 C"）。
-- **非目标**：不解决材质颜色/原图像素还原；不引入 CLIP/LPIPS；不改普通管线评分与结构。
+- 模型可能只原样保留种子或增加无效细节；程序合法、预算利用增加和预览存在都不证明视觉收益。
+- 冻结格距保障空间交接，不保证能够表达小于一个格子的细节；本次不会自动改变格距或重新规划已接受灰模。
+- 开口保留以现有几何采样为依据，世界格所有权以整数占用为依据；这些检查不代替真实画面、空间评审或逐图还原。
+- 局部 worker 看不到其他 worker 的最终新增细节，所以合并复验必需；一次协调修正仍可能失败，失败必须保留明确证据。
+- 本次不增加模型、工具权限、预览名额或无界重试，不改 legacy operations/boxes 语义，不承诺评分、原图像素还原或发布级稳定性。
+- 本次不修复旧普通赛博朋克任务的空间停止问题；历史诊断资料可作为来源，不能覆盖本次代码事实或充当新体素精修的验收结果。
 
-## 11. 待定决策（实现前与用户确认）
+## 11. 已确定的决策与剩余交接
 
-- **粒度**：逐实体 vs 逐组件组（按 `requirementIds` 聚合）——组件组更省调用，实体级更细。
-- **是否先修 `voxel-lattice-v1` 分组空间规划**（方案 C）再加精修，还是在当前（非严格）体素路径上先加精修验证收益。
-- **每实体是否带独立预览/评审**（像普通 assets 的重点资产预览），还是先只做"精修 + 全场景一次预览"。
+粒度沿现有唯一模板；同形实例复用，不另做实体分组模型调用。实现沿正常共同格网路径的已接受灰模和 `generateOneAsset`，使用完整 native 资产契约；预览沿现有重点资产策略。legacy 全场景入口保留。
+
+剩余工作是授权后的隔离真实验收。真实模型/Engine 验证、普通 control、是否有视觉收益、是否达到 basic70、是否接近原图及是否具备稳定性，均需各自证据；当前没有部署或真实 E2E 结论。

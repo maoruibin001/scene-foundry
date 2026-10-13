@@ -45,6 +45,102 @@ export const timestamp = (v: any): number | null => {
   const n = typeof v === "number" ? v : Date.parse(v);
   return Number.isFinite(n) ? n : null;
 };
+export const ASSET_MODEL_ROLES = ["geometry-asset", "voxel-entity"] as const;
+const assetRole = (prefix: string) => ASSET_MODEL_ROLES.find(role => prefix === role || prefix.endsWith("/" + role));
+const validAttempt = (a: any) => Number.isSafeInteger(a?.index) && a.index > 0;
+/** A repair folder is relative to its template directory, with no traversal or recursive discovery. */
+export function assetModelAttemptFolders(checkpoint: any): { folders: string[]; warnings: string[] } {
+  const declared = checkpoint?.modelAttemptFolders;
+  if (declared === undefined || declared === null) return { folders: [], warnings: [] };
+  if (!Array.isArray(declared) || declared.length > 2)
+    return { folders: [], warnings: ["modelAttemptFolders 必须为最多 2 个模板内相对文件夹"] };
+  const folders = declared.filter(folder => typeof folder === "string" && /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,100}$/.test(folder));
+  return { folders: [...new Set(folders)], warnings: folders.length === declared.length ? [] : ["modelAttemptFolders 含非法路径；仅允许模板目录内的单层相对文件夹"] };
+}
+/** Copied repair receipts remain historical; a current repair must belong to this job's time range. */
+export function currentAssetDetailRepair(call: any, checkpoint: any, job: any) {
+  if (checkpoint?.detailRepair !== "voxel-detail-merge-feedback-v1") return false;
+  const folder = call.prefix?.match(/(?:^|\/)assets\/[^/]+\/([^/]+)\/(?:geometry-asset|voxel-entity)$/)?.[1],
+    start = timestamp(call.start), jobStart = timestamp(job.createdAt ?? job.startedAt);
+  return Boolean(folder && assetModelAttemptFolders(checkpoint).folders.includes(folder) && start !== null && (jobStart === null || start >= jobStart));
+}
+/** Read only archives named by producer journals; never scan another run or infer calls from a global ledger. */
+export function assetAttemptArchives(prefix: string, files: Record<string, any>) {
+  const role = assetRole(prefix);
+  if (!role) return [];
+  const folder = prefix.slice(0, -role.length);
+  return [
+    ...arr(files[prefix + "-attempts.json"]).filter(validAttempt).map(a => `${folder}attempts/${role}/${a.index}`),
+    ...arr(files[prefix + "-recovery.json"]?.attempts).filter(validAttempt).map(a => `${folder}provider-attempts/${role}/${a.index}`),
+  ];
+}
+function normalizeCall(c: any, job: any, terminal = false) {
+  const e = c.execution ?? {}, r = c.receipt ?? {}, f = c.failure ?? {}, a = c.attempt ?? {};
+  Object.assign(c, {
+    model: r.requestedModel ?? f.requestedModel ?? a.modelSettings?.model ?? job.modelSettings?.model ?? job.profile?.model ?? null,
+    reasoning: r.requestedReasoning ?? f.requestedReasoning ?? a.modelSettings?.reasoningEffort ?? job.modelSettings?.reasoningEffort ?? null,
+    status: c.reused ? "reused" : e.status ?? (c.failure ? "failed" : r.stopReason ?? a.status ?? "unknown"),
+    start: timestamp(e.startedAt) ?? timestamp(c.inputReceipt?.startedAt) ?? timestamp(a.startedAt),
+    end: timestamp(e.endedAt) ?? timestamp(a.endedAt),
+    lastActivity: timestamp(e.lastActivityAt),
+    durationMs: e.durationMs ?? r.durationMs ?? f.durationMs ?? a.durationMs ?? null,
+    stdoutBytes: e.stdoutBytes ?? null, stderrBytes: e.stderrBytes ?? null,
+    usage: r.usage ?? null, error: f.error ?? e.error ?? a.error ?? null,
+    returnedModel: r.returnedModel ?? null, cliModel: r.cliModel ?? null,
+  });
+  if (terminal && c.status === "running") c.status = "interrupted";
+  return c;
+}
+/** A validated attempt may include several transport calls. Count the latter once, retaining schema attempts separately. */
+export function assetModelCalls(files: Record<string, any>, job: any = {}, terminal = false) {
+  const prefixes = [...new Set(Object.keys(files).flatMap(k => {
+    const prefix = k.replace(/-(?:execution|receipt|failure|input-receipt|attempts|recovery)\.json$/, "").replace(/-invalid$/, "");
+    const nested = prefix.match(/^((?:generation\/)?assets\/[^/]+)\/(.+)\/(?:geometry-asset|voxel-entity)$/);
+    if (nested && !assetModelAttemptFolders(files[nested[1] + "/checkpoint.json"]).folders.includes(nested[2])) return [];
+    return prefix !== k && assetRole(prefix) ? [prefix] : [];
+  }))];
+  return prefixes.flatMap(prefix => {
+    const role = assetRole(prefix)!, folder = prefix.slice(0, -role.length),
+      schemaAttempts = arr(files[prefix + "-attempts.json"]),
+      providerAttempts = arr(files[prefix + "-recovery.json"]?.attempts),
+      records = providerAttempts.length ? providerAttempts : schemaAttempts;
+    const readCall = (at: string, archived = false) => Object.fromEntries(
+      [["execution", "execution"], ["receipt", "receipt"], ["failure", "failure"], ["inputReceipt", "input-receipt"]]
+        .map(([key, suffix]) => [key, files[`${at}${archived ? "/" : "-"}${suffix}.json`]])
+        .filter(([, value]) => value),
+    );
+    const top = readCall(prefix);
+    const rows: any[] = records.length ? records.map((attempt, i) => {
+      const latest = i === records.length - 1,
+        archiveDir = validAttempt(attempt) ? `${folder}${providerAttempts.length ? "provider-attempts" : "attempts"}/${role}/${attempt.index}` : null,
+        raw = archiveDir ? readCall(archiveDir, true) : {};
+      if (latest) for (const [key, value] of Object.entries(top)) raw[key] ??= value;
+      if (!providerAttempts.length && !latest && i === records.length - 2) raw.receipt ??= files[prefix + "-invalid-receipt.json"];
+      // Provider archives may contain stale files after a preflight rejection. Timestamped evidence must belong to this attempt.
+      const attemptStart = timestamp(attempt.startedAt);
+      for (const key of ["execution", "inputReceipt"]) {
+        const started = timestamp(raw[key]?.startedAt);
+        if (attemptStart !== null && started !== null && started < attemptStart - 1) delete raw[key];
+      }
+      if (providerAttempts.length && attempt.status !== "passed" && raw.execution?.status !== "completed") {
+        delete raw.receipt;
+        if (!raw.execution && !raw.inputReceipt) delete raw.failure;
+      }
+      if (attempt.status === "passed" || raw.execution?.status === "completed") delete raw.failure;
+      return { ...raw, id: latest ? prefix : `${prefix}/${providerAttempts.length ? "provider-attempt" : "attempt"}-${attempt.index ?? i + 1}`,
+        prefix, role, attempt, attemptIndex: attempt.index ?? i + 1, archiveDir: latest ? null : archiveDir,
+        schemaAttempts, reused: Boolean(attempt.reused || raw.receipt?.reused) };
+    }) : [
+      ...(files[prefix + "-invalid-receipt.json"] ? [{ receipt: files[prefix + "-invalid-receipt.json"], id: prefix + "-invalid", prefix, role, schemaAttempts }] : []),
+      ...(Object.keys(top).length ? [{ ...top, id: prefix, prefix, role, schemaAttempts, reused: Boolean(top.receipt?.reused) }] : []),
+    ];
+    return rows.map(c => normalizeCall({ ...c, stage: "assets", templateId: prefix.match(/(?:^|\/)assets\/([^/]+)\//)?.[1] ?? null,
+      invoked: c.reused ? false : Boolean(c.execution || c.inputReceipt || c.receipt || c.failure ||
+        c.attempt?.status === "passed" || /PROVIDER_HTTP_\d+|PROVIDER_TIMEOUT|MODEL_OUTPUT_INCOMPLETE/.test(c.attempt?.error ?? "")),
+      evidence: records.length ? providerAttempts.length ? "逐资产供应商调用日志" : "逐资产验证尝试日志" : "逐资产调用回执",
+    }, job, terminal));
+  });
+}
 export function jobTiming(job: any) {
   const terminal = ["passed", "failed", "blocked", "cancelled", "needs_review", "timed_out", "interrupted"].includes(job.status);
   const completed = arr(job.events)
@@ -82,6 +178,7 @@ export function normalize(
     .filter(
       (k) =>
         /-(execution|receipt|failure)\.json$/.test(k) &&
+        !assetRole(k.replace(/-(execution|receipt|failure)\.json$/, "").replace(/-invalid$/, "")) &&
         !/-input-receipt/.test(k) &&
         (!k.endsWith("-receipt.json") ||
           files[k]?.requestedModel ||
@@ -95,46 +192,21 @@ export function normalize(
       return map;
     }, {});
   for (const c of Object.values(calls) as any[]) {
-    const e = c.execution ?? {},
-      r = c.receipt ?? {},
-      f = c.failure ?? {};
-    Object.assign(c, {
-      model:
-        r.requestedModel ??
-        f.requestedModel ??
-        job.modelSettings?.model ??
-        job.profile?.model ??
-        null,
-      reasoning:
-        r.requestedReasoning ??
-        f.requestedReasoning ??
-        job.modelSettings?.reasoningEffort ??
-        null,
-      status: e.status ?? (c.failure ? "failed" : (r.stopReason ?? "unknown")),
-      start: timestamp(e.startedAt),
-      end: timestamp(e.endedAt),
-      lastActivity: timestamp(e.lastActivityAt),
-      durationMs: e.durationMs ?? r.durationMs ?? f.durationMs ?? null,
-      stdoutBytes: e.stdoutBytes ?? null,
-      stderrBytes: e.stderrBytes ?? null,
-      usage: r.usage ?? null,
-      error: f.error ?? e.error ?? null,
-      returnedModel: r.returnedModel ?? null,
-      cliModel: r.cliModel ?? null,
-    });
-    if (terminal && c.status === "running") c.status = "interrupted";
+    normalizeCall(c, job, terminal);
   }
+  const assetCalls = assetModelCalls(files, job, terminal);
+  for (const c of assetCalls) calls[c.id] = c;
   const checkpoints =
     files["generation/checkpoints.json"] ?? files["checkpoints.json"];
   const inherited=new Set(arr(files["generation/resumed-from.json"]?.assets).map(a=>a.id));
-  const steps = arr(checkpoints?.steps).map((s) => ({
-    ...s,
-    status:inherited.has(s.id)?"reused":s.status,
-    checkpoint:
-      files[`generation/assets/${s.id}/checkpoint.json`] ??
-      files[`assets/${s.id}/checkpoint.json`] ??
-      null,
-  }));
+  const steps = arr(checkpoints?.steps).map(s => {
+    const checkpoint = files[`generation/assets/${s.id}/checkpoint.json`] ?? files[`assets/${s.id}/checkpoint.json`] ?? null,
+      sourceReused = inherited.has(s.id) || s.status === "reused" || Boolean(checkpoint?.reusedFrom),
+      currentRepair = assetCalls.some(c => c.templateId === s.id && currentAssetDetailRepair(c, checkpoint, job));
+    return { ...s, checkpoint, sourceReused, currentRepair,
+      status: sourceReused && !currentRepair ? "reused" : currentRepair ? checkpoint?.status ?? s.status : s.status };
+  });
+  for (const c of assetCalls) c.historical = steps.some(s => s.id === c.templateId && s.sourceReused && !currentAssetDetailRepair(c, s.checkpoint, job));
   const count = steps.length
     ? {
         completed: steps.filter((s) => ["passed","reused"].includes(s.status)).length,
@@ -303,20 +375,25 @@ export function normalize(
               : "waiting",
       dependsOn: "materials",
     });
-    for (const [i, s] of steps.entries())
+    for (const s of steps) {
+      const related = assetCalls.filter(c => c.templateId === s.id && !c.historical && !c.reused),
+        knownStarts = related.map(c => c.start).filter((at): at is number => at !== null),
+        knownEnds = related.map(c => c.end).filter((at): at is number => at !== null),
+        repairStart = knownStarts.length ? Math.min(...knownStarts) : null,
+        repairEnd = related.length && knownEnds.length === related.length ? Math.max(...knownEnds) : null;
       children.push({
         id: `asset:${s.id}`,
         label: s.label ?? s.id,
         status: terminal && active(s.status) ? "interrupted" : s.status,
         dependsOn: "materials",
-        start: s.status === "reused" ? null : (
+        start: s.status === "reused" ? null : s.sourceReused && s.currentRepair ? repairStart : (
           timestamp(s.checkpoint?.startedAt) ??
-          calls[`generation/assets/${s.id}/geometry-asset`]?.start ??
-          calls[`assets/${s.id}/geometry-asset`]?.start ?? null),
-        durationMs: s.status === "reused" ? 0 : s.checkpoint?.durationMs ?? null,
+          (knownStarts.length ? Math.min(...knownStarts) : null)),
+        durationMs: s.status === "reused" ? 0 : s.sourceReused && s.currentRepair ? repairStart !== null && repairEnd !== null ? Math.max(0,repairEnd-repairStart) : null : s.checkpoint?.durationMs ?? null,
         error: s.checkpoint?.error ?? null,
         evidence: "资产检查点",
       });
+    }
     children.push({
       id: "assembly",
       label: LABELS.assembly,
@@ -358,6 +435,7 @@ export function normalize(
     Math.max(
       ...events.map((e) => timestamp(e.at) ?? 0),
       ...executionKeys.map((k) => timestamp(files[k]?.lastActivityAt) ?? 0),
+      ...assetCalls.map(c => c.lastActivity ?? 0),
       0,
     ) || null;
   const currentCall = (Object.values(calls) as any[]).find(
@@ -399,10 +477,10 @@ export function normalize(
   const plan = job.plan ?? files["plan.json"];
   return {
     job,
-    adapterWarnings:
-      files["observer-progress.json"] && !declared
-        ? ["生产者阶段快照与任务版本不匹配或格式不合法；未采用该快照"]
-        : [],
+    adapterWarnings: [
+      ...(files["observer-progress.json"] && !declared ? ["生产者阶段快照与任务版本不匹配或格式不合法；未采用该快照"] : []),
+      ...steps.flatMap(s => assetModelAttemptFolders(s.checkpoint).warnings.map(warning => `${s.id}: ${warning}`)),
+    ],
     terminal,
     start,
     end,
@@ -417,8 +495,11 @@ export function normalize(
     stages,
     children,
     calls: Object.values(calls),
+    assetModelCallCount: assetCalls.filter(c => c.invoked && !c.historical).length,
+    assetModelCallCountUnknown: assetCalls.filter(c => !c.invoked && !c.reused && !c.historical).length,
     assets: steps.map((s) => ({
       ...s,
+      attempts: assetCalls.filter(c => c.templateId === s.id),
       status: terminal && active(s.status) ? "interrupted" : s.status,
     })),
     count,

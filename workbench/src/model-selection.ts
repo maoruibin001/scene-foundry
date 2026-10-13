@@ -20,7 +20,7 @@ export function settingsOf(record:any):ModelSettings|undefined{
 export function modelTimeoutMs(effort:string,role?:string){
  // 质量优先：多图空间规划实测约 994 秒，表面步骤也被旧 480 秒计时器截断。
  // 生成步骤与高思考视觉验收保留 20 分钟绝对上限；需求提取仍用较短上限。
- if(['scene-observation','scene-blockout','scene-space-judge','scene-space','scene-surface','scene-refine','scene-spatial-refine','geometry-asset','judge'].includes(role??'')&&['xhigh','max','ultra'].includes(effort))return 1200000;
+ if(['scene-observation','scene-blockout','scene-space-judge','scene-space','scene-surface','scene-refine','scene-spatial-refine','geometry-asset','voxel-entity','judge'].includes(role??'')&&['xhigh','max','ultra'].includes(effort))return 1200000;
  return ({none:120000,minimal:120000,low:120000,medium:180000,high:300000,xhigh:480000,max:600000,ultra:900000} as Record<string,number>)[effort]??120000;
 }
 

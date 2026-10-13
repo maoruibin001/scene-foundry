@@ -3,7 +3,7 @@ export function phaseStage(label:string){
  if(label.includes('规划空间')||label.includes('规划共享布局'))return 'space';
  if(label.includes('规划材质'))return 'surface';
  if(label.includes('提取并记录材质'))return 'materials';
- if(label.startsWith('生成资产'))return 'assets';
+ if(label.startsWith('生成资产')||label.startsWith('体素逐组件精修'))return 'assets';
  if(label.includes('组装并检查'))return 'assembly';
  return null;
 }

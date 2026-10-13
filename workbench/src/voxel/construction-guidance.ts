@@ -12,3 +12,9 @@ export const VOXEL_SURFACE_GUIDANCE=`当前参考是体素作品，材质规划�
 
 export function voxelGeometryGuidance(lattice?:VoxelLattice){return VOXEL_GEOMETRY_GUIDANCE+(lattice?`
 本场景已冻结共同格网cellSize=${lattice.cellSize}米、origin=[0,0,0]。所有灰模、部件草稿与修复只允许voxelVolume，cellSize逐字保持；shape.origin及part.position是该格距的整数倍，scale固定[1,1,1]，rotation仅90度整数转。用dimensions和有序fill/erase/repeat表达尺寸、斜坡与厚度，不能用缩放薄化桥板或改变格距，不能用连续box/grid/scatter替代。每个独立组件必须实际构造；桥板宽厚、板缝、跨空及墙面附着簇的体量与区域覆盖继续依据原图，不因格网通过而称图像验收通过。总实际展开占用上界须不超过500000格，不能用重复交叠返还预算。`:'' );}
+
+
+/** Detail consumes the already accepted local structure; it is never another scene planner. */
+export const VOXEL_ENTITY_DETAIL_GUIDANCE=`当前阶段是逐组件体素精修，输出仍是单个asset-geometry-v1模板，部件只能使用原生voxelVolume。每个模板一次聚焦制作，同形实例共用模板；不是一次输出整场景，也不逐格输出方块。voxelDetailAllocation是本次冻结的模板预算，已计入全部实例的占用倍数；每项maximum都是上限而不是质量指标。
+先逐字保留proceduralStructure里的全部已验收体素种子id、姿态、cellSize、origin、dimensions和有序operations，仅按冻结材料表调整材质。原图可见的台阶、墙板厚度、窗框、板缝、栏杆、凹槽和块簇使用有依据的fill/erase/repeat新增细节部件；不能把已通过的门洞、桥下跨空或通道填平。不要为了用满预算增加无关方块。粗轮廓已接受不等于细节完成，应逐项核对当前资产的原图局部和完整实例用途。
+共同格距、模板bounds、所有实例和机位、材料ID与需求均冻结。新增部件全部格点须在该模板严格边界内；不能利用旧5%边界容差扩张。不得细化格距、重划所有权、封堵净空、覆盖邻近实体或用反复重叠返还占用预算。局部校验与最终组装都检查冻结预算和实际原生体积。结构校验和预览只证明合法性与实际画面存在，不能自称空间或原图验收通过。`;

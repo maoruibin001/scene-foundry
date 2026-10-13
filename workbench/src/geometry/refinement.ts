@@ -1,3 +1,5 @@
+import {assertVoxelDetailScene,validateVoxelDetailBasis} from '../voxel/detail-scene';
+import {VOXEL_DETAIL_POLICY} from '../voxel/entity-detail';
 import {voxelGeometryGuidance} from '../voxel/construction-guidance';
 import type {VoxelLattice} from '../voxel/scene-lattice';
 import {sourceSceneFile} from './source-scene';
@@ -150,13 +152,21 @@ ${CAMERA_CHANGE_PROMPT}
 ${GEOMETRY_RULES}`;
 
 export async function refineScene(job:any,plan:any,images:{path:string;mime:string}[],dir:string,signal:AbortSignal,from?:{dir:string;jobId:string;version:any;iteration:number}){
- const sourceDir=from?.dir??runDir(job.reuseSceneFrom),sourceId=from?.jobId??job.reuseSceneFrom,original=read(sourceSceneFile(job,sourceDir)) as SceneInput,textures=read(join(sourceDir,'materials/texture-registry.json'));
+ const sourceDir=from?.dir??runDir(job.reuseSceneFrom),sourceId=from?.jobId??job.reuseSceneFrom;
+ const detailBasisFile=join(runDir(sourceId),'generation/voxel-detail-basis.json');
+ if(job.voxelDetailPolicy===VOXEL_DETAIL_POLICY&&!existsSync(detailBasisFile))throw Error('VOXEL_DETAIL_BASIS_MISSING：质量修正缺少已封存精修基线，停止模型调用，不能从当前候选反推或放宽原约束');
+ const detailBasis=job.voxelDetailPolicy===VOXEL_DETAIL_POLICY?validateVoxelDetailBasis(read(detailBasisFile)):null;
+ const detailIdentity=detailBasis?digest(stable(detailBasis)):undefined;
+ const detailGuidance=detailBasis?'\n本任务采用voxel-detail-v1：保持已接受原生灰模种子的完整有序操作、ID和姿态，以及共同格距、模板/实例/实体身份、实例姿态、材料ID集合、关系、开口与接触约束。只可在原模板冻结bounds及分配预算内修正新增细节、材质属性/表面、光照和相机；不得增加模板或实例、改种子、封堵任何原来明确通透的开口采样或侵入其他实体格。选择修正目标时不得要求改变这些冻结项；修正候选预览和最终合并都会复核这些约束。':'';
+ const assertDetail=(value:any)=>{if(detailBasis)return assertVoxelDetailScene(value,detailBasis,textures);};
+ const original=read(sourceSceneFile(job,sourceDir)) as SceneInput,textures=read(join(sourceDir,'materials/texture-registry.json'));
+ assertDetail(original);
  const sourceDigest=digest(JSON.stringify(original)),refs=images.map(i=>digest(readFileSync(i.path))),folder=join(dir,'refinement');mkdirSync(folder,{recursive:true});
  require(JSON.stringify(refs)===JSON.stringify((job.images??[]).map((i:any)=>i.id)),'参考图片内容与来源不一致');
  const runtime=read(join(sourceDir,'runtime/runtime.json')),frameNames=runtime.images.filter((x:string)=>/^reference-|^inspection-/.test(x));require(frameNames.length>0,'缺少用于修正的实际画面');
  for(const f of frameNames)require(digest(readFileSync(join(sourceDir,'runtime',f)))===runtime.hashes[runtime.images.indexOf(f)],'修正画面摘要不符');
  const baseline=from?{review:read(join(sourceDir,'review.json')),quality:read(join(sourceDir,'quality.json')),reassessed:false}:await refinementBaseline(job,read(join(sourceDir,'job.json')),sourceDir,folder,signal);
- const review=baseline.review,source=await observeOpenings(job,original,review,images,frameNames.map((name:string)=>({name,path:join(sourceDir,'runtime',name),mime:'image/png'})),folder,signal);
+ const review=baseline.review,source=detailBasis?original:await observeOpenings(job,original,review,images,frameNames.map((name:string)=>({name,path:join(sourceDir,'runtime',name),mime:'image/png'})),folder,signal);
  const openingDiagnostics=openingSummary(inspectOpenings(source));
  const previousRepairs=repairHistory(job,original,refs);save(join(folder,'repair-history.json'),previousRepairs);
  const reflection={...repairReflection(baseline.quality,previousRepairs),scoreControls:scoreControlEvidence(job,sourceDigest)};save(join(folder,'repair-reflection.json'),reflection);event(job,'repair-reflection','已读取 '+reflection.verifiedAttempts+' 份同契约修复证据；最大差距：'+reflection.dimensions.slice(0,2).map(d=>d.id+' 缺 '+d.pointsLost+' 分').join('、'));
@@ -173,7 +183,7 @@ export async function refineScene(job:any,plan:any,images:{path:string;mime:stri
  if(remainingCalls!==null&&remainingCalls<(recovered?2:3))throw Error('修复剩余调用不足；需保留独立评审，已保存候选不重复生成');
  const goalInput={requirementFeedback,callBudget:{remaining:remainingCalls,reservedAssessmentCalls:1,maxExecutionBatches:remainingCalls===null?null:remainingCalls-2,instructions:'优先能在本轮闭环的明确可见缺陷，保留一次独立评审；避免把已改善的大结构与所有细节重新打包成大量改写。'},surfaceBindings:surfaceBindings(source),repairReflection:reflection,reusableTextures:reusableTextureEvidence.context,textureEvidence:textureEvidence.context,textureEvidenceRule:'纹理证据按顺序展示当前已用贴图表，随后若有候选则展示asset-编号的可复用材质表，编号与reusableTextures对应。候选包含同参考图的历史资源及明确来源的固定外部PBR目录，均为已校验真实像素；需要看图判断适配性，不按名称或生成方式决定质量，不足时明确记录。优先使用已有合适材质，避免反复从带透视和阴影的曲面照片裁出条带。先区分裁切本身错误、UV拉伸/重复及场景光照；裁切已失真时仅调材质颜色或UV无法恢复纹样。照片带原光照，不是无光照反射率，避免再次压暗。',repairBudget:editBudget,geometryBudget,originalPrompt:job.prompt,deliveryStandard:job.policy?.deliveryStandard??'strict',scoring:scoringGuidance(job.policy),frozenPlan:plan,referenceImages:images.length,actualFrameNames:frameNames,geometryVisibility:visibility.context,cameraChangeFeedback,review,previousRepairs,budget:complexityPolicy(job.complexity,images.length>0&&Array.isArray((source as any).observedBindings)),scene:repairGoalContext(source)};
  save(join(folder,'repair-goals-input.json'),goalInput);event(job,'refinement-plan','对照原图、实际截图与空间范围，选择本轮最影响整体还原的修正目标');
- const goalsResult=recovered?{value:validateRepairGoals(recovered.goals,source,plan,images.length,frameNames,editBudget),receipt:{method:'saved-repair-goals',sourceJobId:recovered.recovery.sourceJobId}}:await callValidated({role:'scene-repair-plan',schemaContext:{repairReferences:repairGoalReferences(source,plan,images.length,frameNames),repairComplexity:job.complexity},modelSettings:job.modelSettings,signal,maxTokens:5000,reservedCalls:2,images:inputImages,system:REPAIR_GOALS_PROMPT+'\n'+CAMERA_CHANGE_PROMPT,text:JSON.stringify(repairPlanningContext(goalInput))},folder,v=>validateRepairGoals(v,source,plan,images.length,frameNames,editBudget));
+ const goalsResult=recovered?{value:validateRepairGoals(recovered.goals,source,plan,images.length,frameNames,editBudget),receipt:{method:'saved-repair-goals',sourceJobId:recovered.recovery.sourceJobId}}:await callValidated({role:'scene-repair-plan',schemaContext:{repairReferences:repairGoalReferences(source,plan,images.length,frameNames),repairComplexity:job.complexity},modelSettings:job.modelSettings,signal,maxTokens:5000,reservedCalls:2,images:inputImages,system:REPAIR_GOALS_PROMPT+'\n'+CAMERA_CHANGE_PROMPT+detailGuidance,text:JSON.stringify({...repairPlanningContext(goalInput),...(detailBasis?{voxelDetailBasisSha256:detailIdentity,voxelDetailAllocation:detailBasis.allocation}:{})})},folder,v=>validateRepairGoals(v,source,plan,images.length,frameNames,editBudget));
  const repairGoals=goalsResult.value;
  save(join(folder,'repair-goals.json'),{...repairGoals,quality:'not-assessed',sourceDigest,referenceSha256:refs,modelReceipt:goalsResult.receipt});
  job.repairGoals={...repairGoals,artifactPath:relative(runDir(job.id),join(folder,'repair-goals.json')),historyPath:relative(runDir(job.id),join(folder,'repair-history.json')),historyCount:previousRepairs.attempts.length,visibilityPath:relative(runDir(job.id),visibility.pagePath),cameraChangePath:cameraChangeFeedback?relative(runDir(job.id),join(folder,'camera-change.json')):null};
@@ -190,11 +200,11 @@ export async function refineScene(job:any,plan:any,images:{path:string;mime:stri
  event(job,'refinement','将 '+repairGoals.goals.length+' 个修复目标分为 '+batches.length+' 个独立调用；仅传入选中部件，复用其余场景');
  const responses=await Promise.allSettled(batches.map(async batch=>{
   const batchFolder=join(folder,batch.id);mkdirSync(batchFolder,{recursive:true});
-  const request:any={role:'scene-refine',schemaContext:{repairComplexity:job.complexity,voxelLattice:source.voxelLattice},modelSettings:job.modelSettings,signal,maxTokens:16000,reservedCalls:1,images:inputImages,system:REFINEMENT_PROMPT+(source.voxelLattice?'\n'+voxelGeometryGuidance(source.voxelLattice):'')+'\n本轮必须落实repairGoals所选目标，只改其中允许的已有模板、实例、材质、机位或光照；每个目标必须有对应的真实数据变化。保留未选对象。目标范围不等于已经修好，最终由独立画面验收判断。\n'+FOCUSED_REFINEMENT_PROMPT,text:JSON.stringify(repairExecutionContext({requirementFeedback,surfaceBindings:surfaceBindings(source),repairReflection:reflection,textureEvidence:textureEvidence.context,textureEvidenceRule:goalInput.textureEvidenceRule,repairBudget:editBudget,geometryBudget,originalPrompt:job.prompt,deliveryStandard:job.policy?.deliveryStandard??'strict',scoring:scoringGuidance(job.policy),previousRepairs,repairGoals:batch,repairFocus:focus,frozenPlan:plan,referenceImages:images.length,actualFrameNames:frameNames,geometryVisibility:visibility.context,cameraChangeFeedback,review,openingDiagnostics,budget:complexityPolicy(job.complexity,images.length>0&&Array.isArray((source as any).observedBindings)),sourceScene:repairSourceContext(source,anchors,batch),reusableTextures:reusableTextureEvidence.context}))};
-  const validateBase=(v:any)=>{if(batch.goals.every(g=>['surface','lighting'].includes(g.kind))&&(v.parts.length||v.removeParts.length||v.addTemplates.length||v.instances.length||v.screenTargets?.length||v.removeInstances.length||v.cameras.length))throw Error('表面修复只允许surfaceUpdates、材质、纹理和光照，不得重写几何或机位');const next=applyRefinement(source,v,plan,images.length,job.complexity);resolveTextureReuse(next,refs);assertPlannedRepair(source,next,batch);if(focus)assertRefinementFocus(source,next,focus);
+ const request:any={role:'scene-refine',schemaContext:{repairComplexity:job.complexity,voxelLattice:source.voxelLattice},modelSettings:job.modelSettings,signal,maxTokens:16000,reservedCalls:1,images:inputImages,system:REFINEMENT_PROMPT+(source.voxelLattice?'\n'+voxelGeometryGuidance(source.voxelLattice):'')+(detailBasis?'\n本任务采用voxel-detail-v1：保持已接受原生灰模种子的完整有序操作、ID和姿态，以及共同格距、模板/实例/实体身份、实例姿态、材料ID集合、关系、开口与接触约束。只可在原模板冻结bounds及分配预算内修正新增细节、材质属性/表面、光照和相机；不得增加模板或实例、改种子、封堵任何原来明确通透的开口采样或侵入其他实体格。修正候选预览和最终合并都会复核这些冻结约束。':'')+'\n本轮必须落实repairGoals所选目标，只改其中允许的已有模板、实例、材质、机位或光照；每个目标必须有对应的真实数据变化。保留未选对象。目标范围不等于已经修好，最终由独立画面验收判断。\n'+FOCUSED_REFINEMENT_PROMPT,text:JSON.stringify(repairExecutionContext({requirementFeedback,surfaceBindings:surfaceBindings(source),repairReflection:reflection,textureEvidence:textureEvidence.context,textureEvidenceRule:goalInput.textureEvidenceRule,repairBudget:editBudget,geometryBudget,originalPrompt:job.prompt,deliveryStandard:job.policy?.deliveryStandard??'strict',scoring:scoringGuidance(job.policy),previousRepairs,repairGoals:batch,repairFocus:focus,frozenPlan:plan,referenceImages:images.length,actualFrameNames:frameNames,geometryVisibility:visibility.context,cameraChangeFeedback,review,openingDiagnostics,budget:complexityPolicy(job.complexity,images.length>0&&Array.isArray((source as any).observedBindings)),sourceScene:repairSourceContext(source,anchors,batch),reusableTextures:reusableTextureEvidence.context}))};
+  const validateBase=(v:any)=>{if(batch.goals.every(g=>['surface','lighting'].includes(g.kind))&&(v.parts.length||v.removeParts.length||v.addTemplates.length||v.instances.length||v.screenTargets?.length||v.removeInstances.length||v.cameras.length))throw Error('表面修复只允许surfaceUpdates、材质、纹理和光照，不得重写几何或机位');const next=applyRefinement(source,v,plan,images.length,job.complexity);resolveTextureReuse(next,refs);assertDetail(next);assertPlannedRepair(source,next,batch);if(focus)assertRefinementFocus(source,next,focus);
    // 新裁切片段在后续提取步骤检查像素；此处只编译几何，避免用伪造纹理预填充。
    const compiled=compileGeometryProgram({...next.program,materials:next.program.materials.map(m=>({...m,textureId:null,surfaceDetail:null}))});assertCameraPreflight(next,compiled);return v;};
-  const feedback=PROVIDER==='codex-cli'?createRepairTools({source,textures,folder:join(batchFolder,'feedback'),signal,images,refs,sourceFrames:(runtime.referenceFrames??[]).map((f:any)=>({referenceIndex:f.referenceIndex,path:join(sourceDir,'runtime',f.file)})),onEvent:message=>event(job,'repair-feedback',batch.id+' · '+message),validate:validateBase,apply:v=>applyRefinement(source,v,plan,images.length,job.complexity)}):null;
+  const feedback=PROVIDER==='codex-cli'?createRepairTools({source,textures,folder:join(batchFolder,'feedback'),signal,images,refs,...(detailIdentity?{validationIdentity:detailIdentity}:{}),sourceFrames:(runtime.referenceFrames??[]).map((f:any)=>({referenceIndex:f.referenceIndex,path:join(sourceDir,'runtime',f.file)})),onEvent:message=>event(job,'repair-feedback',batch.id+' · '+message),validate:validateBase,apply:v=>applyRefinement(source,v,plan,images.length,job.complexity)}):null;
   if(feedback){request.tools=feedback.kit;request.system+='\n'+REPAIR_TOOL_PROMPT;
    if(recovered&&feedback.counts.enginePreviews>=2){
     request.system='本次仅恢复中断前已完成的候选选择。对照原参考图、来源场景和随后附上的已有候选画面，选一个最能落实修复目标的成功预览。不得重新规划或生成补丁，不宣称已达标；最终仅输出selectedPatchSha256和中文reason，由管线取回原补丁重新校验、运行和独立评分。';
@@ -202,10 +212,11 @@ export async function refineScene(job:any,plan:any,images:{path:string;mime:stri
     request.images=[...images,...frameNames.map((name:string)=>({path:join(sourceDir,'runtime',name),mime:'image/png'}))];
    }
   }
+  if(detailBasis)request.text=JSON.stringify({...JSON.parse(request.text),voxelDetailBasisSha256:detailIdentity,voxelDetailAllocation:detailBasis.allocation});
   const validate=(v:any)=>{const value=validateBase(v);feedback?.assertReviewed(v);return value;};
   const compute=()=>callValidated(request,batchFolder,validate);
   if(job.batchId)return compute();
-  const started=Date.now(),key=validatedKey(request,{version:job.pipelineVersion,profile:job.profile,sourceDigest,contract:'repair-feedback-v1'});
+  const started=Date.now(),key=validatedKey(request,{version:job.pipelineVersion,profile:job.profile,sourceDigest,...(detailIdentity?{voxelDetailBasisSha256:detailIdentity}:{}),contract:'repair-feedback-v1'});
   const cached=await validatedCache.use(key,validateBase,compute,{jobId:job.id,pipelineVersion:job.pipelineVersion,dir:batchFolder},signal);
   return cached.reuse?persistValidatedReuse(batchFolder,'scene-refine',cached.result,cached.reuse,started):cached.result;
  }));
@@ -214,10 +225,11 @@ export async function refineScene(job:any,plan:any,images:{path:string;mime:stri
  const successful=responses.map(r=>(r as PromiseFulfilledResult<any>).value);
  const result={value:{...mergeRefinementPatches(successful.map(r=>r.value)),version:'scene-refinement-batches-v1',batches:successful.map(r=>r.value)},receipt:{method:'repair-batches-v2',batches:successful.map((r,i)=>({id:batches[i].id,receipt:r.receipt}))}};
  // 单批次有效不代表组合有效：原三角形、部件、范围和目标约束再统一检查。
- const merged=applyRefinement(source,result.value,plan,images.length,job.complexity);assertPlannedRepair(source,merged,repairGoals);save(join(folder,'camera-preflight.json'),assertCameraPreflight(merged));
+ const merged=applyRefinement(source,result.value,plan,images.length,job.complexity);assertDetail(merged);assertPlannedRepair(source,merged,repairGoals);save(join(folder,'camera-preflight.json'),assertCameraPreflight(merged));
 
  signal.throwIfAborted();require(digest(JSON.stringify(read(sourceSceneFile(job,sourceDir))))===sourceDigest,'修正期间原场景发生变化');
  const scene=applyRefinement(source,result.value,plan,images.length,job.complexity),unchanged=source.program.templates.filter(t=>JSON.stringify(t)===JSON.stringify(scene.program.templates.find(x=>x.id===t.id))).length;
+ if(detailBasis)save(join(folder,'voxel-detail-validation.json'),assertDetail(scene));
  if(focus)save(join(folder,'focus-result.json'),{focus,after:assertRefinementFocus(source,scene,focus),quality:'not-assessed'});
  save(join(folder,'repair-goals-result.json'),assertPlannedRepair(source,scene,repairGoals));
  const removedInstances=(result.value.removeInstances??[]).map((r:any)=>({instanceId:r.instanceId,reason:r.reason}));

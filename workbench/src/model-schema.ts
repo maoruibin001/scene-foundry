@@ -1,5 +1,6 @@
 import type {VoxelLattice} from './voxel/scene-lattice';
 import {voxelSchema} from './voxel/schema';
+import {voxelEntitySchema,type VoxelEntitySchemaContext} from './voxel/entity-schema';
 import {imageMatchSchema} from './image-reconstruction';
 import {pairwiseSchema} from './geometry/pairwise-compare';
 import {grayboxSpaceRepairSchema} from './geometry/graybox-space-repair';
@@ -24,9 +25,10 @@ const arr=(items:any)=>({type:'array',items});
 const obj=(properties:any)=>({type:'object',properties,required:Object.keys(properties),additionalProperties:false});
 const choice=(...values:string[])=>({type:'string',enum:values});
 const nullableNum={type:['number','null']};
-export type ModelSchemaContext={requirementIds?:string[];referenceCount?:number;repairReferences?:RepairGoalReferences;repairComplexity?:Complexity;qualityVersion?:string;imageGoal?:boolean;grayboxRepair?:boolean;templateBounds?:boolean;derivedSpatialRelations?:boolean;strictVoxel?:boolean;voxelLattice?:VoxelLattice;voxel?:boolean};
+export type ModelSchemaContext=VoxelEntitySchemaContext & {requirementIds?:string[];referenceCount?:number;repairReferences?:RepairGoalReferences;repairComplexity?:Complexity;qualityVersion?:string;imageGoal?:boolean;grayboxRepair?:boolean;templateBounds?:boolean;derivedSpatialRelations?:boolean;strictVoxel?:boolean;voxelLattice?:VoxelLattice;voxel?:boolean};
 export function modelSchema(role:string,context?:ModelSchemaContext):any {
  if(role==='voxel-scene')return voxelSchema(context?.requirementIds);
+ if(role==='voxel-entity')return voxelEntitySchema(context);
  if(role==='scene-repair-plan')return repairGoalsSchema(context?.repairReferences,context?.repairComplexity?repairBudget(context.repairComplexity):LEGACY_REPAIR_BUDGET);
  if(role==='scene-openings')return openingObservationSchema();
  if(role==='scene-spatial-refine')return spatialRefinementSchema();

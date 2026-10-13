@@ -1,3 +1,6 @@
+import {mergeVoxelDetails} from '../voxel/detail-merge';
+import {createVoxelDetailBasis,validateVoxelDetailBasis,assertVoxelDetailScene} from '../voxel/detail-scene';
+import {allocateVoxelEntityDetails,VOXEL_DETAIL_POLICY} from '../voxel/entity-detail';
 import {preserveInitialSpaceDraft} from './space-draft';
 import {assetGeometryBasis,assetGeometryBasisMatches} from './asset-geometry-basis';
 import {VOXEL_LIMITS} from '../voxel/program';
@@ -75,6 +78,7 @@ export async function runGeneralScene({job,plan,dir,signal,stage,command,preview
  job.generationMethod=job.sceneKind==='voxel'?(legacyVoxel?'voxel-scene-v1':job.voxelConstructionVersion==='voxel-lattice-v1'?'voxel-geometry-v4':'voxel-geometry-v3'):'general-geometry-v3';job.stageTrackingVersion='exclusive-stages-v1';job.iteration=0;
  assertFixedDependencies();
  const finishScene=async(value:any,textures:any,provenance:any)=>{
+  if(job.voxelDetailPolicy===VOXEL_DETAIL_POLICY&&!job.partialOutput){const basis=validateVoxelDetailBasis(read(join(dir,'generation/voxel-detail-basis.json')));save(join(dir,'voxel-detail-basis.json'),basis);save(join(dir,'voxel-detail-validation.json'),{sourceSceneSha256:digest(JSON.stringify(value)),...assertVoxelDetailScene(value,basis,textures)});}
   if(job.sceneKind==='voxel'&&!legacyVoxel){
    await stage('voxel',async()=>{
     if(job.voxelConstructionVersion==='voxel-lattice-v1'&&!value.voxelLattice)throw Error('VOXEL_LATTICE_REQUIRED: frozen construction metadata missing before final conversion');
@@ -103,6 +107,7 @@ export async function runGeneralScene({job,plan,dir,signal,stage,command,preview
   if(baseline)save(join(dir,'spatial-reuse.json'),baseline.provenance);
   const progress=(phase:string,completed:number,total:number,current:string|null)=>{generationPhase(job,phase);job.generationProgress={phase,completed,total,current};event(job,'generation-progress',phase+(total?' '+completed+'/'+total:'')+(current?' · '+current:''));};
   const generationDir=join(dir,'generation'),ctx:any={job,plan,images,dir:generationDir,signal,stage,onProgress:(phase:string)=>progress(phase,0,0,null)};
+  if(source&&job.voxelDetailPolicy===VOXEL_DETAIL_POLICY){const basis=validateVoxelDetailBasis(read(join(runDir(job.reuseSceneFrom),'generation/voxel-detail-basis.json')));mkdirSync(generationDir,{recursive:true});save(join(generationDir,'voxel-detail-basis.json'),basis);assertVoxelDetailScene(sourceScene,basis,read(join(runDir(job.reuseSceneFrom),'materials/texture-registry.json')));}
   progress(source?(job.refineScene?'根据真实画面反馈修正场景':'复用完整场景'):'规划共享布局',0,0,null);
   const restored=job.reuseCheckpoint?checkpoints.restore(job.reuseCheckpoint,job,generationDir):null;
   let layout:any=null;
@@ -134,6 +139,7 @@ export async function runGeneralScene({job,plan,dir,signal,stage,command,preview
    const assets=await stage('assets',async()=>{assertSpatialAccepted(job,layout);
    ctx.acceptedScene=read(join(generationDir,'blockout',String(job.blockout.currentRound??0),'scene.json'));
    save(join(generationDir,'procedural-budget.json'),assertProceduralBudget(ctx.acceptedScene,layout));
+   if(job.voxelDetailPolicy===VOXEL_DETAIL_POLICY){ctx.voxelDetailAllocation=allocateVoxelEntityDetails(layout,ctx.acceptedScene);save(join(generationDir,'voxel-detail-allocation.json'),ctx.voxelDetailAllocation);save(join(generationDir,'voxel-detail-basis.json'),createVoxelDetailBasis(layout,ctx.acceptedScene,ctx.voxelDetailAllocation));}
    if(job.optimizationPolicy?.assetContextViews===1)ctx.assetSceneContext={scene:ctx.acceptedScene,review:job.blockout.rounds.at(-1).review,observation:ctx.observation};
    const contextContract=ctx.assetSceneContext?assetContextContract(layout,ctx.assetSceneContext):undefined;
    const restoredBasis=(restored?.assets??[]).map((a:any)=>({templateId:a.id,source:a.source?.acceptedGeometrySha256??null,expected:assetGeometryBasis(ctx.acceptedScene,a.id)?.sha256??null,reusable:assetGeometryBasisMatches(a.source,ctx.acceptedScene,a.id)}));
@@ -150,7 +156,7 @@ export async function runGeneralScene({job,plan,dir,signal,stage,command,preview
    const pending=ranked.map(r=>r.brief).filter(t=>!ready.has(t.id)),active=new Map<string,string>();let completed=assets.length;
    const enoughBudget=standardJob(job)?hasSceneBudget(job,pending.length):hasBudget(pending.length+1); // A budget shortage preserves a local draft without starting more model requests.
    if(!enoughBudget)job.executionFault=(standardJob(job)?'SCORE_BUDGET_RESERVED':'MODEL_BUDGET_EXHAUSTED')+'：缺少 '+pending.length+' 类资产，剩余预算不足以完成资产和一次评估';
-   const concurrency=executionSettings(job.executionSettings).assetConcurrency,phase='生成资产（最多并发 '+concurrency+' 类）',readyAt=Date.now();
+   const concurrency=executionSettings(job.executionSettings).assetConcurrency,phase=(job.voxelDetailPolicy===VOXEL_DETAIL_POLICY?'体素逐组件精修':'生成资产')+'（最多并发 '+concurrency+' 类）',readyAt=Date.now();
    job.generationLimits={assetConcurrency:concurrency,assetStageTimeoutMs:job.productionWindow?.version==='quality-delivery-window-v3'?null:standardJob(job)?Math.max(1,Math.min(90*60*1000,remainingProductionMs(job,'geometry-asset'))):90*60*1000};
    const persistCheckpoint=()=>{try{const cp=checkpoints.register({job,planFile:join(dir,'plan.json'),generationDir,textureFile:join(dir,'materials/texture-registry.json'),provenance:{kind:'asset-progress',pipelineVersion:job.pipelineVersion,parentCheckpoint:job.reuseCheckpoint??null}});job.checkpointId=cp.id;saveJob(job);}catch(error){event(job,'checkpoint-error','进度文件已保存，检查点登记失败：'+String(error));}};
    save(join(generationDir,'checkpoints.json'),checkpoint);progress(phase,completed,steps.length,null);persistCheckpoint();
@@ -166,7 +172,16 @@ export async function runGeneralScene({job,plan,dir,signal,stage,command,preview
    if(assets.length<layout.program.templates.length){job.partialOutput={completed:assets.length,total:layout.program.templates.length,missing:layout.program.templates.filter(t=>!assets.some(a=>a.template.id===t.id)).map(t=>({id:t.id,label:t.label})),reason:generated.fatal??(generated.timedOut?'制作时间窗已到，保留成功资产并进入草稿评分':null)??'独立资产在有界修正后仍未完成；保留成功资产并交付明确标记的草稿'};event(job,'partial-output','详细资产未齐，交付本次已生成几何组成的草稿，缺失详情公开，继续细化需恢复未完成资产。');}
    return assets;});
    for(const asset of assets)assertProceduralHandoff(asset,ctx.acceptedScene);
-   progress(job.partialOutput?'组装已完成资产与灰模草稿':'组装并检查完整场景',assets.length,steps.length,null);assertSpatialAccepted(job,layout);if(job.partialOutput){value=provisionalScene(layout,assets,read(join(generationDir,'blockout',String(job.blockout.currentRound??0),'scene.json')),plan,images.length).scene;}else{const raw={...layout,version:'scene-v1',program:{...layout.program,templates:layout.program.templates.map(t=>assets.find(a=>a.template.id===t.id)!.template)}};const fitted=fitAssemblyBudget(raw.program);save(join(dir,'assembly-budget.json'),fitted.report);if(fitted.report.changes.length){job.assemblyOptimization=fitted.report;event(job,'assembly-budget','旧资产总量超预算，已保留所有实例和结构，仅降低散布密度；原始资产保留，质量待验收。');}value=validate({...raw,program:fitted.program});}return await finishScene(value!,textures,provenance);
+   progress(job.partialOutput?'组装已完成资产与灰模草稿':'组装并检查完整场景',assets.length,steps.length,null);assertSpatialAccepted(job,layout);if(job.partialOutput){value=provisionalScene(layout,assets,read(join(generationDir,'blockout',String(job.blockout.currentRound??0),'scene.json')),plan,images.length).scene;}else{if(ctx.voxelDetailAllocation){
+    const merged=await mergeVoxelDetails(layout,assets,ctx.acceptedScene,ctx.voxelDetailAllocation,textures,{signal,canRepair:()=>hasSceneBudget(job,1,'voxel-entity'),repair:async(templateId,feedback,validateDetailMerge)=>{
+     const brief=layout.program.templates.find(t=>t.id===templateId)!,folder=join(generationDir,'assets',templateId),repairFolder=join(folder,'detail-repair-1');
+     const prior=read(join(folder,'checkpoint.json'));if(prior.detailRepair===feedback.version||existsSync(join(repairFolder,'checkpoint.json')))throw Error('VOXEL_DETAIL_MERGE_REPAIR_EXHAUSTED：当前合并诊断已执行一次修正，不能重置调用或重修');
+     const detailRepairStartedAt=Date.now();save(join(folder,'checkpoint.json'),{...prior,modelAttemptFolders:['detail-repair-1'],detailRepair:feedback.version,detailRepairStartedAt});save(join(folder,'voxel-detail-merge-feedback.json'),feedback);event(job,'voxel-detail-repair','按真实合并冲突自动修正 '+brief.label+'，其余已完成模板保持冻结；最多一次协调修正');
+     progress('体素逐组件精修 · 合并冲突修正',0,1,brief.label);const value=await stage('assets',()=>generateOneAsset({...ctx,assetFolder:repairFolder,readyAt:Date.now(),requiresAssetPreview:!!existsSync(join(folder,'asset-visual-review.json')),revision:{previousAsset:assets.find(a=>a.template.id===templateId),feedback,frames:[]},validateDetailMerge},layout,brief,textures));
+     for(const name of ['geometry.json','accepted-geometry.json','asset-visual-review.json','voxel-detail-input.json','voxel-detail-metrics.json'])if(existsSync(join(repairFolder,name)))cpSync(join(repairFolder,name),join(folder,name));
+     const selected=read(join(repairFolder,'checkpoint.json')),startedAt=Number.isFinite(prior.startedAt)?prior.startedAt:selected.startedAt;save(join(folder,'checkpoint.json'),{...selected,readyAt:Number.isFinite(prior.readyAt)?prior.readyAt:selected.readyAt,startedAt,durationMs:Math.max(0,selected.endedAt-startedAt),modelAttemptFolders:['detail-repair-1'],detailRepair:feedback.version,detailRepairStartedAt:selected.startedAt});steps.find(s=>s.id===templateId)!.status='passed';save(join(generationDir,'checkpoints.json'),checkpoint);return value;
+    }});assets.splice(0,assets.length,...merged.assets);save(join(generationDir,'voxel-detail-assembly.json'),merged.report.budget);save(join(generationDir,'voxel-detail-ownership.json'),merged.report.ownership);if(merged.repair)save(join(generationDir,'voxel-detail-merge-repair.json'),merged.repair);
+   }const raw={...layout,version:'scene-v1',program:{...layout.program,templates:layout.program.templates.map(t=>assets.find(a=>a.template.id===t.id)!.template)}};const fitted=fitAssemblyBudget(raw.program);save(join(dir,'assembly-budget.json'),fitted.report);if(fitted.report.changes.length){job.assemblyOptimization=fitted.report;event(job,'assembly-budget','旧资产总量超预算，已保留所有实例和结构，仅降低散布密度；原始资产保留，质量待验收。');}value=validate({...raw,program:fitted.program});}return await finishScene(value!,textures,provenance);
   }
   assertSpatialAccepted(job,value);return await finishScene(value!,textures,provenance);
   }finally{finishGeneration(job,job.structure?.passed?'passed':signal.aborted?'cancelled':'failed');if(layout&&existsSync(join(dir,'materials/texture-registry.json'))){try{const cp=checkpoints.register({job,planFile:join(dir,'plan.json'),generationDir,textureFile:join(dir,'materials/texture-registry.json'),provenance:{kind:job.reuseCheckpoint?'continuation':'job',pipelineVersion:job.pipelineVersion,parentCheckpoint:job.reuseCheckpoint??null}});job.checkpointId=cp.id;event(job,'checkpoint','已保存可续跑检查点：'+cp.assets.length+'/'+cp.total+' 类资产');}catch(error){event(job,'checkpoint-error','检查点未保存：'+String(error));}}}

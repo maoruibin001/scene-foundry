@@ -13,6 +13,18 @@ import {validateRegion} from './visual-region';
 const pose={position:[0,0,0],rotation:[0,0,0],scale:[1,1,1]},plan={requirements:[{id:'R1',critical:true,count:null}]};
 const scene=()=>({version:'scene-v1',program:{version:'geometry-v1',name:'通用物体',materials:[{id:'base',color:[1,1,1,1],roughness:.7,metallic:0,textureId:null}],templates:[{id:'subject',parts:[{...pose,id:'body',material:'base',shape:{type:'box',size:[1,1,1],radius:0}}]}],instances:[{...pose,id:'one',label:'主体',template:'subject',requirementIds:['R1']}]},entities:[{instanceId:'one',category:'物体',role:'subject'}],cameras:[{name:'参考',referenceIndex:1,position:[3,-4,2],target:[0,0,0],fov:1},{name:'检查',referenceIndex:null,position:[-3,4,2],target:[0,0,0],fov:1}],textures:[],textureReuse:[],lighting:{direction:[.5,.5,-.7],color:[1,1,1],intensity:1,ambientColor:[1,1,1],ambientIntensity:.2,points:[]},assumptions:[]});
 const patch=()=>({version:'scene-refinement-v5',reason:'依据画面调整材质',instances:[],cameras:[],materials:[{id:'base',color:[.5,.5,.5,1],roughness:.7,metallic:0,textureId:null}],parts:[],removeParts:[],addTemplates:[],addEntities:[],textures:[],textureReuse:[],lighting:null,assumptions:[],surfaceUpdates:[],screenTargets:[],removeInstances:[]});
+test('工具恢复绑定新增精修依据，不能复用旧约束审计或重置工具额度',async()=>{
+ const folder=mkdtempSync(join(tmpdir(),'detail-tool-identity-')),options={source:scene(),textures:{},folder,signal:new AbortController().signal,images:[],refs:[],apply:()=>scene(),validate:()=>{}};
+ try{
+  const old=createRepairTools(options);await old.kit.call('inspect_scene_parts',{templateId:'subject',partIds:[]});
+  expect(()=>createRepairTools({...options,validationIdentity:digest('new frozen basis')})).toThrow('精修约束');
+  rmSync(join(folder,'tool-audit.json'));
+  const identity=digest('new frozen basis'),first=createRepairTools({...options,validationIdentity:identity});await first.kit.call('inspect_scene_parts',{templateId:'subject',partIds:[]});
+  expect(createRepairTools({...options,validationIdentity:identity}).counts.inspect_scene_parts).toBe(1);
+  expect(()=>createRepairTools({...options,validationIdentity:digest('another basis')})).toThrow('精修约束');
+  expect(()=>createRepairTools(options)).toThrow('精修约束');
+ }finally{rmSync(folder,{recursive:true,force:true});}
+});
 test('局部看图只选择已知原图、明确来源机位与成功候选，不把失败或未知路径当证据',async()=>{
  const folder=mkdtempSync(join(tmpdir(),'region-tool-test-')),seen:any[]=[];let renderFailure=false;
  const f=createRepairTools({source:scene(),textures:{},folder,signal:new AbortController().signal,images:[{path:'/known/reference.png',mime:'image/png'}],refs:['ref'],sourceFrames:[{referenceIndex:1,path:'/known/source.png'}],apply:()=>scene(),validate:()=>{},inspectRegion:async(images)=>{seen.push(images);return [{type:'text',text:'真实局部诊断'}];},render:async(_scene,_images,_refs,dir)=>{if(renderFailure)throw Error('预览失败');mkdirSync(join(dir,'capture'),{recursive:true});writeFileSync(join(dir,'capture/candidate-1.png'),'pixels');writeFileSync(join(dir,'engine-preview-receipt.json'),JSON.stringify({sceneSha256:digest(JSON.stringify(_scene)),frames:[{referenceIndex:1,file:'candidate-1.png',sha256:digest('pixels')}]}));return [];}});

@@ -2,7 +2,7 @@ import {crossTaskReuse} from './reuse-mode';
 import {existsSync,mkdirSync,readFileSync,writeFileSync,readdirSync} from 'node:fs';
 import {join} from 'node:path';
 import {DATA,digest,read,save} from './store';
-const roles=new Set(['plan','scene-observation','scene-space','scene-surface','scene-blockout','geometry-asset']);
+const roles=new Set(['plan','scene-observation','scene-space','scene-surface','scene-blockout','geometry-asset','voxel-entity']);
 export const stable=(v:any):string=>JSON.stringify(v,(_k,x)=>x&&typeof x==='object'&&!Array.isArray(x)?Object.fromEntries(Object.keys(x).sort().map(k=>[k,x[k]])):x);
 export function validatedKey(input:any,identity:any){return digest(stable({identity,role:input.role,system:input.system,text:input.text,schemaContext:input.schemaContext??null,maxTokens:input.maxTokens,modelSettings:input.modelSettings,images:(input.images??[]).map(i=>({mime:i.mime,sha256:digest(readFileSync(i.path))}))}));}
 /** Single-flight within the coordinator. Disk artifacts survive restart; failures are never cached. */

@@ -17,7 +17,7 @@ export const REPAIR_TOOL_PROMPT='本次提供 scene_feedback 专用工具。可�
 const patchInput={type:'object',properties:{patchJson:{type:'string',description:'完整 scene-refinement-v5 补丁的 JSON 字符串；相对原始场景应用。'}},required:['patchJson'],additionalProperties:false};
 const renderInput={type:'object',properties:{patchJson:{type:'string',description:'新候选完整JSON；与patchSha256二选一。'},patchSha256:{type:'string',pattern:'^[a-f0-9]{64}$',description:'本轮已通过检查或预览的候选摘要；避免重写相同补丁。'}},additionalProperties:false,anyOf:[{required:['patchJson']},{required:['patchSha256']}]};
 const text=(value:any):ToolContent=>({type:'text',text:JSON.stringify(value)});
-export function createRepairTools(options:{source:any;textures:any;observation?:any;folder:string;signal:AbortSignal;images:{path:string;mime:string}[];refs:string[];validate:(patch:any)=>any;apply:(patch:any)=>any;render?:typeof renderRepairPreview;sourceFrames?:{referenceIndex:number;path:string}[];inspectRegion?:typeof inspectVisualRegion;onEvent?:(message:string)=>void}){
+export function createRepairTools(options:{source:any;textures:any;observation?:any;folder:string;signal:AbortSignal;images:{path:string;mime:string}[];refs:string[];validate:(patch:any)=>any;apply:(patch:any)=>any;render?:typeof renderRepairPreview;sourceFrames?:{referenceIndex:number;path:string}[];inspectRegion?:typeof inspectVisualRegion;onEvent?:(message:string)=>void;validationIdentity?:string}){
  const {source,textures,folder,signal}=options;mkdirSync(folder,{recursive:true});
  const counts={inspect_visual_region:0,inspect_scene_parts:0,check_scene_patch:0,render_scene_patch:0,enginePreviews:0},limits={inspect_visual_region:6,inspect_scene_parts:8,check_scene_patch:6,render_scene_patch:8};
  const audited:any[]=[],reviewed=reviewedCandidates({folder,validate:options.validate,apply:options.apply});let busy=false;let latestFrames:{referenceIndex:number;path:string}[]=[];
@@ -25,6 +25,7 @@ export function createRepairTools(options:{source:any;textures:any;observation?:
  if(existsSync(auditFile)){
   const prior=JSON.parse(readFileSync(auditFile,'utf8'));
   if(prior.sourceSha256!==digest(stable(source)))throw Error('工具恢复来源场景发生变化');
+  if(prior.validationIdentity!==options.validationIdentity)throw Error('工具恢复精修约束发生变化');
   for(const key of Object.keys(counts) as (keyof typeof counts)[]){if(!Number.isInteger(prior.counts?.[key])||prior.counts[key]<0)throw Error('工具恢复额度无效');counts[key]=prior.counts[key];}
   audited.push(...prior.attempts);
   for(const row of audited.filter(r=>r.name==='render_scene_patch'&&r.status==='passed')){
@@ -33,7 +34,7 @@ export function createRepairTools(options:{source:any;textures:any;observation?:
    latestFrames=receipt.frames.filter((f:any)=>Number.isInteger(f.referenceIndex)&&f.referenceIndex>0).map((f:any)=>({referenceIndex:f.referenceIndex,path:join(dir,'capture',f.file)}));
   }
  }
- const persist=()=>save(auditFile,{version:REPAIR_TOOL_VERSION,sourceSha256:digest(stable(source)),counts,limits,attempts:audited,renderedPatchHashes:reviewed.hashes(),quality:'not-assessed'});
+ const persist=()=>save(auditFile,{version:REPAIR_TOOL_VERSION,sourceSha256:digest(stable(source)),...(options.validationIdentity?{validationIdentity:options.validationIdentity}:{}),counts,limits,attempts:audited,renderedPatchHashes:reviewed.hashes(),quality:'not-assessed'});
  // A new CLI process has no earlier conversation. Restore paid-for inspection
  // evidence and the last unfinished patch without resetting any tool allowance.
  const retainedWork=()=>{

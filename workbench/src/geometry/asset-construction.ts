@@ -28,7 +28,7 @@ export function assetConstructionPrompt(instructions:string){
 export function createAssetConstruction(options:{
  folder:string;jobId:string;rootJobId:string;inputKey:string;brief:AssetBrief;layout:SceneLayout;
  textures:Record<string,Texture>;signal:AbortSignal;revision?:any;review?:CodexToolKit;voxel?:boolean;
- validateFinal:(value:AssetGeometry)=>AssetGeometry;
+ validateFinal:(value:AssetGeometry)=>AssetGeometry;validateParts?:(value:AssetGeometry)=>any;
 }){
  const {folder,brief,layout,textures,signal,review,validateFinal}=options;
  check(typeof options.jobId==='string'&&options.jobId.length>0&&typeof options.rootJobId==='string'&&options.rootJobId.length>0&&hash(options.inputKey),'资产分块缺少执行身份或冻结输入摘要');
@@ -56,7 +56,7 @@ export function createAssetConstruction(options:{
   return value;
  };
  const restored=valueOf(state);
- if(restored.template.parts.length)validateAllocatedAssetParts(restored,brief,layout,textures);
+ if(restored.template.parts.length)(options.validateParts??((v:any)=>validateAllocatedAssetParts(v,brief,layout,textures)))(restored);
  else check(state.writes===0,'已保存的资产分块不能为空');
  const current=()=>{
   signal.throwIfAborted();
@@ -115,7 +115,7 @@ export function createAssetConstruction(options:{
     parts.push(...upserts.filter(p=>!value.template.parts.some(old=>old.id===p.id)));
     const next=asset(parts),serialized=stable(next);
     check(serialized.length<=MAX_JSON_CHARS,'整份资产超过原有 JSON 大小上限');
-    const measured=validateAllocatedAssetParts(next,brief,layout,textures),assetSha256=digest(serialized);
+    const measured=(options.validateParts??((v:any)=>validateAllocatedAssetParts(v,brief,layout,textures)))(next),assetSha256=digest(serialized);
     if(assetSha256===state.assetSha256)return reply({...summary(),unchanged:true});
     check(state.writes<maxWrites,'本资产分块保存上限已到，不得通过重试重置');
     const rows=parts.map(p=>({id:p.id,sha256:digest(stable(p))}));
