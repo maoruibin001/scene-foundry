@@ -59,7 +59,7 @@ export class ImprovementLedger {
   save(this.path(v.id),v);
  }
  inputKey(input:any){return digest(JSON.stringify([String(input.prompt??'').trim().replace(/\s+/g,' '),(input.images??[]).map((i:any)=>i.id),...(input.sceneKind==='voxel'?['voxel']:[])]));}
- key(input:any){const key=this.inputKey(input);return input.reuseMode==='fresh'&&input.generationMode==='first-pass'&&input.baselineId?digest(JSON.stringify([key,'fresh-first-pass',input.baselineId])):key;}
+ key(input:any){const key=this.inputKey(input);if(input.improvementSalt)return digest(JSON.stringify([key,'multiplan',input.improvementSalt]));return input.reuseMode==='fresh'&&input.generationMode==='first-pass'&&input.baselineId?digest(JSON.stringify([key,'fresh-first-pass',input.baselineId])):key;}
  path(id:string){if(!/^[a-f0-9]{64}$/.test(id))throw Error('实验标识无效');return join(this.root,id+'.json');}
  get(id:string){return read(this.path(id));}
  enter(input:any,jobId:string,historical:any[]=[],source?:any,mode='generation'){const id=source?.improvementId??this.key(input),p=this.path(id),v=existsSync(p)?read(p):{id,createdAt:Date.now(),strategy:'image-first-graybox-v1',limits:input.generationMode==='qualified'?{...IMPROVEMENT_LIMITS,repairs:null,calls:null}:IMPROVEMENT_LIMITS,repairs:0,calls:0,noGain:0,jobs:[],results:[],history:historical.map(j=>({id:j.id,score:j.quality?.score??null,status:j.status,pipelineVersion:j.pipelineVersion?.label})),scope:this.key(input)!==this.inputKey(input)?'用户确认的从头首轮验证；绑定参考基准，同基准和技术恢复不重置；历史案例独立保留，全局调用仍累计': '历史运行保留审计；新机制从首次启用起统一累计，换模型、版本或新任务不重置',inputKey:this.inputKey(input),firstPassBaseline:this.key(input)!==this.inputKey(input)?input.baselineId:null};
