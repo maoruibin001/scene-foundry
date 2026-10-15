@@ -36,6 +36,7 @@ import {SURFACE_TRANSLUCENCY} from './geometry/surface-translucency';
 import {OBJECTIVE_METRICS,objectiveMetricsRule,computeObjectiveMetrics} from './geometry/objective-metrics';
 import {HUMAN_CALIBRATION} from './human-calibration';
 import {GRAYBOX_MULTIPLAN,GRAYBOX_MULTIPLAN_K,multiPlanRule,multiPlanSalt,shouldSpawnNextPlan,nextPlanAttempt} from './geometry/graybox-multiplan';
+import {generationInput} from './reference-input';
 import {STAGE_NAMES} from './timing-snapshot';
 import {sceneQueue,renderPool,PermitPool,owner,ownerAlive,legacyJobs,pauseProvider,schedulerSnapshot} from './concurrency';
 import {references} from './reference-baseline';
