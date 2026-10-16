@@ -22,7 +22,7 @@ const selection={type:'object',properties:{selectedPatchSha256:{type:'string',pa
 const text=(v:any):ToolContent=>({type:'text',text:JSON.stringify(v)});
 
 /** A reviewed local patch must be the exact geometry later used by the normal graybox gate. */
-export function createGrayboxSpacePreview(options:{space:any;sourceScene:any;observation?:any;contractVersion?:string;voxel?:boolean;templateBounds?:boolean;jointFitNet?:boolean;spaceFit?:boolean;occlusion?:boolean;images:{path:string;mime:string}[];folder:string;signal:AbortSignal;schema:any;apply:(patch:any)=>any;buildScene:(space:any,patch:any)=>any;render?:typeof renderRepairPreview}){
+export function createGrayboxSpacePreview(options:{space:any;sourceScene:any;observation?:any;contractVersion?:string;voxel?:boolean;templateBounds?:boolean;jointFitNet?:boolean;spaceFit?:boolean;images:{path:string;mime:string}[];folder:string;signal:AbortSignal;schema:any;apply:(patch:any)=>any;buildScene:(space:any,patch:any)=>any;render?:typeof renderRepairPreview}){
  const {folder,signal}=options;mkdirSync(folder,{recursive:true});
  const version=options.contractVersion??GRAYBOX_SPACE_PREVIEW,measured=[GRAYBOX_SPACE_PREVIEW,'graybox-space-preview-v14','graybox-space-preview-v13','graybox-space-preview-v12','graybox-space-preview-v11','graybox-space-preview-v10','graybox-space-preview-v9','graybox-space-preview-v8','graybox-space-preview-v7','graybox-space-preview-v6','graybox-space-preview-v5','graybox-space-preview-v4','graybox-space-preview-v3'].includes(version);
  if(!measured&&version!=='graybox-space-preview-v2')throw Error('未知灰模预览证据契约');
@@ -30,9 +30,7 @@ export function createGrayboxSpacePreview(options:{space:any;sourceScene:any;obs
  const templateEdits=version===GRAYBOX_SPACE_PREVIEW&&options.templateBounds===true?GRAYBOX_TEMPLATE_BOUND_EDITS:0,jointFitNet=version===GRAYBOX_SPACE_PREVIEW&&options.jointFitNet===true;
  // The numeric fit is an ordinary-scene policy tool on the current contract; voxel jobs keep the lattice fit.
  const spaceFit=version===GRAYBOX_SPACE_PREVIEW&&options.spaceFit===true&&options.voxel!==true;
- // Occlusion-overflow term for the fit: only on the current contract, only when spaceFit is on.
- const occlusion=spaceFit&&options.occlusion===true;
- const contract=digest(stable({version,space:options.space,scene:options.sourceScene,images:options.images.map(i=>digest(readFileSync(i.path))),...(measured?{observation:options.observation??null}:{}),...([GRAYBOX_SPACE_PREVIEW,'graybox-space-preview-v14','graybox-space-preview-v13','graybox-space-preview-v12'].includes(version)?{voxel:options.voxel===true}:{}),...(templateEdits?{templateBounds:true}:{}),...(jointFitNet?{jointFitNet:true}:{}),...(spaceFit?{spaceFit:true}:{}),...(occlusion?{occlusion:true}:{})}));
+ const contract=digest(stable({version,space:options.space,scene:options.sourceScene,images:options.images.map(i=>digest(readFileSync(i.path))),...(measured?{observation:options.observation??null}:{}),...([GRAYBOX_SPACE_PREVIEW,'graybox-space-preview-v14','graybox-space-preview-v13','graybox-space-preview-v12'].includes(version)?{voxel:options.voxel===true}:{}),...(templateEdits?{templateBounds:true}:{}),...(jointFitNet?{jointFitNet:true}:{}),...(spaceFit?{spaceFit:true}:{})}));
  const auditFile=join(folder,'graybox-preview-audit.json'),audit=existsSync(auditFile)?read(auditFile):{version,contract,used:0,attempts:[],...(measured?{measured:0,measurements:[]}:{})};
  if(audit.contract!==contract||audit.version!==version||!Number.isInteger(audit.used)||audit.used<0||audit.used>2)throw Error('灰模预览恢复契约或额度发生变化');
  if(measured&&(!Number.isInteger(audit.measured)||audit.measured<0||audit.measured>4||!Array.isArray(audit.measurements)||audit.measurements.length!==audit.measured))throw Error('灰模量化测量恢复额度无效');
@@ -99,7 +97,7 @@ export function createGrayboxSpacePreview(options:{space:any;sourceScene:any;obs
     if(audit.spaceFits.length>=L.calls||audit.spaceFitMeasured>=L.evaluations)throw Error('灰模数值拟合已达到本轮额度；恢复与重试不重置，仍可使用已有拟合结果、测量或真实预览');
     const measure=(patch:any)=>{const applied=apply(patch),canonical=build(applied.value,patch);return composition(bindReferenceFrames(readableBlockout(canonical),options.images));};
     busy=true;let result;
-    try{result=fitGrayboxSpace({space:options.space,basePatch:args.basePatch,instanceIds:args.instanceIds,referenceIndices:args.referenceIndices,signal,occlusion,maxEvaluations:Math.min(L.evaluationsPerCall,L.evaluations-audit.spaceFitMeasured),measure,sourceReport:()=>composition(bindReferenceFrames(readableBlockout(options.sourceScene),options.images)),jointFit:fit});}
+    try{result=fitGrayboxSpace({space:options.space,basePatch:args.basePatch,instanceIds:args.instanceIds,referenceIndices:args.referenceIndices,signal,maxEvaluations:Math.min(L.evaluationsPerCall,L.evaluations-audit.spaceFitMeasured),measure,sourceReport:()=>composition(bindReferenceFrames(readableBlockout(options.sourceScene),options.images)),jointFit:fit});}
     finally{busy=false;}
     const row={input:structuredClone(args),inputSha256,result,resultSha256:digest(stable(result))};audit.spaceFits.push(row);audit.spaceFitMeasured+=result.report.evaluations;persist();
     return {content:[text({...result,report:{...result.report,attempts:undefined},used:audit.spaceFitMeasured,limit:L.evaluations,quality:'geometry-prediction-only',instructions:'这是有界几何预测，仍需提交返回完整patch到preview_graybox_space看真实画面，最终只选择真实预览过的摘要；可在此patch上继续手工修正后再预览。'})]};
