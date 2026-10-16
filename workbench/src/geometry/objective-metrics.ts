@@ -4,7 +4,7 @@ import {existsSync} from 'node:fs';
 import {referenceViews} from '../image-reconstruction';
 
 export const OBJECTIVE_METRICS='objective-reference-metrics-v1';
-/** New ordinary jobs attach deterministic colour/structure metrics as a NON-GATING cross-check on the model's visual judgement; voxel and historical jobs are unchanged. */
+/** New jobs attach deterministic colour/structure metrics as a NON-GATING cross-check on the model's visual judgement; historical jobs are unchanged. */
 export function objectiveMetricsRule(job:any){return job?.objectiveMetricsPolicy===OBJECTIVE_METRICS;}
 
 export type ObjectivePair={referenceIndex:number;original:string;frame:string};
