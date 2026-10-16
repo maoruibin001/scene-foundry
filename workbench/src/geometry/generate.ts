@@ -38,7 +38,6 @@ import type {Texture} from './program';
 import {jobTextureCandidates,jobTextureReuse} from './texture-library';
 import {assetInput} from './asset-input';
 import {referencePixelSizes,TEXTURE_SOURCE_GUIDANCE} from './texture-source';
-import {surfaceTranslucencyRule,SURFACE_TRANSLUCENCY_GUIDANCE} from './surface-translucency';
 import {prepareAssetEvidence} from './asset-evidence';
 import {repairReusableTextureEvidence} from './repair-texture-evidence';
 import {assetCache,assetKey} from './asset-cache';
@@ -77,7 +76,7 @@ export async function generateLayout(ctx:GenerationContext){
  const planSurface=(frozenSpace:any,surfaceSignal=signal)=>ctx.stage!('surface',async()=>{
   const refs=images.map(i=>digest(readFileSync(i.path))),candidates=jobTextureCandidates(job,refs);
   const evidence=candidates.length?await repairReusableTextureEvidence(refs,join(dir,'surface-materials'),surfaceSignal,undefined,candidates.map(c=>c.id)):{images:[],context:[]};
-  const request={modelSettings:job.modelSettings,role:'scene-surface',signal:surfaceSignal,maxTokens:6500,images:[...images,...evidence.images],schemaContext:{voxel:job.sceneKind==='voxel',voxelLattice:frozenSpace.voxelLattice},system:SURFACE_PROMPT+'\n'+pipelineGuidance(job)+'\n'+matchingGuidance(job)+(job.sceneKind==='voxel'?'\n'+VOXEL_SURFACE_GUIDANCE:'')+(surfaceTranslucencyRule(job)?'\n'+SURFACE_TRANSLUCENCY_GUIDANCE:'')+'\n'+TEXTURE_SOURCE_GUIDANCE,text:JSON.stringify({input:job.prompt,referenceImages:images.length,referencePixelSizes:ctx.referencePixelSizes,plan,space:frozenSpace,materialBudget:job.generationBrief.budget.maximumMaterials,reusableTextures:evidence.context,materialImageOrder:'原始参考图在前，最后一张为实际候选颜色贴图表；表中asset编号与reusableTextures.sheetId对应，不是新的参考图。'})};
+  const request={modelSettings:job.modelSettings,role:'scene-surface',signal:surfaceSignal,maxTokens:6500,images:[...images,...evidence.images],schemaContext:{voxel:job.sceneKind==='voxel',voxelLattice:frozenSpace.voxelLattice},system:SURFACE_PROMPT+'\n'+pipelineGuidance(job)+'\n'+matchingGuidance(job)+(job.sceneKind==='voxel'?'\n'+VOXEL_SURFACE_GUIDANCE:'')+'\n'+TEXTURE_SOURCE_GUIDANCE,text:JSON.stringify({input:job.prompt,referenceImages:images.length,referencePixelSizes:ctx.referencePixelSizes,plan,space:frozenSpace,materialBudget:job.generationBrief.budget.maximumMaterials,reusableTextures:evidence.context,materialImageOrder:'原始参考图在前，最后一张为实际候选颜色贴图表；表中asset编号与reusableTextures.sheetId对应，不是新的参考图。'})};
   const validateSurface=(v:any)=>{if(!Array.isArray(v.instanceSurfaces))throw Error('材质规划缺少逐实例表面配置 instanceSurfaces');const layout=applySurface(frozenSpace,v,plan,images.length,job.complexity);jobTextureReuse(job,layout,images.map(i=>digest(readFileSync(i.path))));return v;};
   const saved=savedStage(ctx,'scene-surface',validateSurface,false,undefined,request);
   if(saved){surfaceSignal.throwIfAborted();persistStageReuse(ctx,'scene-surface',saved);ctx.job.stages.surface.reused=true;return {value:saved.value,receipt:saved.receipt};}
