@@ -17,6 +17,8 @@ export async function initializeCodexRoute(){try{activeRoute=await discoverCodex
 function routeForModel(model=process.env.PIPELINE_MODEL){return routeForSelection(activeRoute,process.env.PIPELINE_MODEL,model);}
 export function codexRouteInfo(model?:string){const route=routeForModel(model);return route?routeSummary(route):null;}
 export function codexRouteError(){return routeFailure??null;}
+/** Address used only for a credential-free reachability probe after a network outage; never a model request. */
+export function codexProbeUrl(model?:string){const base=routeForModel(model)?.definition?.base_url;return typeof base==='string'?base:'https://chatgpt.com/backend-api/codex';}
 export const CODEX_EFFORT=process.env.PIPELINE_CODEX_EFFORT??'high';
 // Reuse the CLI's login. Never pass API keys, endpoint overrides or provider credentials.
 export function codexEnvironment(source=process.env){return Object.fromEntries(['PATH','HOME','CODEX_HOME','TMPDIR','LANG','LC_ALL','USER','LOGNAME','PIPELINE_ACCEPTANCE_CONTROL_FILE','PIPELINE_VALIDATION_CONTROL_FILE'].filter(k=>source[k]!==undefined).map(k=>[k,source[k]!]));}
