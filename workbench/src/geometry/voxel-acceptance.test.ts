@@ -1,5 +1,7 @@
 import {test,expect} from 'bun:test';
-import {objectiveAcceptance,objectiveMarginal,voxelAcceptanceRule,withObjectiveAcceptance,VOXEL_ACCEPTANCE} from './voxel-acceptance';
+import {existsSync,readdirSync,readFileSync} from 'node:fs';
+import {join} from 'node:path';
+import {objectiveAcceptance,objectiveMarginal,objectiveRepairFeedback,voxelAcceptanceRule,withObjectiveAcceptance,VOXEL_ACCEPTANCE} from './voxel-acceptance';
 import {selectSpatialCandidate} from './blockout-selection';
 
 // Shapes follow the recorded voxel rounds: judge 3.0 under the 3.5 threshold, critical rows at 2.5–3, measured landmark boxes within .05.
@@ -59,6 +61,30 @@ test('re-review is spent only when the measured checks pass and a critical row i
  expect(objectiveMarginal(withObjectiveAcceptance(gate([3,2.5,2]),space,composition(),observation),space)).toBe(true);
  expect(objectiveMarginal(withObjectiveAcceptance(gate([3,3.5,2]),space,composition(),observation),space)).toBe(false);
  expect(objectiveMarginal(withObjectiveAcceptance(gate([3,2.5,2]),space,composition(0,true),observation),space)).toBe(false);
+});
+
+test('a measured blocker the judge never scored reaches the repair input with its bound instances',()=>{
+ const hidden=composition();hidden.rows[3]={landmarkId:'d',critical:true,referenceIndex:1,status:'unverified',extent:'occluded',pixels:0,expected:[.1,.05,.3,.3],instanceIds:['pool']} as any;
+ // A measured non-critical row keeps four rows for the mirror check.
+ hidden.rows.push({...hidden.rows[0],landmarkId:'e',critical:false});
+ const f=objectiveRepairFeedback(withObjectiveAcceptance(gate([3,3,3]),space,hidden,observation),hidden)!;
+ expect(f.failed.map((c:any)=>c.id)).toEqual(['critical-visible']);
+ expect(f.hiddenLandmarks).toEqual([{landmarkId:'d',referenceIndex:1,instanceIds:['pool'],extent:'occluded',expected:[.1,.05,.3,.3],pixels:0}]);
+ // Other measured blockers carry their detail without hidden landmarks; an accepted or judge-only round adds nothing.
+ const flipped=objectiveRepairFeedback(withObjectiveAcceptance(gate(),space,composition(0,true),observation),composition(0,true))!;
+ expect(flipped.failed.map((c:any)=>c.id)).toContain('not-mirrored');expect(flipped.hiddenLandmarks).toEqual([]);
+ expect(objectiveRepairFeedback(withObjectiveAcceptance(gate(),space,composition(),observation),composition())).toBeNull();
+ expect(objectiveRepairFeedback(gate(),composition())).toBeNull();
+});
+
+test('recorded temple round: the rear pool the judge never scored below 2.5 is named with its instance',()=>{
+ const runs='/tmp/sf-vx-r6/data/runs',run=existsSync(runs)?readdirSync(runs).find(d=>d.startsWith('bbb70515')):null;
+ if(!run)return;
+ // Read-only scan of the recorded 2026-10-18 round 1.
+ const read=(f:string)=>JSON.parse(readFileSync(join(runs,run,'generation/blockout/1',f),'utf8'));
+ const f=objectiveRepairFeedback(read('gate.json'),read('reference-composition.json'))!;
+ expect(f.failed.map((c:any)=>c.id)).toEqual(['critical-visible']);
+ expect(f.hiddenLandmarks.map((h:any)=>[h.landmarkId,h.instanceIds,h.pixels])).toEqual([['rear_pool',['water_rear_pool'],0]]);
 });
 
 test('an objectively accepted round becomes the retained candidate even when it opens judge rows below 3',()=>{

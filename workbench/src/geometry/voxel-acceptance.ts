@@ -56,6 +56,17 @@ export function objectiveMarginal(gate:any,space:any){
  return gate.review.relations.some((x:any)=>critical.has(x.id)&&Math.abs(x.score-VOXEL_ACCEPTANCE_LIMITS.criticalScore)<=band);
 }
 const MEASURED=['critical-visible','not-mirrored','landmark-alignment','complete-extent'];
+/**
+ * Repair input for a round the objective checks rejected. The repair model otherwise sees only the judge review, so a blocker the judge
+ * did not score (the 2026-10-18 temple rear pool: 0 pixels in all four rounds, relations 2.5–3) never became a repair target.
+ */
+export function objectiveRepairFeedback(gate:any,composition:any){
+ const o=gate?.objective;if(!o||o.passed)return null;
+ const failed=o.checks.filter((c:any)=>!c.passed),rows:any[]=Array.isArray(composition?.rows)?composition.rows:[];
+ const hidden=failed.some((c:any)=>c.id==='critical-visible')?rows.filter(r=>r.critical&&!((measured(r)&&r.pixels>=VOXEL_ACCEPTANCE_LIMITS.visiblePixels)||r.boundInstanceEvidence?.pixels>=VOXEL_ACCEPTANCE_LIMITS.visiblePixels))
+  .map(r=>({landmarkId:r.landmarkId,referenceIndex:r.referenceIndex,instanceIds:r.instanceIds??[],extent:r.extent,expected:r.expected??null,pixels:r.pixels??0})):[];
+ return {version:VOXEL_ACCEPTANCE,failed:failed.map((c:any)=>({id:c.id,detail:c.detail})),hiddenLandmarks:hidden};
+}
 /** The recorded row keeps the judge verdict beside the objective one; `passed` is the objective verdict every later stage reads. */
 export function withObjectiveAcceptance(gate:any,space:any,composition:any,observation:any){
  const objective=objectiveAcceptance(gate,space,composition,observation);
