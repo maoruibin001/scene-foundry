@@ -5,7 +5,8 @@ import {improvement} from '../improvement-governance';
 import {stable} from '../validated-cache';
 
 const same=(a:any,b:any)=>stable(a)===stable(b);
-const HARD=['framing','cameraMotion','nonFlat','multipleViews','entitiesLoaded','frameRate','runtime','noErrors','hudToggle','video','cameraStopped'];
+/** Capture checks prove the frames are a genuine, complete Engine run. Scene checks measure the candidate itself, so a false value is part of what was rejected, not missing evidence; the 2026-10-18 temple job crashed on framing=false although every frame and receipt matched. */
+const CAPTURE=['multipleViews','entitiesLoaded','runtime','noErrors','hudToggle','video','cameraStopped'],SCENE=['framing','cameraMotion','nonFlat','frameRate'];
 export function sameRejectedSpatialCase(current:any,other:any){
  return current.improvementId&&current.improvementId===other.improvementId&&['prompt','baselineId','complexity','matchingLevel'].every(k=>same(current[k],other[k]))&&same(current.plan,other.plan)&&same(current.modelSettings,other.modelSettings)&&same(current.policy,other.policy)
   &&same((current.images??[]).map(i=>i.id),(other.images??[]).map(i=>i.id))
@@ -19,7 +20,7 @@ export function rejectedSpatialAttempt(folder:string,job:any,ctx:any,sourceFolde
  const repair=read(handoff).repairFolder,receipt=read(join(repair,'repair-receipt.json'));
  if(receipt.sourceFolder!==sourceFolder)return null;
  const runtime=read(join(folder,'runtime/runtime.json')),report=read(join(folder,'project/evidence/run-report.json')),parsed=read(join(folder,'scene-space-judge-parsed.json')),judge=read(join(folder,'scene-space-judge-receipt.json'));
- if(!same(parsed,gate.review)||judge.stopReason!=='completed'||judge.requestedModel!==ctx.job.modelSettings.model||gate.runtimeDigest!==runtime.distManifestDigest||report.distManifestDigest!==gate.runtimeDigest||report.engineSha!==ctx.job.profile.engineSha||report.generatorSha!==ctx.job.profile.generatorSha||!HARD.every(k=>runtime.hard?.[k]===true))throw Error('失败空间反馈缺少对应的独立评分或Engine证据');
+ if(!same(parsed,gate.review)||judge.stopReason!=='completed'||judge.requestedModel!==ctx.job.modelSettings.model||gate.runtimeDigest!==runtime.distManifestDigest||report.distManifestDigest!==gate.runtimeDigest||report.engineSha!==ctx.job.profile.engineSha||report.generatorSha!==ctx.job.profile.generatorSha||!CAPTURE.every(k=>runtime.hard?.[k]===true)||!SCENE.every(k=>typeof runtime.hard?.[k]==='boolean'))throw Error('失败空间反馈缺少对应的独立评分或Engine证据');
  if(runtime.images.length!==runtime.hashes.length)throw Error('失败空间反馈图片清单不完整');
  runtime.images.forEach((file,n)=>{if(basename(file)!==file||digest(readFileSync(join(folder,'runtime',file)))!==runtime.hashes[n])throw Error('失败空间反馈图片哈希变化');});
  for(const image of read(join(folder,'scene-space-judge-input-receipt.json')).images)if(digest(readFileSync(image.path))!==image.sha256)throw Error('失败空间评审输入哈希变化');

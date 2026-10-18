@@ -30,3 +30,10 @@ test('已通过、低置信度或不同门槛不作确定的失败禁令；评�
 test('相同几何机位换文案不能再测量/渲染；实际几何变化可继续，原失败不改',()=>{
  const x=fixture();try{const v=rejectedSpatialAttempt(x.folder,x.job,x.ctx,x.source);expect(()=>assertNotRejectedSpatialScene([v],structuredClone(x.scene))).toThrow('PREVIOUSLY_REJECTED');const changed={...x.scene,cameras:[{id:'reference',position:[.1,0,0]}]};expect(assertNotRejectedSpatialScene([v],changed)).toBe(changed);expect(x.scene.cameras).toEqual([{id:'reference'}]);}finally{x.close();}
 });
+test('候选自身未过的场景检查仍是可用负证据；缺失或采集类检查未过才拒绝',()=>{
+ const x=fixture();try{const p=join(x.folder,'runtime/runtime.json'),r=read(p);
+  // Recorded 2026-10-18 temple round: only the declared subject (a small chest) was framed below 25%, every other check passed.
+  save(p,{...r,hard:{...r.hard,framing:false}});expect(rejectedSpatialAttempt(x.folder,x.job,x.ctx,x.source).review.score).toBe(2.9);
+  for(const hard of [{...r.hard,framing:undefined},{...r.hard,entitiesLoaded:false},{...r.hard,noErrors:false}]){save(p,{...r,hard});expect(()=>rejectedSpatialAttempt(x.folder,x.job,x.ctx,x.source)).toThrow('Engine证据');}
+ }finally{x.close();}
+});
