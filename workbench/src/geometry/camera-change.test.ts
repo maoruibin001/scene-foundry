@@ -1,5 +1,5 @@
 import {test,expect} from 'bun:test';
-import {mkdtempSync,mkdirSync,rmSync} from 'node:fs';
+import {existsSync,mkdtempSync,mkdirSync,readdirSync,readFileSync,rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {digest,save} from '../store';
@@ -74,4 +74,27 @@ test('超过第二轮的已保存候选仍按自身回执验证，不受旧轮�
   save(join(now,'generation/iteration-3/refinement/receipt.json'),{sourceJobId:'old',sourceIteration:3,sourceDigest:digest(JSON.stringify(previous)),sceneDigest:digest(JSON.stringify(current))});
   expect(cameraChangeHistory(iteration,current,{},locate)?.previousIteration).toBe(3);
  }finally{rmSync(dir,{recursive:true,force:true});}
+});
+test('体素修正的历史按冻结的构造来源比对，而不是体素化后的成图场景',()=>{
+ const dir=mkdtempSync(join(tmpdir(),'camera-feedback-voxel-'));try{
+  const locate=(id:string)=>join(dir,id),{previous,current}=pair(),job=locate('job'),iteration=join(job,'iterations/1');
+  // The voxelized scene differs from its construction source; the receipt digests the source.
+  const voxelized={...structuredClone(previous),voxelized:true};
+  mkdirSync(join(job,'iterations/0'),{recursive:true});mkdirSync(iteration,{recursive:true});mkdirSync(join(job,'generation/iteration-1/refinement'),{recursive:true});
+  save(join(job,'iterations/0/voxel-source-scene.json'),previous);save(join(job,'iterations/0/generated-scene.json'),voxelized);
+  save(join(iteration,'candidate.json'),{jobId:'job',cycle:{index:1},fields:{visualRefinement:{sourceJobId:'job',sourceIteration:0}}});
+  save(join(job,'generation/iteration-1/refinement/receipt.json'),{sourceJobId:'job',sourceIteration:0,sourceDigest:digest(JSON.stringify(previous)),sceneDigest:digest(JSON.stringify(current))});
+  expect(()=>cameraChangeHistory(iteration,current,{},locate)).toThrow('摘要');
+  const voxel=(folder:string)=>join(folder,'voxel-source-scene.json');
+  expect(cameraChangeHistory(iteration,current,{},locate,voxel)?.previousIteration).toBe(0);
+ }finally{rmSync(dir,{recursive:true,force:true});}
+});
+test('recorded voxel temple cycle 2: the camera history of its own refinement validates',()=>{
+ const runs='/tmp/sf-vx-r8/data/runs',run=existsSync(runs)?readdirSync(runs).find(d=>d.startsWith('998fcf48')):null;
+ if(!run)return;
+ // Read-only replay of the 2026-10-18 repair cycle 2 that stopped on this check.
+ const root=join(runs,run),locate=(id:string)=>join(runs,readdirSync(runs).find(d=>d.startsWith(id))!),source=join(root,'iterations/1');
+ const current=JSON.parse(readFileSync(join(source,'voxel-source-scene.json'),'utf8')),textures=JSON.parse(readFileSync(join(source,'materials/texture-registry.json'),'utf8'));
+ expect(()=>cameraChangeHistory(source,current,textures,locate)).toThrow('摘要');
+ expect(()=>cameraChangeHistory(source,current,textures,locate,f=>join(f,'voxel-source-scene.json'))).not.toThrow();
 });

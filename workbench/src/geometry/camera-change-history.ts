@@ -5,8 +5,11 @@ import {cameraChangeFeedback} from './camera-change';
 import type {SceneInput} from './scene-contract';
 import type {Texture} from './program';
 
-/** 只消费与当前产物及修正来源摘要相符的历史；没有修正的首稿不制造反事实。 */
-export function cameraChangeHistory(sourceDir:string,current:SceneInput,textures:Record<string,Texture>,locate=runDir){
+/**
+ * 只消费与当前产物及修正来源摘要相符的历史；没有修正的首稿不制造反事实。
+ * 旧场景按当前场景的同一来源文件读取：体素修正的回执摘要来自 voxel-source-scene.json，按 generated-scene.json 比对会让第二轮修正必然中断（2026-10-18 temple）。
+ */
+export function cameraChangeHistory(sourceDir:string,current:SceneInput,textures:Record<string,Texture>,locate=runDir,sceneFile=(folder:string)=>join(folder,'generated-scene.json')){
  const snapshot=existsSync(join(sourceDir,'candidate.json'))?read(join(sourceDir,'candidate.json')):null;
  const job=snapshot?null:read(join(sourceDir,'job.json'));
  const history=snapshot?.fields.visualRefinement??job?.visualRefinement;
@@ -22,7 +25,7 @@ export function cameraChangeHistory(sourceDir:string,current:SceneInput,textures
  const previousIndex=history.sourceIteration;
  if(previousIndex!=null&&(!Number.isSafeInteger(previousIndex)||previousIndex<0))throw Error('机位历史来源轮次无效');
  const previousDir=previousIndex==null?locate(history.sourceJobId):join(locate(history.sourceJobId),'iterations',String(previousIndex));
- const previous=read(join(previousDir,'generated-scene.json')) as SceneInput;
+ const previous=read(sceneFile(previousDir)) as SceneInput;
  const sourceDigest=digest(JSON.stringify(previous)),sceneDigest=digest(JSON.stringify(current));
  const matches=receiptPaths.map(read).filter(receipt=>receipt.sourceJobId===history.sourceJobId&&(receipt.sourceIteration??null)===(previousIndex??null)&&receipt.sourceDigest===sourceDigest&&receipt.sceneDigest===sceneDigest);
  if(!matches.length)throw Error('机位历史来源或场景摘要不一致');

@@ -171,7 +171,7 @@ export async function refineScene(job:any,plan:any,images:{path:string;mime:stri
  const openingDiagnostics=openingSummary(inspectOpenings(source));
  const previousRepairs=repairHistory(job,original,refs);save(join(folder,'repair-history.json'),previousRepairs);
  const reflection={...repairReflection(baseline.quality,previousRepairs),scoreControls:scoreControlEvidence(job,sourceDigest)};save(join(folder,'repair-reflection.json'),reflection);event(job,'repair-reflection','已读取 '+reflection.verifiedAttempts+' 份同契约修复证据；最大差距：'+reflection.dimensions.slice(0,2).map(d=>d.id+' 缺 '+d.pointsLost+' 分').join('、'));
- const cameraChangeFeedback=cameraChangeHistory(sourceDir,original,textures);
+ const cameraChangeFeedback=cameraChangeHistory(sourceDir,original,textures,runDir,folder=>sourceSceneFile(job,folder));
  if(cameraChangeFeedback){save(join(folder,'camera-change.json'),cameraChangeFeedback);event(job,'camera-change','已核对历史来源，对比 '+cameraChangeFeedback.views.length+' 个调整机位的同几何遮挡变化；仅辅助修正，不改写评分');}
  const projection=await ensureProjectionEvidence(source,images,refs,sourceDir,runtime,folder,signal);
  const visibility=prepareVisibilityEvidence(source,textures,folder,projection.sourceFolder,projection.runtime,frameNames);
