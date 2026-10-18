@@ -1,8 +1,9 @@
 import {test,expect} from 'bun:test';
-import {existsSync,readdirSync,readFileSync} from 'node:fs';
+import {readFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {assertVoxelDetailPreservation,assertVoxelDetailOwnership,voxelOverrideSources} from './detail-ownership';
 import {inspectOpenings} from '../geometry/openings';
+import {recordedRun} from '../recorded-runs';
 
 const pose=()=>({position:[0,0,0],rotation:[0,0,0],scale:[1,1,1]});
 const part=(id='seed',origin=[0,0,0],dimensions=[1,1,1],operations:any[]=[{mode:'fill',min:[0,0,0],size:dimensions,repeat:null}])=>({...pose(),id,material:'m',shape:{type:'voxelVolume',cellSize:.1,origin,dimensions,operations}});
@@ -96,11 +97,9 @@ test('override sources list what real parts must carry and how many cells every 
  // A recolour overlay on the seed's own cells takes no other owner's cell; it still counts toward the expanded upper bound.
  expect(()=>assertVoxelDetailPreservation(asset('a',[part(),{...part('tint'),material:'m2'}]),f.briefs[0],f.layout,f.accepted)).not.toThrow();
 });
-test('recorded temple green cluster: both override sources required and no cell beyond the seed is safe',()=>{
- const runs='/tmp/sf-vx-r6/data/runs',run=existsSync(runs)?readdirSync(runs).find(d=>d.startsWith('a68ff1ce')):null;
- if(!run)return;
+test.skipIf(!recordedRun('a68ff1ce'))('recorded temple green cluster: both override sources required and no cell beyond the seed is safe',()=>{
  // Read-only replay of the recorded 2026-10-18 detail basis.
- const basis=JSON.parse(readFileSync(join(runs,run,'generation/voxel-detail-basis.json'),'utf8'));
+ const basis=JSON.parse(readFileSync(join(recordedRun('a68ff1ce')!,'generation/voxel-detail-basis.json'),'utf8'));
  const brief=basis.layout.program.templates.find((t:any)=>t.id==='green_cluster'),s=voxelOverrideSources(brief,basis.layout,basis.acceptedScene);
  expect(s.requiredSourceMaterialIds.sort()).toEqual(['mat_green_light','mat_green_sage']);
  expect(s.cellsUsableByEveryInstance).toBe(102);

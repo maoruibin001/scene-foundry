@@ -5,6 +5,7 @@ import {join} from 'node:path';
 import {networkExhaustion,networkResumeInfo,networkResumesUsed,probeProviderRoute,NETWORK_RESUME_LIMIT} from './network-resume';
 import {executionFaultOf} from './provider-recovery';
 import {save} from './store';
+import {recordedRun} from './recorded-runs';
 
 const EXHAUSTED='Error: PROVIDER_RECOVERY_EXHAUSTED：当前逻辑调用及排队已达恢复总时长上限';
 // Shape of the 2026-10-16 mecha repair: a timeout and a transient failure, then the elapsed limit, every log with chatgpt.com connection errors.
@@ -51,10 +52,9 @@ test('the chain limit counts earlier network continuations and does not reset',(
  }finally{rmSync(f.dir,{recursive:true,force:true});}
 });
 
-test('recorded runs: the 2026-10-16 outage qualifies, the 2026-10-08 slow exhausted space call does not',()=>{
- const outage='/tmp/sf-vx-r4/data/runs/3f1d9235-289a-4c4f-9c55-03d2d7b2c48b',slow='/tmp/sf-vx-20261008/data/runs/dd15f78b-6bd2-4eea-9443-fbb397d76ca4';
- if(!existsSync(outage)||!existsSync(slow))return;
+test.skipIf(!recordedRun('3f1d9235')||!recordedRun('dd15f78b'))('recorded runs: the 2026-10-16 outage qualifies, the 2026-10-08 slow exhausted space call does not',()=>{
  // Read-only scan of the recorded runs.
+ const outage=recordedRun('3f1d9235')!,slow=recordedRun('dd15f78b')!;
  const job={status:'blocked',error:EXHAUSTED};
  expect(networkExhaustion(job,outage)?.calls.map((c:any)=>c.role)).toEqual(['scene-space']);
  expect(networkExhaustion(job,slow)).toBeNull();

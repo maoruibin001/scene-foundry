@@ -1,11 +1,12 @@
 import {test,expect} from 'bun:test';
-import {existsSync,mkdtempSync,mkdirSync,readdirSync,readFileSync,rmSync} from 'node:fs';
+import {mkdtempSync,mkdirSync,readFileSync,rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {digest,save} from '../store';
 import {cameraChangeFeedback} from './camera-change';
 import {cameraChangeHistory} from './camera-change-history';
 import {sceneVisibility} from './visibility';
+import {recordedRun} from '../recorded-runs';
 
 const transform={position:[0,0,0],rotation:[0,0,0],scale:[1,1,1]};
 function scene():any{return {program:{version:'geometry-v1',name:'遮挡对照',materials:[{id:'solid',color:[.5,.5,.5,1],roughness:1,metallic:0,textureId:null}],templates:[{id:'post',parts:[{...transform,id:'body',material:'solid',shape:{type:'box',size:[1,.2,2],radius:0}}]}],instances:[{...transform,id:'front',label:'前景柱',template:'post',position:[0,0,1],requirementIds:[]}]},cameras:[{name:'参考机位',referenceIndex:1,position:[0,-5,1],target:[0,0,1],fov:1}],textures:[],entities:[],assumptions:[],lighting:{}};}
@@ -89,11 +90,9 @@ test('体素修正的历史按冻结的构造来源比对，而不是体素化�
   expect(cameraChangeHistory(iteration,current,{},locate,voxel)?.previousIteration).toBe(0);
  }finally{rmSync(dir,{recursive:true,force:true});}
 });
-test('recorded voxel temple cycle 2: the camera history of its own refinement validates',()=>{
- const runs='/tmp/sf-vx-r8/data/runs',run=existsSync(runs)?readdirSync(runs).find(d=>d.startsWith('998fcf48')):null;
- if(!run)return;
+test.skipIf(!recordedRun('998fcf48'))('recorded voxel temple cycle 2: the camera history of its own refinement validates',()=>{
  // Read-only replay of the 2026-10-18 repair cycle 2 that stopped on this check.
- const root=join(runs,run),locate=(id:string)=>join(runs,readdirSync(runs).find(d=>d.startsWith(id))!),source=join(root,'iterations/1');
+ const root=recordedRun('998fcf48')!,locate=(id:string)=>recordedRun(id)!,source=join(root,'iterations/1');
  const current=JSON.parse(readFileSync(join(source,'voxel-source-scene.json'),'utf8')),textures=JSON.parse(readFileSync(join(source,'materials/texture-registry.json'),'utf8'));
  expect(()=>cameraChangeHistory(source,current,textures,locate)).toThrow('摘要');
  expect(()=>cameraChangeHistory(source,current,textures,locate,f=>join(f,'voxel-source-scene.json'))).not.toThrow();

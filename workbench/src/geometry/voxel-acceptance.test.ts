@@ -1,9 +1,10 @@
 import {test,expect} from 'bun:test';
-import {existsSync,readdirSync,readFileSync} from 'node:fs';
-import {join} from 'node:path';
+import {readFileSync} from 'node:fs';
+import {basename,join} from 'node:path';
 import {objectiveAcceptance,objectiveBlockers,objectiveMarginal,objectiveProgressScore,objectiveRepairFeedback,voxelAcceptanceRule,withObjectiveAcceptance,VOXEL_ACCEPTANCE,OBJECTIVE_PROGRESS} from './voxel-acceptance';
 import {scoreProgress,IMPROVEMENT_LIMITS} from '../improvement-governance';
 import {selectSpatialCandidate} from './blockout-selection';
+import {recordedRun} from '../recorded-runs';
 
 // Shapes follow the recorded voxel rounds: judge 3.0 under the 3.5 threshold, critical rows at 2.5–3, measured landmark boxes within .05.
 const space={voxelLattice:{version:'voxel-lattice-v1'},spatialRelations:[{id:'R1',critical:true},{id:'R2',critical:true},{id:'R3',critical:false}]};
@@ -78,11 +79,9 @@ test('a measured blocker the judge never scored reaches the repair input with it
  expect(objectiveRepairFeedback(gate(),composition())).toBeNull();
 });
 
-test('recorded temple round: the rear pool the judge never scored below 2.5 is named with its instance',()=>{
- const runs='/tmp/sf-vx-r6/data/runs',run=existsSync(runs)?readdirSync(runs).find(d=>d.startsWith('bbb70515')):null;
- if(!run)return;
+test.skipIf(!recordedRun('bbb70515'))('recorded temple round: the rear pool the judge never scored below 2.5 is named with its instance',()=>{
  // Read-only scan of the recorded 2026-10-18 round 1.
- const read=(f:string)=>JSON.parse(readFileSync(join(runs,run,'generation/blockout/1',f),'utf8'));
+ const read=(f:string)=>JSON.parse(readFileSync(join(recordedRun('bbb70515')!,'generation/blockout/1',f),'utf8'));
  const f=objectiveRepairFeedback(read('gate.json'),read('reference-composition.json'))!;
  expect(f.failed.map((c:any)=>c.id)).toEqual(['critical-visible']);
  expect(f.hiddenLandmarks.map((h:any)=>[h.landmarkId,h.instanceIds,h.pixels])).toEqual([['rear_pool',['water_rear_pool'],0]]);
@@ -110,11 +109,10 @@ test('objective blockers count what the gate itself still rejects, not the judge
  expect(same-two).toBeGreaterThan(0);expect(same-two).toBeLessThan(IMPROVEMENT_LIMITS.minGain);
 });
 
-test('recorded temple r7: 7 → 2 blockers becomes the next basis and a ledger gain instead of the second no-gain round',()=>{
- const runs='/tmp/sf-vx-r7/data/runs',run=existsSync(runs)?readdirSync(runs).find(d=>d.startsWith('a9b29207')):null;
- if(!run)return;
+test.skipIf(!recordedRun('a9b29207'))('recorded temple r7: 7 → 2 blockers becomes the next basis and a ledger gain instead of the second no-gain round',()=>{
  // Read-only replay of the recorded 2026-10-18 rounds 0 and 1.
- const at=(n:number)=>{const dir=join(runs,run,'generation/blockout',String(n)),r=(f:string)=>JSON.parse(readFileSync(join(dir,f),'utf8'));return {jobId:run,round:n,folder:dir,space:r('space.json'),gate:r('gate.json')};};
+ const root=recordedRun('a9b29207')!,run=basename(root);
+ const at=(n:number)=>{const dir=join(root,'generation/blockout',String(n)),r=(f:string)=>JSON.parse(readFileSync(join(dir,f),'utf8'));return {jobId:run,round:n,folder:dir,space:r('space.json'),gate:r('gate.json')};};
  const [r0,r1]=[at(0),at(1)];
  expect([objectiveBlockers(r0.gate,r0.space)!.items,objectiveBlockers(r1.gate,r1.space)!.items]).toEqual([7,2]);
  // Recorded rule: the new 2.0 row kept round 0 and the ledger saw a non-eligible round.

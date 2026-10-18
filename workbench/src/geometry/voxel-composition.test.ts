@@ -4,6 +4,7 @@ import {transformPoint} from './program';
 import {existsSync,readdirSync,readFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {assertSubjectFraming,checkVoxelComposition,compositionRows,voxelCompositionRule,VOXEL_COMPOSITION} from './voxel-composition';
+import {recordedRun} from '../recorded-runs';
 
 // Square reference, isometric orthographic camera like the voxel references; +Y lies on screen right from this side.
 const sizes=[{referenceIndex:1,width:1200,height:1200}];
@@ -68,10 +69,11 @@ test('a plan whose subjects cover too little of a reference view is returned bef
  expect(()=>checkVoxelComposition(lone,observed(camera),sizes)).toThrow(/VOXEL_SUBJECT_FRAMING[\s\S]*b5[\s\S]*至少25%[\s\S]*b\d \d+%/);
 });
 
-test('recorded plans: the lone-chest temple plan fails, every plan whose rounds passed framing passes',()=>{
- // Read-only scan of the 2026-10-18 isolated rigs; runtime framing is the measured outcome for each round.
- const rows=['/tmp/sf-vx-r6/data/runs','/tmp/sf-vx-r7/data/runs'].filter(existsSync).flatMap(runs=>readdirSync(runs).flatMap(id=>{const b=join(runs,id,'generation/blockout');
-  return existsSync(b)?readdirSync(b).filter(r=>existsSync(join(b,r,'space.json'))&&existsSync(join(b,r,'runtime/runtime.json'))).map(r=>({space:JSON.parse(readFileSync(join(b,r,'space.json'),'utf8')),framing:JSON.parse(readFileSync(join(b,r,'runtime/runtime.json'),'utf8')).hard.framing})):[];}));
+const FRAMING_RUNS=['01c33e50','a68ff1ce','bbb70515','a9b29207'];
+test.skipIf(!FRAMING_RUNS.some(recordedRun))('recorded plans: the lone-chest temple plan fails, every plan whose rounds passed framing passes',()=>{
+ // Read-only scan of the 2026-10-18 voxel temple, tower and mecha runs; runtime framing is the measured outcome for each round.
+ const rows=FRAMING_RUNS.map(recordedRun).filter((r):r is string=>!!r).flatMap(run=>{const b=join(run,'generation/blockout');
+  return existsSync(b)?readdirSync(b).filter(r=>existsSync(join(b,r,'space.json'))&&existsSync(join(b,r,'runtime/runtime.json'))).map(r=>({space:JSON.parse(readFileSync(join(b,r,'space.json'),'utf8')),framing:JSON.parse(readFileSync(join(b,r,'runtime/runtime.json'),'utf8')).hard.framing})):[];});
  for(const row of rows){const check=()=>assertSubjectFraming(row.space,row.space.cameras.filter((c:any)=>c.referenceIndex).map((c:any)=>({referenceIndex:c.referenceIndex,width:1200,height:1200})));
   if(row.framing)expect(check).not.toThrow();else expect(check).toThrow('VOXEL_SUBJECT_FRAMING');}
 });
