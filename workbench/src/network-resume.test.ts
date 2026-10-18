@@ -52,7 +52,7 @@ test('the chain limit counts earlier network continuations and does not reset',(
 });
 
 test('recorded runs: the 2026-10-16 outage qualifies, the 2026-10-08 slow exhausted space call does not',()=>{
- const outage='/tmp/sf-vx-r4/data/runs/3f1d9235-289a-4c4f-9c55-03d2d7b2c48b',slow='/Users/maoruibin/extensions/test/scene-foundry-voxel-20261008/data/runs/dd15f78b-6bd2-4eea-9443-fbb397d76ca4';
+ const outage='/tmp/sf-vx-r4/data/runs/3f1d9235-289a-4c4f-9c55-03d2d7b2c48b',slow='/tmp/sf-vx-20261008/data/runs/dd15f78b-6bd2-4eea-9443-fbb397d76ca4';
  if(!existsSync(outage)||!existsSync(slow))return;
  // Read-only scan of the recorded runs.
  const job={status:'blocked',error:EXHAUSTED};
