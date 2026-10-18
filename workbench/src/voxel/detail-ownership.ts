@@ -148,3 +148,25 @@ export function assertVoxelDetailOwnership(layout:SceneLayout,assets:AssetGeomet
  }
  return {version:'voxel-detail-ownership-v1',baselineOccupiedUpperBound:baseline.expanded,baselineOwnedCells:baseline.owners.size,addedOccupiedUpperBound,newOwnedCells:addedOwners.size,openings};
 }
+
+/**
+ * Surface override sources every instance of this template expects on real parts, and how many cells a new part could add without
+ * entering another entity's accepted cells in any instance. The 2026-10-18 temple green_cluster (15 instances) had none beyond its seed:
+ * fourteen saves of a new mat_green_light part each hit an owner, and the asset then failed the missing override source.
+ */
+export function voxelOverrideSources(brief:AssetBrief,layout:SceneLayout,acceptedScene:any){
+ const instances=layout.program.instances.filter(i=>i.template===brief.id),required=[...new Set(instances.flatMap(i=>(i.surfaceOverrides??[]).map(b=>b.sourceMaterialId)))];
+ const seeds=proceduralSeeds(acceptedScene,brief.id).filter((p:any)=>p.shape.type==='voxelVolume').map((p:any)=>p.id);
+ const lattice=validateVoxelLattice(layout.voxelLattice),cs=lattice.cellSize,dims=brief.bounds.min.map((n,k)=>Math.round((brief.bounds.max[k]-n)/cs));
+ let free:number|null=null;
+ // Bounded audit; a very large envelope reports null instead of a guess.
+ if(required.length&&dims.every(n=>n>0)&&dims[0]*dims[1]*dims[2]*instances.length<=4_000_000){
+  const {owners}=baselineOwnership(layout,acceptedScene),identity={position:[0,0,0],rotation:[0,0,0],scale:[1,1,1]} as any;free=0;
+  for(let z=0;z<dims[2];z++)for(let y=0;y<dims[1];y++)for(let x=0;x<dims[0];x++){
+   const centre=[x,y,z].map((n,k)=>brief.bounds.min[k]+(n+.5)*cs) as Cell;
+   if(instances.every(i=>{const key=cellKey(transformPoint(transformPoint(centre,identity),i).map((n,k)=>Math.round((n-lattice.origin[k])/cs-.5)) as Cell),o=owners.get(key);return !o||o.has(i.id);}))free++;
+  }
+ }
+ return {requiredSourceMaterialIds:required,seedPartIds:seeds,cellsUsableByEveryInstance:free,
+  rule:'requiredSourceMaterialIds中每个材质都必须出现在本模板至少一个部件上，实例的surfaceOverrides才能命中；缺一个即整份资产校验失败。先把保留的种子部件material改为其中一个；其余每个源材质用一个新id的着色部件实现：复制该种子的position/rotation/scale、cellSize、origin、dimensions和完整operations，再在末尾追加erase只保留要换色的区域，这样它只占种子已有格。不要为了换色新增格：cellsUsableByEveryInstance是在所有实例中都不侵入其他实体已接受格的格数（含种子自身格；为null表示未统计），等于或接近种子格数时，任何超出种子的新格都会被拒绝。'};
+}

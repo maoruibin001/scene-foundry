@@ -1,5 +1,7 @@
 import {test,expect} from 'bun:test';
-import {assertVoxelDetailPreservation,assertVoxelDetailOwnership} from './detail-ownership';
+import {existsSync,readdirSync,readFileSync} from 'node:fs';
+import {join} from 'node:path';
+import {assertVoxelDetailPreservation,assertVoxelDetailOwnership,voxelOverrideSources} from './detail-ownership';
 import {inspectOpenings} from '../geometry/openings';
 
 const pose=()=>({position:[0,0,0],rotation:[0,0,0],scale:[1,1,1]});
@@ -82,4 +84,24 @@ test('384k occupied-cell ownership remains bounded and supports sparse new detai
  const value=asset('a',[f.assets[0].template.parts[0],part('detail',[8,0,0])]);
  const report=assertVoxelDetailPreservation(value,f.briefs[0],f.layout,f.accepted);
  expect(report.baselineOwnedCells).toBe(384_001);expect(report.addedOccupiedUpperBound).toBe(1);
+});
+
+test('override sources list what real parts must carry and how many cells every instance can still take',()=>{
+ const f=fixture();f.layout.program.instances[0].surfaceOverrides=[{sourceMaterialId:'m2',targetMaterialId:'m',uvScale:null}];
+ const s=voxelOverrideSources(f.briefs[0],f.layout,f.accepted);
+ expect(s.requiredSourceMaterialIds).toEqual(['m2']);expect(s.seedPartIds).toEqual(['seed']);
+ // 20^3 bounds cells, one taken by template b at 10,0,0; the seed's own cell stays usable.
+ expect(s.cellsUsableByEveryInstance).toBe(7999);
+ expect(voxelOverrideSources(f.briefs[1],f.layout,f.accepted)).toMatchObject({requiredSourceMaterialIds:[],cellsUsableByEveryInstance:null});
+ // A recolour overlay on the seed's own cells takes no other owner's cell; it still counts toward the expanded upper bound.
+ expect(()=>assertVoxelDetailPreservation(asset('a',[part(),{...part('tint'),material:'m2'}]),f.briefs[0],f.layout,f.accepted)).not.toThrow();
+});
+test('recorded temple green cluster: both override sources required and no cell beyond the seed is safe',()=>{
+ const runs='/tmp/sf-vx-r6/data/runs',run=existsSync(runs)?readdirSync(runs).find(d=>d.startsWith('a68ff1ce')):null;
+ if(!run)return;
+ // Read-only replay of the recorded 2026-10-18 detail basis.
+ const basis=JSON.parse(readFileSync(join(runs,run,'generation/voxel-detail-basis.json'),'utf8'));
+ const brief=basis.layout.program.templates.find((t:any)=>t.id==='green_cluster'),s=voxelOverrideSources(brief,basis.layout,basis.acceptedScene);
+ expect(s.requiredSourceMaterialIds.sort()).toEqual(['mat_green_light','mat_green_sage']);
+ expect(s.cellsUsableByEveryInstance).toBe(102);
 });

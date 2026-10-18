@@ -115,6 +115,11 @@ export function validateVoxelEntityDetail(value:AssetGeometry,brief:AssetBrief,l
  fail(Array.isArray(value.template.parts),'精修部件缺失');
  const voxelMetrics=nativeMetrics(value.template,allocation.lattice,row.maximum);
  for(const key of Object.keys(voxelMetrics) as (keyof VoxelEntityMetrics)[])fail(voxelMetrics[key]<=row.maximum[key],brief.id+' 的 '+key+' '+voxelMetrics[key]+' 超过分配 '+row.maximum[key]);
+ if(!options.partial){
+  // Name the remedy at the frozen contract instead of the generic override miss, which led the model to keep adding new cells.
+  const used=new Set(value.template.parts.map(p=>p.material)),missing=[...new Set(layout.program.instances.filter(i=>i.template===brief.id).flatMap(i=>(i.surfaceOverrides??[]).map(b=>b.sourceMaterialId)))].filter(id=>!used.has(id));
+  fail(!missing.length,'表面覆盖源材质 '+missing.join('、')+' 未出现在 '+brief.id+' 的任何部件上，实例覆盖无法命中。把保留的种子部件material改为缺失的源材质；若还需要另一种源材质，新增一个着色部件：复制种子的姿态、cellSize、origin、dimensions和完整operations，末尾追加erase只保留换色区域。不要新增种子以外的格，也不要删改种子结构。');
+ }
  const measured=options.partial?validateAllocatedAssetParts(value,brief,layout,textures):validateAllocatedAsset(value,brief,layout,textures);
  // Ordinary geometry permits a 5% envelope tolerance. The new detail policy is
  // strictly inside accepted bounds; it cannot buy detail by moving the envelope.

@@ -96,3 +96,15 @@ test('merge validates saved candidates again and rejects missing, duplicated, or
  const layout=structuredClone(f.layout);layout.program.instances.pop();
  expect(()=>assertVoxelDetailAssembly(layout,f.assets,allocation,{})).toThrow('实例倍数已改变');
 });
+
+test('a full detail names an unused override source and the own-cell overlay that satisfies it',()=>{
+ const f=fixture([2]);f.layout.program.materials.push({id:'m2',color:[.2,.6,.3,1],roughness:1,metallic:0,textureId:null});f.briefs[0].materialIds=['m','m2'];
+ f.layout.program.instances[1].surfaceOverrides=[{sourceMaterialId:'m2',targetMaterialId:'m',uvScale:null}];
+ const a=allocateVoxelEntityDetails(f.layout,f.accepted);
+ expect(()=>validateVoxelEntityDetail(asset('t0'),f.briefs[0],f.layout,a,{})).toThrow('表面覆盖源材质 m2 未出现在 t0');
+ // The checkpoint may still be missing the source; only the full asset must carry it.
+ expect(()=>validateVoxelEntityDetail(asset('t0'),f.briefs[0],f.layout,a,{},{partial:true})).not.toThrow();
+ const overlay=part(volume([4,4,4],[{mode:'fill',min:[0,0,0],size:[4,4,4],repeat:null},{mode:'erase',min:[0,0,0],size:[4,3,4],repeat:null}]),'tint');
+ expect(validateVoxelEntityDetail(asset('t0',[part(),{...overlay,material:'m2'}]),f.briefs[0],f.layout,a,{}).voxelMetrics.parts).toBe(2);
+ expect(validateVoxelEntityDetail(asset('t0',[{...part(),material:'m2'}]),f.briefs[0],f.layout,a,{}).voxelMetrics.parts).toBe(1);
+});
