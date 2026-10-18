@@ -1,13 +1,16 @@
 import {basis,project} from './camera-fit';
 import {referenceFrame} from './reference-frame.mjs';
 import {transformPoint} from './program';
+import {projectedHeight} from './runtime-metrics.mjs';
 
 export const VOXEL_COMPOSITION='voxel-composition-v1';
 /** Only new voxel jobs created under the policy check and fit their reference cameras; historical and ordinary jobs are unchanged. */
 export function voxelCompositionRule(job:any){return job?.voxelCompositionPolicy===VOXEL_COMPOSITION;}
 /** Measured on the first voxel-lattice-v1 plans: a left-right mirrored layout gave a 0.33 mean centre error against 0.02 when mirrored back; correct plans stayed under 0.06. */
 export const VOXEL_COMPOSITION_LIMITS={mirrorError:.12,mirrorRatio:.5,minimumRows:4,maxShift:.25,scale:[.8,1.25],minimumGain:.01,gainRatio:.8};
-export const VOXEL_COMPOSITION_GUIDANCE='参考机位画面方向按Engine右手系计算（Z向上）：forward=normalize(target-position)，画面右方=normalize(cross(forward,[0,0,1]))=(forward.y,-forward.x,0)的单位向量，画面上方=cross(右方,forward)。例如机位在+X+Y一侧俯视原点时，世界+Y偏向画面右侧、+X偏向画面左侧。决定实例左右位置前先用该公式核对原图左右；程序会把每个地标模板边界投影到参考机位与原图观察框比对，整体左右镜像会被退回。参考机位的平移与正交覆盖高度可能由程序按观察框做确定性微调，不改变实例、模板和格网。';
+/** The runtime framing hard check: subject-role parts must span at least this share of every reference frame's height. */
+export const SUBJECT_FRAMING_MINIMUM=.25;
+export const VOXEL_COMPOSITION_GUIDANCE='参考机位画面方向按Engine右手系计算（Z向上）：forward=normalize(target-position)，画面右方=normalize(cross(forward,[0,0,1]))=(forward.y,-forward.x,0)的单位向量，画面上方=cross(右方,forward)。例如机位在+X+Y一侧俯视原点时，世界+Y偏向画面右侧、+X偏向画面左侧。决定实例左右位置前先用该公式核对原图左右；程序会把每个地标模板边界投影到参考机位与原图观察框比对，整体左右镜像会被退回。参考机位的平移与正交覆盖高度可能由程序按观察框做确定性微调，不改变实例、模板和格网。entities.role=subject标注原图画面主体的主要结构与关键物件（不只一个小物件），它们在每个参考机位合起来须占画面高度至少'+SUBJECT_FRAMING_MINIMUM*100+'%，否则运行取景硬检查每轮失败；规划会按同一投影退回。';
 
 type Row={landmarkId:string;extent:string;observed:number[];projected:number[];weight:number};
 const WEIGHT:Record<string,number>={complete:1,partial:.6,occluded:.4};
@@ -66,5 +69,28 @@ export function checkVoxelComposition(space:any,observation:any,sizes:{reference
   const next=accepted?applyImageShift(camera,aspect,fit.scale,fit.shift):camera,check=accepted?meanError(compositionRows(space,observation,next,aspect)):before;
   cameras.push(next);report.push({camera:camera.name,referenceIndex:camera.referenceIndex,status:accepted?'fitted':'kept',mirror:m,rows:rows.length,scale:fit.scale,shift:fit.shift,before,after:check,original:accepted?{position:camera.position,target:camera.target,orthographicHeight:camera.orthographicHeight}:undefined});
  }
+ assertSubjectFraming({...space,cameras},sizes);
  return {space:{...space,cameras},report:{version:VOXEL_COMPOSITION,unit:'画面高度归一化的地标中心距离；投影为模板边界包围盒，不是可见像素，也不是质量得分',cameras:report}};
+}
+const toEngine=(v:number[])=>[v[0],v[2],-v[1]];
+/** Engine-space bounds of each instance's template, as the framing check sees the compiled parts; whole-template bounds never under-estimate it. */
+function instanceObjects(space:any,keep:(id:string)=>boolean){
+ const templates=new Map(space.program.templates.map((t:any)=>[t.id,t]));
+ return space.program.instances.filter((i:any)=>keep(i.id)&&templates.has(i.template)).map((i:any)=>{const t:any=templates.get(i.template),lo=[Infinity,Infinity,Infinity],hi=[-Infinity,-Infinity,-Infinity];
+  for(let c=0;c<8;c++){const p=toEngine(transformPoint([0,1,2].map(k=>c&(1<<k)?t.bounds.max[k]:t.bounds.min[k]) as any,i));for(let k=0;k<3;k++){lo[k]=Math.min(lo[k],p[k]);hi[k]=Math.max(hi[k],p[k]);}}
+  return {id:i.id,position:lo.map((v,k)=>(v+hi[k])/2),size:hi.map((v,k)=>Math.max(.001,v-lo[k]))};});
+}
+/**
+ * A plan whose subject role covers too little of a reference view fails the framing hard check in every graybox round, and no spatial repair
+ * changes roles. The 2026-10-18 temple plan named only a 1.2 m chest as subject (7.7% of the frame) while 25 earlier voxel rounds measured 27–70%.
+ */
+export function assertSubjectFraming(space:any,sizes:{referenceIndex:number;width:number;height:number}[]){
+ const roles=new Map((space.entities??[]).map((e:any)=>[e.instanceId,e.role])),subjects=instanceObjects(space,id=>roles.get(id)==='subject');
+ for(const camera of space.cameras.filter((c:any)=>c.referenceIndex)){
+  const s=sizes.find(s=>s.referenceIndex===camera.referenceIndex);if(!s)throw Error('参考机位没有对应原图尺寸：'+camera.name);
+  const frame=referenceFrame(s.width,s.height),pose={...camera,position:toEngine(camera.position),target:toEngine(camera.target)},ratio=projectedHeight(pose,subjects,frame.width,frame.height).heightRatio;
+  if(ratio>=SUBJECT_FRAMING_MINIMUM)continue;
+  const others=instanceObjects(space,id=>roles.get(id)==='context').map(o=>({id:o.id,ratio:projectedHeight(pose,[o],frame.width,frame.height).heightRatio})).sort((a,b)=>b.ratio-a.ratio).slice(0,6);
+  throw Error('VOXEL_SUBJECT_FRAMING：参考机位“'+camera.name+'”下，role=subject 的实例（'+subjects.map(o=>o.id).join('、')+'）投影仅占画面高度'+(ratio*100).toFixed(1)+'%，运行硬检查要求至少'+SUBJECT_FRAMING_MINIMUM*100+'%，后续灰模修正不改role，此规划每轮都会失败。subject应标注原图画面中构成主体的主要结构和关键物件，不只是一个小物件；按原图把这些实例的entities.role改为subject，不改实例几何、机位或地标绑定。占画面较高的context实例（实例 占比）：'+others.map(o=>o.id+' '+(o.ratio*100).toFixed(0)+'%').join('；'));
+ }
 }
