@@ -45,6 +45,7 @@ export function spatialTimingStage(stage, job) {
 
 export function spatialPolicyDescription(job) {
   const policy=job.optimizationPolicy?.spatialPreflight;
+  if(job.voxelAcceptancePolicy==='voxel-objective-acceptance-v1')return '体素客观验收：能运行且多视角实拍、无关键关系缺失或明显错误（关键关系 ≥2.5/5、置信度达标）、关键地标均可见、无左右镜像、地标边缘残差 ≤0.10 后进入详细制作；评审综合分仅作参考，成品仍须独立70分验收。';
   if(policy==='composition-v3')return '构图灰模：空间 ≥3.5/5、关键关系 ≥3/5、置信度 ≥0.6，且无关键主体缺失后进入详细制作；局部偏差与灰模无法验证的材质关系保留警告。';
   if(policy==='coarse-v2')return '快速灰模：空间 ≥3/5、置信度 ≥0.6，关键主体和主通路没有严重缺失即可进入详细制作；局部比例与细节后续修正。';
   return '严格灰模：空间 ≥4/5 且关键关系满足后，才开始详细资产。';

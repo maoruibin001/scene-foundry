@@ -15,6 +15,8 @@ export function selectSpatialCandidate(previous:SpatialCandidate|null,current:Sp
  const old=previous.gate;
  if(g.protocol!==old.protocol||JSON.stringify(g.threshold)!==JSON.stringify(old.threshold)||JSON.stringify(current.space.spatialRelations)!==JSON.stringify(previous.space.spatialRelations))throw Error('空间候选的冻结关系或评审契约改变，不能跨契约选优');
  if(g.review.confidence<g.threshold.confidence)return {candidate:previous,eligible:false,changed:false,reason:'候选证据置信度未达门槛，保留原来源'};
+ // An objectively accepted voxel round can still carry judge rows below 3; it is the accepted graybox, not a regression.
+ if(g.objective?.passed===true&&g.passed)return {candidate:current,eligible:true,changed:true,reason:'体素客观验收通过'};
  const added=(g.failed??[]).filter((id:string)=>!(old.failed??[]).includes(id));
  if(added.length){
   // A repair that closes more critical blocks than it opens, scores higher, and only opens marginal ones is a better next basis.
