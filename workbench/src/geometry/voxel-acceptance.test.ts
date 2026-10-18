@@ -1,7 +1,8 @@
 import {test,expect} from 'bun:test';
 import {existsSync,readdirSync,readFileSync} from 'node:fs';
 import {join} from 'node:path';
-import {objectiveAcceptance,objectiveMarginal,objectiveRepairFeedback,voxelAcceptanceRule,withObjectiveAcceptance,VOXEL_ACCEPTANCE} from './voxel-acceptance';
+import {objectiveAcceptance,objectiveBlockers,objectiveMarginal,objectiveProgressScore,objectiveRepairFeedback,voxelAcceptanceRule,withObjectiveAcceptance,VOXEL_ACCEPTANCE,OBJECTIVE_PROGRESS} from './voxel-acceptance';
+import {scoreProgress,IMPROVEMENT_LIMITS} from '../improvement-governance';
 import {selectSpatialCandidate} from './blockout-selection';
 
 // Shapes follow the recorded voxel rounds: judge 3.0 under the 3.5 threshold, critical rows at 2.5–3, measured landmark boxes within .05.
@@ -93,4 +94,44 @@ test('an objectively accepted round becomes the retained candidate even when it 
  expect(previous.gate.passed).toBe(false);expect(current.gate.passed).toBe(true);
  const s=selectSpatialCandidate(previous,current,{netClosure:true,swap:true});
  expect(s.candidate).toBe(current);expect(s.eligible).toBe(true);
+});
+
+test('objective blockers count what the gate itself still rejects, not the judge 3.0 row list',()=>{
+ // A measured non-critical row keeps four rows for the mirror check.
+ const hidden=composition();hidden.rows=hidden.rows.filter(r=>r.landmarkId!=='d');hidden.rows.push({...hidden.rows[0],landmarkId:'e',critical:false});
+ const b=objectiveBlockers(withObjectiveAcceptance(gate([3,2,2]),space,hidden,observation),space)!;
+ expect(b).toEqual({geometry:[],relations:['R2'],hidden:['d'],items:2});
+ expect(objectiveBlockers(withObjectiveAcceptance(gate(),space,composition(0,true),observation),space)!.geometry).toEqual(['not-mirrored','landmark-alignment']);
+ expect(objectiveBlockers(gate(),space)).toBeNull();
+ // One closed item is a ledger gain whatever the judge did; the judge alone only ranks equal rounds.
+ const two=objectiveProgressScore(withObjectiveAcceptance(gate([3,2,2],undefined,3.2),space,hidden,observation),space)!,one=objectiveProgressScore(withObjectiveAcceptance(gate([3,2.5,2],undefined,2.8),space,hidden,observation),space)!;
+ expect(one-two).toBeGreaterThanOrEqual(IMPROVEMENT_LIMITS.minGain);
+ const same=objectiveProgressScore(withObjectiveAcceptance(gate([3,2,2],undefined,4),space,hidden,observation),space)!;
+ expect(same-two).toBeGreaterThan(0);expect(same-two).toBeLessThan(IMPROVEMENT_LIMITS.minGain);
+});
+
+test('recorded temple r7: 7 → 2 blockers becomes the next basis and a ledger gain instead of the second no-gain round',()=>{
+ const runs='/tmp/sf-vx-r7/data/runs',run=existsSync(runs)?readdirSync(runs).find(d=>d.startsWith('a9b29207')):null;
+ if(!run)return;
+ // Read-only replay of the recorded 2026-10-18 rounds 0 and 1.
+ const at=(n:number)=>{const dir=join(runs,run,'generation/blockout',String(n)),r=(f:string)=>JSON.parse(readFileSync(join(dir,f),'utf8'));return {jobId:run,round:n,folder:dir,space:r('space.json'),gate:r('gate.json')};};
+ const [r0,r1]=[at(0),at(1)];
+ expect([objectiveBlockers(r0.gate,r0.space)!.items,objectiveBlockers(r1.gate,r1.space)!.items]).toEqual([7,2]);
+ // Recorded rule: the new 2.0 row kept round 0 and the ledger saw a non-eligible round.
+ expect(selectSpatialCandidate(r0,r1,{netClosure:true,swap:true}).candidate).toBe(r0);
+ const s=selectSpatialCandidate(r0,r1,{netClosure:true,swap:true,objective:true});
+ expect(s.candidate).toBe(r1);expect(s.eligible).toBe(true);
+ const row=(c:any)=>({kind:'space',comparison:c.gate.protocol,jobId:run,metric:OBJECTIVE_PROGRESS,score:objectiveProgressScore(c.gate,c.space),assessmentScope:'legacy-unknown'});
+ expect(scoreProgress([row(r0)],{...row(r1),requiresDiagnosis:!s.eligible},IMPROVEMENT_LIMITS.minGain)).toMatchObject({improved:true,noGain:0});
+});
+
+test('objective selection keeps the source when blockers rise and defers to the judge rule when they are equal',()=>{
+ // A measured non-critical row keeps four rows for the mirror check.
+ const hidden=composition();hidden.rows=hidden.rows.filter(r=>r.landmarkId!=='d');hidden.rows.push({...hidden.rows[0],landmarkId:'e',critical:false});
+ const one={jobId:'j',round:0,folder:'0',space,gate:withObjectiveAcceptance(gate([3,3,3],undefined,3),space,hidden,observation)};
+ const two={jobId:'j',round:1,folder:'1',space,gate:{...withObjectiveAcceptance(gate([3,2,3],undefined,3.4),space,hidden,observation),failed:['R2']}};
+ const worse=selectSpatialCandidate(one,two,{netClosure:true,swap:true,objective:true});
+ expect(worse.candidate).toBe(one);expect(worse.eligible).toBe(false);expect(worse.reason).toContain('客观阻断增加');
+ const even={...one,round:1,folder:'1',gate:{...one.gate,review:{...one.gate.review,score:3.2}}};
+ expect(selectSpatialCandidate(one,even,{objective:true}).reason).toBe('空间分提高且没有新增关键阻断');
 });

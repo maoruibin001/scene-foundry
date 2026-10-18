@@ -67,6 +67,33 @@ export function objectiveRepairFeedback(gate:any,composition:any){
   .map(r=>({landmarkId:r.landmarkId,referenceIndex:r.referenceIndex,instanceIds:r.instanceIds??[],extent:r.extent,expected:r.expected??null,pixels:r.pixels??0})):[];
  return {version:VOXEL_ACCEPTANCE,failed:failed.map((c:any)=>({id:c.id,detail:c.detail})),hiddenLandmarks:hidden};
 }
+const GEOMETRY=['evidence','not-mirrored','landmark-alignment','complete-extent'];
+/**
+ * What still stands between a round and objective acceptance, in the gate's own terms: failed whole-layout checks first, then critical
+ * relations missing or below the floor plus hidden critical landmarks. The judge's 3.0 row list is not the acceptance target under the
+ * policy; the 2026-10-18 temple round 1 went from 7 such blockers to 2 and was still retained against, and counted as no gain, because
+ * one relation dropped from 2.5 to 2.0.
+ */
+export function objectiveBlockers(gate:any,space:any){
+ const o=gate?.objective;if(!o)return null;
+ const critical=new Set(space.spatialRelations.filter((r:any)=>r.critical).map((r:any)=>r.id)),relations=gate.review.relations.filter((x:any)=>critical.has(x.id));
+ const relationIds=relations.filter((x:any)=>x.verdict==='missing'||x.score<VOXEL_ACCEPTANCE_LIMITS.criticalScore).map((x:any)=>x.id);
+ // The hidden landmark ids are only on the check detail; the saved objective shape stays unchanged so recorded rounds still re-derive equal.
+ const visible=o.checks.find((c:any)=>c.id==='critical-visible'),hidden=visible&&!visible.passed?(String(visible.detail).split('：')[1]?.split('、').filter(Boolean)??['?']):[];
+ const geometry=o.checks.filter((c:any)=>GEOMETRY.includes(c.id)&&!c.passed).map((c:any)=>c.id);
+ return {geometry,relations:relationIds,hidden,items:relationIds.length+hidden.length};
+}
+/** Negative when `a` is closer to objective acceptance than `b`. */
+export function compareObjectiveBlockers(a:any,b:any){return a.geometry.length-b.geometry.length||a.items-b.items;}
+/**
+ * Plateau score under the policy, in its own ledger family: 25 per failed layout check and 5 per blocker item, so closing one item is a
+ * gain over the 2-point minimum whatever the judge does; the judge score adds at most 1, which ranks equal-blocker rounds but is never a gain.
+ */
+export const OBJECTIVE_PROGRESS='voxel-objective-progress-v1';
+export function objectiveProgressScore(gate:any,space:any){
+ const b=objectiveBlockers(gate,space);if(!b)return null;
+ return Math.round((100-25*b.geometry.length-5*b.items+gate.review.score/5)*100)/100;
+}
 /** The recorded row keeps the judge verdict beside the objective one; `passed` is the objective verdict every later stage reads. */
 export function withObjectiveAcceptance(gate:any,space:any,composition:any,observation:any){
  const objective=objectiveAcceptance(gate,space,composition,observation);

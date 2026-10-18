@@ -1,3 +1,4 @@
+import {compareObjectiveBlockers,objectiveBlockers} from './voxel-acceptance';
 export const SPATIAL_SELECTION_V1='net-closure-v1';
 export const SPATIAL_SELECTION='net-closure-v2';
 export const SPATIAL_NET_CLOSURE_MARGIN=.5;
@@ -5,10 +6,11 @@ export const SPATIAL_NET_CLOSURE_MARGIN=.5;
 export function spatialSelectionRule(job:any){return job?.spatialSelectionPolicy===SPATIAL_SELECTION_V1||job?.spatialSelectionPolicy===SPATIAL_SELECTION;}
 /** v2 also takes an even swap: as many critical blocks closed as marginal ones opened, with a higher verified score. */
 export function spatialSwapRule(job:any){return job?.spatialSelectionPolicy===SPATIAL_SELECTION;}
+export const OBJECTIVE_SELECTION='objective-blockers-v1';
 export type SpatialCandidate={jobId:string;round:number;folder:string;space:any;gate:any};
 
 /** Select the next repair's geometry, screenshots and feedback together. Never promote a failed graybox. */
-export function selectSpatialCandidate(previous:SpatialCandidate|null,current:SpatialCandidate,options:{netClosure?:boolean,swap?:boolean}={}){
+export function selectSpatialCandidate(previous:SpatialCandidate|null,current:SpatialCandidate,options:{netClosure?:boolean,swap?:boolean,objective?:boolean}={}){
  const g=current.gate;
  if(!Number.isFinite(g.review?.score)||!Number.isFinite(g.review?.confidence))throw Error('空间候选缺少完整独立评估');
  if(!previous)return {candidate:current,eligible:true,changed:true,reason:'首个完整评估候选'};
@@ -17,6 +19,12 @@ export function selectSpatialCandidate(previous:SpatialCandidate|null,current:Sp
  if(g.review.confidence<g.threshold.confidence)return {candidate:previous,eligible:false,changed:false,reason:'候选证据置信度未达门槛，保留原来源'};
  // An objectively accepted voxel round can still carry judge rows below 3; it is the accepted graybox, not a regression.
  if(g.objective?.passed===true&&g.passed)return {candidate:current,eligible:true,changed:true,reason:'体素客观验收通过'};
+ // Under the objective policy the next basis is the round with fewer objective blockers; only an even count falls back to the judge rows.
+ if(options.objective===true&&g.objective&&old.objective){
+  const a=objectiveBlockers(g,current.space)!,b=objectiveBlockers(old,previous.space)!,order=compareObjectiveBlockers(a,b);
+  if(order<0)return {candidate:current,eligible:true,changed:true,reason:OBJECTIVE_SELECTION+' 客观阻断减少：'+b.geometry.length+'/'+b.items+' → '+a.geometry.length+'/'+a.items+'（整体检查/关键项）'};
+  if(order>0)return {candidate:previous,eligible:false,changed:false,reason:OBJECTIVE_SELECTION+' 客观阻断增加：'+b.geometry.length+'/'+b.items+' → '+a.geometry.length+'/'+a.items+'（整体检查/关键项）'};
+ }
  const added=(g.failed??[]).filter((id:string)=>!(old.failed??[]).includes(id));
  if(added.length){
   // A repair that closes more critical blocks than it opens, scores higher, and only opens marginal ones is a better next basis.
