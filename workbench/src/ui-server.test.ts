@@ -70,3 +70,77 @@ test('隔离只读观察器覆盖冻结体素worker的过程读取，写入拒�
   expect(await Bun.file(job).text()).toBe(bytes);
  }finally{upstream.stop(true);rmSync(root,{recursive:true,force:true});rmSync(data,{recursive:true,force:true});}
 });
+
+test('普通与体素创建和记录入口提供同一个主壳，旧体素index不能覆盖共享界面',async()=>{
+ const root=mkdtempSync(join(tmpdir(),'scene-unified-shell-')),shell='<!doctype html><h1>共享场景界面</h1><script type="module" src="/app.js"></script>';
+ mkdirSync(join(root,'voxel'));writeFileSync(join(root,'index.html'),shell);writeFileSync(join(root,'voxel/index.html'),'<h1>旧独立体素界面</h1>');
+ let requests=0;const upstream=Bun.serve({hostname:'127.0.0.1',port:0,fetch(){requests++;return Response.json({unexpectedProxy:true});}});
+ try{
+  const handle=uiHandler(root,upstream.url.toString());
+  for(const path of ['/','/voxel/','/voxel/index.html']){
+   const response=await handle(new Request('http://127.0.0.1:19884'+path));
+   expect(response.status).toBe(200);expect(await response.text()).toBe(shell);expect(response.headers.get('Content-Type')).toContain('text/html');
+   expect(response.headers.get('Cross-Origin-Opener-Policy')).toBe('same-origin');expect(response.headers.get('Cross-Origin-Embedder-Policy')).toBe('require-corp');
+  }
+  expect(requests).toBe(0);
+ }finally{upstream.stop(true);rmSync(root,{recursive:true,force:true});}
+});
+
+test('体素过程静态别名使用本地process真实文件和相对模块，不请求冻结worker静态文件',async()=>{
+ const root=mkdtempSync(join(tmpdir(),'scene-unified-process-'));
+ mkdirSync(join(root,'process/vendor'),{recursive:true});
+ const files={'index.html':'<h1>共同过程页</h1><script type="module" src="./app.js"></script>','app.js':'export const processView="shared";','api-path.js':'export const scope="pathname";','style.css':'.call{display:block}','vendor/xterm.mjs':'export const term=true;'};
+ for(const [name,body]of Object.entries(files))writeFileSync(join(root,'process',name),body);
+ let requests=0;const upstream=Bun.serve({hostname:'127.0.0.1',port:0,fetch(){requests++;return Response.json({unexpectedProxy:true});}});
+ try{
+  const handle=uiHandler(root,upstream.url.toString(),undefined,upstream.url.toString());
+  for(const [name,body]of Object.entries(files)){
+   const suffix=name==='index.html'?'':name;
+   for(const prefix of ['/process/','/voxel/process/']){
+    const response=await handle(new Request('http://127.0.0.1:19884'+prefix+suffix));expect(response.status).toBe(200);expect(await response.text()).toBe(body);
+   }
+  }
+  expect(requests).toBe(0);
+ }finally{upstream.stop(true);rmSync(root,{recursive:true,force:true});}
+});
+
+test('体素过程页相对引用scene-context模块可由体素静态别名读取',async()=>{
+ const root=mkdtempSync(join(tmpdir(),'scene-unified-context-')),source='export const currentSceneKind=()=>"voxel";';
+ writeFileSync(join(root,'scene-context.js'),source);
+ let requests=0;const upstream=Bun.serve({hostname:'127.0.0.1',port:0,fetch(){requests++;return Response.json({unexpectedProxy:true});}});
+ try{
+  const handle=uiHandler(root,upstream.url.toString(),undefined,upstream.url.toString());
+  for(const path of ['/scene-context.js','/voxel/scene-context.js']){
+   const response=await handle(new Request('http://127.0.0.1:19884'+path));expect(response.status).toBe(200);expect(await response.text()).toBe(source);expect(response.headers.get('Content-Type')).toContain('javascript');
+  }
+  expect(requests).toBe(0);
+ }finally{upstream.stop(true);rmSync(root,{recursive:true,force:true});}
+});
+
+test('共享静态壳不混合普通与体素API、文件或过程namespace，上游仍分别接收原始路径',async()=>{
+ const root=mkdtempSync(join(tmpdir(),'scene-unified-proxy-')),seen:any[]=[];
+ writeFileSync(join(root,'index.html'),'shared shell');
+ const serve=(worker:string)=>Bun.serve({hostname:'127.0.0.1',port:0,fetch(req){const url=new URL(req.url),value={worker,path:url.pathname,query:url.search};seen.push(value);return Response.json(value);}});
+ const ordinary=serve('ordinary'),voxel=serve('voxel');
+ try{
+  const handle=uiHandler(root,ordinary.url.toString(),undefined,voxel.url.toString());
+  const routes=[['/api/state?compact=1','ordinary'],['/api/jobs?page=2','ordinary'],['/files/uploads/reference.jpg','ordinary'],['/api/voxel/state?compact=1','voxel'],['/api/voxel/jobs?page=2','voxel'],['/voxel/files/uploads/reference.jpg','voxel'],['/api/voxel/process/index','voxel'],['/voxel/process/missing.js','voxel']];
+  for(const [path,worker]of routes){const response=await handle(new Request('http://127.0.0.1:19884'+path));expect(response.status).toBe(200);expect(await response.json()).toEqual({worker,path:path.split('?')[0],query:path.includes('?')?'?'+path.split('?')[1]:''});}
+  expect(seen).toHaveLength(routes.length);
+  const forbidden=await handle(new Request('http://127.0.0.1:19884/api/voxel/jobs',{headers:{origin:'https://example.com'}}));expect(forbidden.status).toBe(403);expect(seen).toHaveLength(routes.length);
+ }finally{ordinary.stop(true);voxel.stop(true);rmSync(root,{recursive:true,force:true});}
+});
+
+test('体素过程静态别名保留逻辑与真实边界，拒绝目录和外根符号链接读取',async()=>{
+ const parent=mkdtempSync(join(tmpdir(),'scene-unified-boundary-')),root=join(parent,'public'),outside=join(parent,'private.txt');
+ mkdirSync(join(root,'process/no-index'),{recursive:true});writeFileSync(outside,'MUST_NOT_EXPOSE');symlinkSync(outside,join(root,'process/external.txt'));
+ mkdirSync(join(parent,'public-extra'));writeFileSync(join(parent,'public-extra/sibling.txt'),'MUST_NOT_EXPOSE');symlinkSync(join(parent,'public-extra'),join(root,'process/prefix-sibling'),'dir');
+ const upstream=Bun.serve({hostname:'127.0.0.1',port:0,fetch(req){return Response.json({safeProxy:true,path:new URL(req.url).pathname});}});
+ try{
+  const handle=uiHandler(root,upstream.url.toString(),undefined,upstream.url.toString());
+  for(const path of ['/voxel/process/external.txt','/voxel/process/prefix-sibling/sibling.txt','/voxel/process/%2e%2e%2f%2e%2e%2fprivate.txt','/voxel/process/no-index/','/voxel/process/no-index']){
+   const response=await handle(new Request('http://127.0.0.1:19884'+path)),body=await response.text();expect(body).not.toContain('MUST_NOT_EXPOSE');expect(JSON.parse(body).safeProxy).toBe(true);
+  }
+  expect(()=>uiHandler(root,upstream.url.toString(),undefined,'https://example.com')).toThrow('本机');
+ }finally{upstream.stop(true);rmSync(parent,{recursive:true,force:true});}
+});

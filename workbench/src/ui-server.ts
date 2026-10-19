@@ -16,7 +16,9 @@ export function uiHandler(publicDir:string, upstream:string, productionTiming?:(
     if(req.headers.get('origin')&&req.headers.get('origin')!==url.origin)return Response.json({error:'跨站请求被拒绝'},{status:403});
     if(observer&&url.pathname.startsWith('/api/voxel/process/')){const observedURL=new URL(url);observedURL.pathname=observedURL.pathname.replace('/api/voxel/process/','/api/process/');const response=observer(new Request(observedURL,req));if(response)return response;}
     if(req.method==='GET' && !url.pathname.startsWith('/api/') && !url.pathname.startsWith('/files/')) {
-      const pathname=decodeURIComponent(url.pathname),file=resolve(root,'.'+pathname+(pathname.endsWith('/')?'index.html':''));
+      const requested=decodeURIComponent(url.pathname);
+      const pathname=requested==='/voxel/'||requested==='/voxel/index.html'?'/index.html':requested==='/voxel/scene-context.js'||requested.startsWith('/voxel/process/')?requested.slice('/voxel'.length):requested;
+      const file=resolve(root,'.'+pathname+(pathname.endsWith('/')?'index.html':''));
       if(file.startsWith(root+sep) && existsSync(file) && realpathSync(file).startsWith(root+sep) && statSync(file).isFile()) return new Response(Bun.file(file),{headers});
     }
     try {
