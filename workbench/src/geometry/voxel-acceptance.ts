@@ -13,6 +13,17 @@ export function voxelAcceptanceRule(job:any){return job?.voxelAcceptancePolicy==
 export const VOXEL_ACCEPTANCE_LIMITS={criticalScore:2.5,mirrorError:.12,mirrorRatio:.5,minimumRows:4,edgeResidual:.10,completeResidual:.15,visiblePixels:8};
 const WEIGHT:Record<string,number>={complete:1,partial:.6,occluded:.4};
 const cx=(b:number[])=>(b[0]+b[2])/2,round=(v:number)=>Math.round(v*1e4)/1e4;
+/**
+ * Jobs under this policy have the observation tag each relation layout or detail. The 2026-10-19 cyberpunk street had 19 of 20 relations
+ * critical, facade details among them (window voids behind railings, sign stacking, shop recess, lamp); the measured layout passed in all
+ * three rounds (edge .034–.039, complete .046–.068) while two to four facade-detail rows stayed at 1.5–2.3 (the left balcony windows at
+ * 1.5 every round, 0.375 m recesses in a uniform grey render) and the job stopped on no gain. Detail rows go to the asset stage, which owns those components; untagged rows stay gated.
+ */
+export const VOXEL_RELATION_SCALE='voxel-relation-scale-v1';
+export const RELATION_SCALES=['layout','detail'] as const;
+export function relationScaleRule(job:any){return job?.voxelRelationScalePolicy===VOXEL_RELATION_SCALE;}
+/** Critical relations the graybox gate holds to the floor. */
+export function grayboxCriticalIds(space:any){return new Set<string>(space.spatialRelations.filter((r:any)=>r.critical&&r.scale!=='detail').map((r:any)=>r.id));}
 const measured=(r:any)=>r.status==='measured-visible-extent'&&Array.isArray(r.visible)&&Array.isArray(r.expected)&&Number.isFinite(r.edgeResidual);
 
 /**
@@ -22,7 +33,7 @@ const measured=(r:any)=>r.status==='measured-visible-extent'&&Array.isArray(r.vi
  */
 export function objectiveAcceptance(gate:any,space:any,composition:any,observation:any){
  const L=VOXEL_ACCEPTANCE_LIMITS,review=gate.review,checks:any[]=[];
- const critical=new Set(space.spatialRelations.filter((r:any)=>r.critical).map((r:any)=>r.id)),relations=review.relations.filter((x:any)=>critical.has(x.id));
+ const critical=grayboxCriticalIds(space),relations=review.relations.filter((x:any)=>critical.has(x.id));
  checks.push({id:'evidence',passed:review.confidence>=gate.threshold.confidence,detail:'评审置信度 '+review.confidence+'，门槛 '+gate.threshold.confidence});
  const missing=relations.filter((x:any)=>x.verdict==='missing').map((x:any)=>x.id);
  checks.push({id:'critical-present',passed:!missing.length,detail:missing.length?'关键关系缺失：'+missing.join('、'):'无关键关系缺失'});
@@ -46,13 +57,18 @@ export function objectiveAcceptance(gate:any,space:any,composition:any,observati
  checks.push({id:'complete-extent',passed:worst===null||worst<=L.completeResidual,detail:worst===null?'无完整可见关键地标，仅按加权残差判断':'完整可见关键地标最大残差 '+round(worst)+'，上限 '+L.completeResidual});
  const failed=checks.filter(c=>!c.passed);
  return {version:VOXEL_ACCEPTANCE,passed:!failed.length,checks,reasons:failed.map(c=>c.detail),metrics:{criticalMinimum:relations.length?Math.min(...relations.map((x:any)=>x.score)):null,edgeResidual:edge===null?null:round(edge),completeResidual:worst===null?null:round(worst),mirror},
-  advisory:{score:review.score,threshold:gate.threshold.space,passed:gate.passed,failed:gate.failed,note:'评审综合分仅作参考；成品仍须独立70分交付验收'}};
+  advisory:{score:review.score,threshold:gate.threshold.space,passed:gate.passed,failed:gate.failed,note:'评审综合分仅作参考；成品仍须独立70分交付验收'},...deferred(review,space)};
+}
+// Only present when the space tags detail rows, so recorded rounds still re-derive equal.
+function deferred(review:any,space:any){
+ const detail=space.spatialRelations.filter((r:any)=>r.critical&&r.scale==='detail');if(!detail.length)return {};
+ return {deferredDetail:{note:'细节级关键关系不阻断灰模，交由资产阶段实现',relations:detail.map((r:any)=>{const x=review.relations.find((x:any)=>x.id===r.id);return {id:r.id,score:x?.score??null,verdict:x?.verdict??null};})}};
 }
 /** Re-review only when the measured checks pass and a critical row sits within one review's ordinary spread of the floor, so the judge alone decides. */
 export function objectiveMarginal(gate:any,space:any){
  const o=gate.objective,band=JUDGE_CONSENSUS_BAND.critical+1e-9;
  if(!o||o.checks.some((c:any)=>MEASURED.includes(c.id)&&!c.passed))return false;
- const critical=new Set(space.spatialRelations.filter((r:any)=>r.critical).map((r:any)=>r.id));
+ const critical=grayboxCriticalIds(space);
  return gate.review.relations.some((x:any)=>critical.has(x.id)&&Math.abs(x.score-VOXEL_ACCEPTANCE_LIMITS.criticalScore)<=band);
 }
 const MEASURED=['critical-visible','not-mirrored','landmark-alignment','complete-extent'];
@@ -76,7 +92,7 @@ const GEOMETRY=['evidence','not-mirrored','landmark-alignment','complete-extent'
  */
 export function objectiveBlockers(gate:any,space:any){
  const o=gate?.objective;if(!o)return null;
- const critical=new Set(space.spatialRelations.filter((r:any)=>r.critical).map((r:any)=>r.id)),relations=gate.review.relations.filter((x:any)=>critical.has(x.id));
+ const critical=grayboxCriticalIds(space),relations=gate.review.relations.filter((x:any)=>critical.has(x.id));
  const relationIds=relations.filter((x:any)=>x.verdict==='missing'||x.score<VOXEL_ACCEPTANCE_LIMITS.criticalScore).map((x:any)=>x.id);
  // The hidden landmark ids are only on the check detail; the saved objective shape stays unchanged so recorded rounds still re-derive equal.
  const visible=o.checks.find((c:any)=>c.id==='critical-visible'),hidden=visible&&!visible.passed?(String(visible.detail).split('：')[1]?.split('、').filter(Boolean)??['?']):[];

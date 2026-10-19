@@ -26,7 +26,7 @@ const arr=(items:any)=>({type:'array',items});
 const obj=(properties:any)=>({type:'object',properties,required:Object.keys(properties),additionalProperties:false});
 const choice=(...values:string[])=>({type:'string',enum:values});
 const nullableNum={type:['number','null']};
-export type ModelSchemaContext=VoxelEntitySchemaContext & {requirementIds?:string[];referenceCount?:number;repairReferences?:RepairGoalReferences;repairComplexity?:Complexity;qualityVersion?:string;imageGoal?:boolean;grayboxRepair?:boolean;templateBounds?:boolean;derivedSpatialRelations?:boolean;strictVoxel?:boolean;voxelLattice?:VoxelLattice;voxel?:boolean};
+export type ModelSchemaContext=VoxelEntitySchemaContext & {requirementIds?:string[];referenceCount?:number;repairReferences?:RepairGoalReferences;repairComplexity?:Complexity;qualityVersion?:string;imageGoal?:boolean;grayboxRepair?:boolean;templateBounds?:boolean;derivedSpatialRelations?:boolean;strictVoxel?:boolean;relationScale?:boolean;voxelLattice?:VoxelLattice;voxel?:boolean};
 export function modelSchema(role:string,context?:ModelSchemaContext):any {
  if(role==='voxel-scene')return voxelSchema(context?.requirementIds);
  if(role==='voxel-entity')return voxelEntitySchema(context);
@@ -35,7 +35,7 @@ export function modelSchema(role:string,context?:ModelSchemaContext):any {
  if(role==='scene-spatial-refine')return spatialRefinementSchema();
  if(role==='scene-alignment')return alignmentSchema();
  if(role==='scene-refine')return refinementSchema(context?.repairComplexity,context?.voxelLattice);
- if(role==='scene-observation')return observationSchema(context?.referenceCount,{strictVoxel:context?.strictVoxel});
+ if(role==='scene-observation')return observationSchema(context?.referenceCount,{strictVoxel:context?.strictVoxel,relationScale:context?.relationScale});
  if(role==='scene-blockout')return blockoutSchema({voxel:context?.voxel,voxelLattice:context?.voxelLattice});
  if(role==='scene-space-judge')return spaceJudgeSchema();
  if(role==='scene-space')return context?.grayboxRepair?grayboxSpaceRepairSchema({voxel:context?.voxel,voxelLattice:context?.voxelLattice,templateBounds:context?.templateBounds}):context?.derivedSpatialRelations?spacePlanningSchema(context.requirementIds,{strictVoxel:context.strictVoxel}):spaceSchema(context?.requirementIds,{strictVoxel:context?.strictVoxel});

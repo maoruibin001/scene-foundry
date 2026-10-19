@@ -133,3 +133,26 @@ test('objective selection keeps the source when blockers rise and defers to the 
  const even={...one,round:1,folder:'1',gate:{...one.gate,review:{...one.gate.review,score:3.2}}};
  expect(selectSpatialCandidate(one,even,{objective:true}).reason).toBe('空间分提高且没有新增关键阻断');
 });
+
+test('detail-scale critical rows do not hold the graybox gate; untagged rows keep the old floor',()=>{
+ const tiered={...space,spatialRelations:[{id:'R1',critical:true,scale:'layout'},{id:'R2',critical:true,scale:'detail'},{id:'R3',critical:false,scale:'layout'}]};
+ const low=gate([3,1.5,2],['partial','missing','partial']);
+ expect(objectiveAcceptance(low,space,composition(),observation).passed).toBe(false);
+ const o=objectiveAcceptance(low,tiered,composition(),observation);
+ expect(o.passed).toBe(true);expect(o.metrics.criticalMinimum).toBe(3);
+ expect(o.deferredDetail.relations).toEqual([{id:'R2',score:1.5,verdict:'missing'}]);
+ expect(objectiveAcceptance(low,space,composition(),observation).deferredDetail).toBeUndefined();
+ const g=withObjectiveAcceptance(low,tiered,composition(),observation);
+ expect(objectiveBlockers(g,tiered)).toMatchObject({relations:[],items:0});expect(objectiveMarginal(g,tiered)).toBe(false);
+ expect(objectiveAcceptance(gate([2,1.5,3]),tiered,composition(),observation).passed).toBe(false);
+});
+
+test.skipIf(!recordedRun('c086a0b9'))('recorded cyberpunk street: with facade rows tagged detail, round 0 passes on the same review and measurement',()=>{
+ const dir=join(recordedRun('c086a0b9')!,'generation/blockout/0'),g=JSON.parse(readFileSync(join(dir,'gate.json'),'utf8')),s=JSON.parse(readFileSync(join(dir,'space.json'),'utf8'));
+ const c=JSON.parse(readFileSync(join(dir,'reference-composition.json'),'utf8')),obs=JSON.parse(readFileSync(join(dir,'../../reference-observations.json'),'utf8'));
+ expect(withObjectiveAcceptance(g,s,c,obs).objective.passed).toBe(false);
+ const detail=new Set(['rel_left_balcony_openings','rel_right_balcony_openings','rel_left_sign_layout','rel_right_sign_layout','rel_left_shop','rel_left_ac_distribution','rel_right_ac_distribution','rel_pipe_distribution','rel_lamp_foreground']);
+ const tiered={...s,spatialRelations:s.spatialRelations.map((r:any)=>({...r,scale:detail.has(r.id)?'detail':'layout'}))};
+ const o=withObjectiveAcceptance(g,tiered,c,obs).objective;
+ expect(o.passed).toBe(true);expect(o.deferredDetail.relations.map((r:any)=>r.id)).toContain('rel_left_balcony_openings');
+});

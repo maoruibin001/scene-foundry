@@ -32,7 +32,12 @@ export function assetSpatialHandoff(brief:any,layout:any,context:AssetSceneConte
   proceduralStructure:proceduralSeeds(context.scene,brief.id),
   proceduralInstructions:'若存在proceduralStructure，保留各branchCrown部件id/姿态/所有结构参数，调整segments与材质/UV，或按id+_branches和id+_leaves两部件拆层绑定不同材质。不能重抽seed、改密度、缩冠或重造已验收轮廓；其他非程序部件按简报细化。',
   scope:'世界布局和机位已冻结；当前资产必须在这些实际位置形成有依据的轮廓与承托。上下文其余物体是已验收灰模，不是最终成品，不能用灰模密度冒充完整场景质量。',
-  residuals:relations.filter((r:any)=>r.review&&r.review.verdict!=='met').map((r:any)=>({id:r.id,verdict:r.review.verdict,score:r.review.score,reason:r.review.reason}))};
+  residuals:relations.filter((r:any)=>r.review&&r.review.verdict!=='met').map((r:any)=>({id:r.id,verdict:r.review.verdict,score:r.review.score,reason:r.review.reason})),...deferredDetail(relations)};
+}
+// Critical detail relations did not hold the graybox back, so the assets that own them are where they must be realized.
+function deferredDetail(relations:any[]){
+ const detail=relations.filter((r:any)=>r.critical&&r.scale==='detail');if(!detail.length)return {};
+ return {deferredDetail:{instructions:'以下细节级关键关系未作为灰模放行条件，必须由当前资产在冻结范围内实现：开口要形成可见的退进或贯通，附着小件要有独立轮廓与正确叠放。',relations:detail.map((r:any)=>({id:r.id,description:r.description,graybox:r.review?{score:r.review.score,verdict:r.review.verdict,reason:r.review.reason}:null}))}};
 }
 
 export function assetContextScene(value:any,brief:any,layout:any,context:AssetSceneContext){

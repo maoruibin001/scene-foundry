@@ -93,3 +93,10 @@ test('已通过灰模的枝冠结构必须进入资产输入，改变密度在�
   await expect(withoutContext.kit.call('preview_asset',{assetJson:JSON.stringify(candidate)})).rejects.toThrow('PROCEDURAL_STRUCTURE_CHANGED');expect(renders).toBe(0);
  }finally{rmSync(folder,{recursive:true,force:true});}
 });
+
+test('critical detail relations the graybox deferred are handed to the assets that own them',()=>{
+ expect(assetSpatialHandoff(brief,layout,context).deferredDetail).toBeUndefined();
+ const tiered={...layout,spatialRelations:[{...layout.spatialRelations[0],scale:'detail'}]};
+ const handoff=assetSpatialHandoff(brief,tiered,{...context,scene:{...context.scene,spatialRelations:tiered.spatialRelations}});
+ expect(handoff.deferredDetail.relations).toEqual([{id:'enclosure',description:'近景和后景构成围合',graybox:{score:3,verdict:'partial',reason:'局部空隙偏大'}}]);
+});

@@ -62,3 +62,33 @@ test('bindObservedSpace enforces coverage only for explicitly strict lattice spa
  observation.landmarks.push({...observation.landmarks[0],id:'clusters',label:'附着块',geometryScope:'component'});space.observedBindings.push({landmarkId:'clusters',instanceIds:['i_wall']});
  expect(()=>bindObservedSpace(space,observation)).toThrow('独立实例');
 });
+
+test('relation scale is required only under the policy, needs a layout critical row and survives space binding',async()=>{
+ const {completeObservedSpacePlan}=await import('./reference-observations');
+ expect(observationSchema(2).properties.relations.items.properties.scale).toBeUndefined();
+ expect(observationSchema(2,{relationScale:true}).properties.relations.items.required).toContain('scale');
+ const value=normalizeObservationIndices(fixture(),2);
+ expect(validateObservations(value,2)).toBe(value);
+ expect(()=>validateObservations(value,2,{relationScale:true})).toThrow('scale');
+ value.relations[0].scale='detail';expect(()=>validateObservations(value,2,{relationScale:true})).toThrow('layout');
+ value.relations[0].scale='layout';expect(validateObservations(value,2,{relationScale:true})).toBe(value);
+ value.relations[0].scale='facade';expect(()=>validateObservations(value,2)).toThrow('scale');
+ value.relations[0].scale='detail';
+ const plan={version:'scene-space-plan-v2',program:{instances:[{id:'w'}]},observedBindings:[{landmarkId:'wall',instanceIds:['w']}]};
+ expect(completeObservedSpacePlan(plan,value).spatialRelations[0]).toEqual({id:'rel',description:'墙在门后',critical:true,scale:'detail',instanceIds:['w']});
+ const changed={...completeObservedSpacePlan(plan,value)};changed.spatialRelations=[{...changed.spatialRelations[0],scale:'layout'}];
+ expect(()=>bindObservedSpace(changed,value)).toThrow('不得更改');
+});
+
+test('a voxel job under the relation-scale policy asks for scale in schema and guidance',async()=>{
+ const {VOXEL_RELATION_SCALE}=await import('./voxel-acceptance');
+ const id=randomUUID(),dir=join(runDir(id),'generation'),plan={requirements:[]},value=normalizeObservationIndices(fixture(),2);value.landmarks[0].geometryScope='object';value.relations[0].scale='layout';
+ try{
+  const job={id,prompt:'参考图复刻',sceneKind:'voxel',voxelConstructionVersion:STRICT_VOXEL_CONSTRUCTION,voxelRelationScalePolicy:VOXEL_RELATION_SCALE,images:[{id:'a'},{id:'b'}],modelSettings:{model:'fixture'}};
+  await observeReferences({job,plan,dir,images:[{},{}]},(async(input:any,_dir:any,validate:any)=>{
+   expect(input.schemaContext).toEqual({referenceCount:2,strictVoxel:true,relationScale:true});
+   expect(input.system).toContain('scale：layout');
+   return {value:validate(value),receipt:{fixture:true}};
+  }) as any);
+ }finally{rmSync(runDir(id),{recursive:true,force:true});}
+});

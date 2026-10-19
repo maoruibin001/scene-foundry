@@ -21,7 +21,7 @@ export function sameSpatialRecovery(target:any,source:any,scene:any,savedScene:a
  try{assertSpatialAccepted(source,scene);}catch{return false;}
  const templates=scene.program.templates.map((t:any)=>({...t,parts:t.parts.map((p:any)=>({...p,material:'blockout'}))}));
  if(!same(grayScene.program.templates,templates)||!same(grayScene.program.instances,spatialInstances(scene.program.instances))||!same(grayScene.cameras,scene.cameras))return false;
- if(!same(target.voxelAcceptancePolicy??null,source.voxelAcceptancePolicy??null))return false;
+ if(!same(target.voxelAcceptancePolicy??null,source.voxelAcceptancePolicy??null)||!same(target.voxelRelationScalePolicy??null,source.voxelRelationScalePolicy??null))return false;
  const judged=spatialGate(gate.review,source.blockout.space,gate.frames,target.optimizationPolicy);
  // An objectively accepted voxel round is re-derived from its own saved composition measurement, never trusted from the row.
  return voxelAcceptanceRule(target)&&source.blockout.space.voxelLattice?!!evidence.composition&&same(withObjectiveAcceptance(judged,source.blockout.space,evidence.composition,evidence.observation).objective,gate.objective)&&gate.objective.passed===true:judged.passed;
