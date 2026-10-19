@@ -92,3 +92,22 @@ test('a voxel job under the relation-scale policy asks for scale in schema and g
   }) as any);
  }finally{rmSync(runDir(id),{recursive:true,force:true});}
 });
+
+test('a diagnosed continuation tags the source observation once and a recovery reuses the saved tags',async()=>{
+ const {VOXEL_RELATION_SCALE}=await import('./voxel-acceptance');const {withObservedRelationScales}=await import('./reference-observations');
+ const [source,target,recovery]=[randomUUID(),randomUUID(),randomUUID()],plan={requirements:[]},base={prompt:'同一输入',images:[{id:'a'},{id:'b'}],plan,modelSettings:{model:'fixture'},reuseMode:'fresh',executionRecoveryRoot:source};
+ try{
+  const jobs={[source]:{...base,id:source},[target]:{...base,id:target,voxelRelationScalePolicy:VOXEL_RELATION_SCALE,spatialRepairSource:{jobId:source,round:0}},[recovery]:{...base,id:recovery,voxelRelationScalePolicy:VOXEL_RELATION_SCALE,recoverySourceJobId:target}};
+  for(const [id,job] of Object.entries(jobs)){mkdirSync(join(runDir(id),'generation'),{recursive:true});save(join(runDir(id),'job.json'),job);}
+  save(join(runDir(source),'generation','scene-observation-response.txt'),fixture());save(join(runDir(source),'generation','scene-observation-receipt.json'),{requestedModel:'fixture'});
+  let calls=0;const tag=(async(input:any,dir:string,validate:any)=>{calls++;
+   expect(input.schemaContext).toEqual({relationScaleTags:true});expect(input.images).toBeUndefined();expect(JSON.parse(input.text).relations).toEqual([{id:'rel',description:'墙在门后',critical:true,landmarkIds:['wall']}]);
+   const tags={relations:[{id:'rel',scale:'layout'}]};expect(()=>validate({relations:[]})).toThrow('scale');save(join(dir,'scene-observation-response.txt'),tags);save(join(dir,'scene-observation-receipt.json'),{requestedModel:'fixture'});return {value:validate(tags)};}) as any;
+  const tagged=await observeReferences({job:jobs[target],plan,dir:join(runDir(target),'generation'),images:[{},{}]},tag);
+  expect(calls).toBe(1);expect(tagged.relations[0]).toEqual({id:'rel',description:'墙在门后',critical:true,landmarkIds:['wall'],scale:'layout'});expect(tagged.landmarks).toEqual(normalizeObservationIndices(fixture(),2).landmarks);
+  const again=await observeReferences({job:jobs[recovery],plan,dir:join(runDir(recovery),'generation'),images:[{},{}]},tag);
+  expect(calls).toBe(1);expect(again).toEqual(tagged);expect(read(join(runDir(recovery),'generation','relation-scale.json')).reusedFrom).toBe(target);
+  const seed={spatialRelations:[{id:'rel',description:'墙在门后',critical:true,instanceIds:['w']}]};
+  expect(withObservedRelationScales(seed,tagged).spatialRelations[0].scale).toBe('layout');expect(withObservedRelationScales(seed,fixture())).toBe(seed);
+ }finally{for(const id of [source,target,recovery])rmSync(runDir(id),{recursive:true,force:true});}
+});

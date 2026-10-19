@@ -18,6 +18,8 @@ const cx=(b:number[])=>(b[0]+b[2])/2,round=(v:number)=>Math.round(v*1e4)/1e4;
  * critical, facade details among them (window voids behind railings, sign stacking, shop recess, lamp); the measured layout passed in all
  * three rounds (edge .034–.039, complete .046–.068) while two to four facade-detail rows stayed at 1.5–2.3 (the left balcony windows at
  * 1.5 every round, 0.375 m recesses in a uniform grey render) and the job stopped on no gain. Detail rows go to the asset stage, which owns those components; untagged rows stay gated.
+ * A diagnosed voxel continuation (allowed only under a changed mechanism, and re-judged) also runs under the policy: it keeps the source
+ * observation and tags its frozen relations once.
  */
 export const VOXEL_RELATION_SCALE='voxel-relation-scale-v1';
 export const RELATION_SCALES=['layout','detail'] as const;

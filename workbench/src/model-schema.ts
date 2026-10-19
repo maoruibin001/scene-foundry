@@ -5,7 +5,7 @@ import {imageMatchSchema} from './image-reconstruction';
 import {pairwiseSchema} from './geometry/pairwise-compare';
 import {grayboxSpaceRepairSchema} from './geometry/graybox-space-repair';
 import {expandBlockoutGeometry} from './geometry/blockout-contract';
-import {observationSchema} from './geometry/reference-observations';
+import {observationSchema,relationScaleTagSchema} from './geometry/reference-observations';
 import {blockoutSchema,spaceJudgeSchema} from './geometry/blockout';
 import {repairBudget,LEGACY_REPAIR_BUDGET} from './geometry/repair-budget';
 import type {Complexity} from './complexity';
@@ -26,7 +26,7 @@ const arr=(items:any)=>({type:'array',items});
 const obj=(properties:any)=>({type:'object',properties,required:Object.keys(properties),additionalProperties:false});
 const choice=(...values:string[])=>({type:'string',enum:values});
 const nullableNum={type:['number','null']};
-export type ModelSchemaContext=VoxelEntitySchemaContext & {requirementIds?:string[];referenceCount?:number;repairReferences?:RepairGoalReferences;repairComplexity?:Complexity;qualityVersion?:string;imageGoal?:boolean;grayboxRepair?:boolean;templateBounds?:boolean;derivedSpatialRelations?:boolean;strictVoxel?:boolean;relationScale?:boolean;voxelLattice?:VoxelLattice;voxel?:boolean};
+export type ModelSchemaContext=VoxelEntitySchemaContext & {requirementIds?:string[];referenceCount?:number;repairReferences?:RepairGoalReferences;repairComplexity?:Complexity;qualityVersion?:string;imageGoal?:boolean;grayboxRepair?:boolean;templateBounds?:boolean;derivedSpatialRelations?:boolean;strictVoxel?:boolean;relationScale?:boolean;relationScaleTags?:boolean;voxelLattice?:VoxelLattice;voxel?:boolean};
 export function modelSchema(role:string,context?:ModelSchemaContext):any {
  if(role==='voxel-scene')return voxelSchema(context?.requirementIds);
  if(role==='voxel-entity')return voxelEntitySchema(context);
@@ -35,6 +35,7 @@ export function modelSchema(role:string,context?:ModelSchemaContext):any {
  if(role==='scene-spatial-refine')return spatialRefinementSchema();
  if(role==='scene-alignment')return alignmentSchema();
  if(role==='scene-refine')return refinementSchema(context?.repairComplexity,context?.voxelLattice);
+ if(role==='scene-observation'&&context?.relationScaleTags)return relationScaleTagSchema();
  if(role==='scene-observation')return observationSchema(context?.referenceCount,{strictVoxel:context?.strictVoxel,relationScale:context?.relationScale});
  if(role==='scene-blockout')return blockoutSchema({voxel:context?.voxel,voxelLattice:context?.voxelLattice});
  if(role==='scene-space-judge')return spaceJudgeSchema();
