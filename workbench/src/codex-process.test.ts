@@ -33,3 +33,17 @@ test('持续输出跨过初始时限会延长，完成结果正常返回，绝�
  const result=await captureCodexProcess({args,cwd:root,env:{PATH:process.env.PATH!},input:'',prefix:join(root,'extend-'),timeoutMs:200,maxTimeoutMs:1500,activityWindowMs:150,extensionMs:200});expect(result.timedOut).toBe(false);expect(result.trace.extensions.length).toBeGreaterThan(0);expect(result.stdout).toBe('完成');
  const endless=[process.execPath,'-e',`setInterval(()=>process.stderr.write('进展'),30)`];const stopped=await captureCodexProcess({args:endless,cwd:root,env:{PATH:process.env.PATH!},input:'',prefix:join(root,'hard-'),timeoutMs:200,maxTimeoutMs:500,activityWindowMs:150,extensionMs:200});expect(stopped.timedOut).toBe(true);expect(stopped.trace.timeoutReason).toBe('absolute-limit');
  }finally{rmSync(root,{recursive:true,force:true})}});
+test('超时会结束整个进程组：启动器的子进程不能占着管道拖过期限',async()=>{const root=mkdtempSync(join(tmpdir(),'codex-group-'));try{
+ // The launcher exits only when its child does; before the group kill the call ended when the 5 s child finished.
+ const args=['sh','-c',`${JSON.stringify(process.execPath)} -e "process.stderr.write('子进程');setTimeout(()=>{},5000)"; true`];
+ const result=await captureCodexProcess({args,cwd:root,env:{PATH:process.env.PATH!},input:'',prefix:join(root,'group-'),timeoutMs:200});
+ expect(result.timedOut).toBe(true);expect(result.trace.durationMs).toBeLessThan(2000);expect(result.stderr).toBe('子进程');
+ }finally{rmSync(root,{recursive:true,force:true})}});
+test('连续无输出达到卡住阈值即提前停止；持续输出不算卡住',async()=>{const root=mkdtempSync(join(tmpdir(),'codex-stall-'));try{
+ const silent=[process.execPath,'-e',`process.stderr.write('已开始');setTimeout(()=>{},5000)`];
+ const stuck=await captureCodexProcess({args:silent,cwd:root,env:{PATH:process.env.PATH!},input:'',prefix:join(root,'stuck-'),timeoutMs:4000,stallMs:200});
+ expect(stuck.timedOut).toBe(true);expect(stuck.trace.timeoutReason).toBe('stalled');expect(stuck.trace.durationMs).toBeLessThan(2000);
+ const busy=[process.execPath,'-e',`const t=setInterval(()=>process.stderr.write('进展'),30);setTimeout(()=>{clearInterval(t);process.stdout.write('完成');},600)`];
+ const working=await captureCodexProcess({args:busy,cwd:root,env:{PATH:process.env.PATH!},input:'',prefix:join(root,'busy-'),timeoutMs:4000,stallMs:200});
+ expect(working.timedOut).toBe(false);expect(working.stdout).toBe('完成');
+ }finally{rmSync(root,{recursive:true,force:true})}});

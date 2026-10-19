@@ -39,3 +39,9 @@ test('内层恢复耗尽优先于嵌套超时或503，不能被外层任务识�
  }
  expect(providerFault('PROVIDER_TIMEOUT').recoverable).toBe(true);
 });
+test('卡住的连接按临时故障重试，不占超时次数：两次卡住后第三次仍可完成；工具调用才启用卡住阈值',async()=>{const dir=mkdtempSync(join(tmpdir(),'stall-recovery-'));let n=0;try{
+ const stalled='Error: PROVIDER_STALLED：Codex 连续 10 分钟没有任何输出（连接卡住）';expect(providerFault(stalled)).toMatchObject({kind:'transient',recoverable:true});
+ const result=await withProviderRecovery({role:'scene-space'},dir,async()=>{if(++n<3)throw Error(stalled);return 'ok';},{wait:async()=>{}});
+ expect(result).toBe('ok');expect(n).toBe(3);expect(read(join(dir,'scene-space-recovery.json')).attempts.map((a:any)=>a.fault)).toEqual(['transient','transient',undefined]);
+ expect(modelTimeoutPolicy('high','scene-space',0,3600000,'space-checkpoint-v2').stallMs).toBe(10*60*1000);expect(modelTimeoutPolicy('xhigh','judge').stallMs).toBeNull();
+ }finally{rmSync(dir,{recursive:true,force:true})}});

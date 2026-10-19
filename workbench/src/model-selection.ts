@@ -25,6 +25,9 @@ export function modelTimeoutMs(effort:string,role?:string){
 }
 
 /** 活跃输出允许延长；恢复时给慢调用更多时间，但仍受单阶段总预算约束。 */
+// Tool-driven calls print at every tool call and tools are capped at 240 s; recorded healthy space calls were never silent beyond 454 s,
+// while stuck connections stayed silent for 17–38 minutes after their first seconds.
+export const TOOL_CALL_STALL_MS=10*60*1000;
 export function modelTimeoutPolicy(effort:string,role:string,attempt=0,remainingMs=3600000,toolsContract?:string){
  // Repair includes inspection and real Engine previews. The high-effort
  // token-only timeout used to kill active repairs at ten minutes and redo them.
@@ -32,7 +35,7 @@ export function modelTimeoutPolicy(effort:string,role:string,attempt=0,remaining
  // Initial space construction saves dozens of tool checkpoints; recorded high-effort calls took 12–14 minutes and were killed at the ten-minute cap.
  const construction=role==='scene-space'&&(toolsContract??'').startsWith('space-checkpoint-');
  const base=role==='judge'?900000:role==='scene-refine'||preview||construction?Math.max(900000,modelTimeoutMs(effort,role)):modelTimeoutMs(effort,role),timeoutMs=Math.min(Math.round(base*(attempt?1.5:1)),remainingMs);
- return {timeoutMs,maxTimeoutMs:role==='judge'?timeoutMs:Math.min(timeoutMs*2,remainingMs,45*60*1000),activityWindowMs:Math.min(5*60*1000,timeoutMs),extensionMs:Math.min(5*60*1000,timeoutMs)};
+ return {timeoutMs,maxTimeoutMs:role==='judge'?timeoutMs:Math.min(timeoutMs*2,remainingMs,45*60*1000),activityWindowMs:Math.min(5*60*1000,timeoutMs),extensionMs:Math.min(5*60*1000,timeoutMs),stallMs:toolsContract?TOOL_CALL_STALL_MS:null};
 }
 
 export const COMPLEXITY_MODEL_DEFAULTS:Record<Complexity,Readonly<ModelSettings>>={
