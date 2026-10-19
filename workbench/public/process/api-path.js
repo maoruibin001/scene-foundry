@@ -1,1 +1,2 @@
-export const apiPath=path=>globalThis.location?.pathname.startsWith('/voxel/')&&path.startsWith('/api/')?path.replace('/api/','/api/voxel/'):path;
+import {scenePath} from '../scene-context.js';
+export const apiPath=path=>scenePath(path);
