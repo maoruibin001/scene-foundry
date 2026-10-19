@@ -18,6 +18,7 @@ import {read,save,digest,runDir,event} from '../store';
 import {callValidated} from '../contracts';
 import {scoringGuidance} from '../quality';
 import {refinementBaseline} from './refinement-baseline';
+import {chainedObservation} from './reference-observations';
 import {applyRefinement,REFINEMENT_PROMPT} from './refinement';
 import {createRepairTools,REPAIR_TOOL_PROMPT} from './repair-tools';
 import {repairTextureEvidence,repairReusableTextureEvidence} from './repair-texture-evidence';
@@ -45,12 +46,7 @@ export async function refineWithEvidence(job:any,plan:any,images:any[],dir:strin
  const baselineReceipt=read(join(baselineFolder,'engine-preview-receipt.json'));
  const currentFrames=baselineReceipt.frames.map((f:any)=>({referenceIndex:f.referenceIndex,path:join(baselineFolder,'capture',f.file),mime:'image/png',sha256:f.sha256}));
  const [used,reusable]=await Promise.all([repairTextureEvidence(source,textures,folder,signal,images),repairReusableTextureEvidence(refs,folder,signal)]);
- // 恢复任务可能只保存场景：沿同一输入的恢复链取原始观察，不能借用其他案例。
- let observation:any=null,observationJobId:string|null=null,cursor:any=sourceJob;const seen=new Set();
- while(cursor&&!seen.has(cursor.id)&&seen.size<20){seen.add(cursor.id);if(JSON.stringify(cursor.images?.map((i:any)=>i.id))!==JSON.stringify(refs))break;
-  const file=join(runDir(cursor.id),'generation/reference-observations.json');if(existsSync(file)){observation=read(file);observationJobId=cursor.id;break;}
-  const parent=cursor.recoverySourceJobId??cursor.reuseSceneFrom??(cursor.retryRoot!==cursor.id?cursor.retryRoot:null);cursor=parent&&existsSync(join(runDir(parent),'job.json'))?read(join(runDir(parent),'job.json')):null;
- }
+ const chained=chainedObservation(sourceJob,refs),observation=chained?.observation??null,observationJobId=chained?.jobId??null;
  const support=supportDiagnostics(source);save(join(folder,'support-diagnostics.json'),support);save(join(folder,'surface-audit.json'),surfaceAudit(source,textures));
  const apply=(patch:any)=>applyRefinement(correctedOpeningSource(source,patch),patch,plan,images.length,job.complexity);
  const validate=(patch:any)=>{const scene=apply(patch);resolveTextureReuse(scene,refs);assertCameraPreflight(scene);return patch;};

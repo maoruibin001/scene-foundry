@@ -24,6 +24,7 @@ import {prioritizeAssets,selectAssetPreviews} from './asset-priority';
 import {prioritizePipelineAssets} from '../pipeline-plan';
 import {referencePixelSizes,textureSourceEvidence} from './texture-source';
 import {refineWithEvidence} from './evidence-refinement';
+import {chainedObservation} from './reference-observations';
 import {assertFixedDependencies} from '../dependency-preflight';
 import {assertSpatialAccepted} from './spatial-order';
 import {checkpointSpatialInput,assertCheckpointSpace} from './checkpoint-space';
@@ -109,6 +110,8 @@ export async function runGeneralScene({job,plan,dir,signal,stage,command,preview
   const progress=(phase:string,completed:number,total:number,current:string|null)=>{generationPhase(job,phase);job.generationProgress={phase,completed,total,current};event(job,'generation-progress',phase+(total?' '+completed+'/'+total:'')+(current?' · '+current:''));};
   const generationDir=join(dir,'generation'),ctx:any={job,plan,images,dir:generationDir,signal,stage,onProgress:(phase:string)=>progress(phase,0,0,null)};
   if(source&&job.voxelDetailPolicy===VOXEL_DETAIL_POLICY){const basis=validateVoxelDetailBasis(read(join(runDir(job.reuseSceneFrom),'generation/voxel-detail-basis.json')));mkdirSync(generationDir,{recursive:true});save(join(generationDir,'voxel-detail-basis.json'),basis);assertVoxelDetailScene(sourceScene,basis,read(join(runDir(job.reuseSceneFrom),'materials/texture-registry.json')));}
+  // 复用场景不重做观察；与检查点恢复相同，沿同一输入的恢复链取原始观察并存入本次产物，客观灰模验收和后续恢复都依赖它。
+  if(source){const chained=chainedObservation(read(join(runDir(job.reuseSceneFrom),'job.json')),job.images?.map((i:any)=>i.id));if(chained){ctx.observation=chained.observation;mkdirSync(generationDir,{recursive:true});save(join(generationDir,'reference-observations.json'),chained.observation);}}
   progress(source?(job.refineScene?'根据真实画面反馈修正场景':'复用完整场景'):'规划共享布局',0,0,null);
   const restored=job.reuseCheckpoint?checkpoints.restore(job.reuseCheckpoint,job,generationDir):null;
   let layout:any=null;

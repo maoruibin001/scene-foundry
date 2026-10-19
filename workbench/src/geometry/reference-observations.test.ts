@@ -1,5 +1,5 @@
 import {test,expect} from 'bun:test';
-import {normalizeObservationIndices,validateObservations,observationSchema,observeReferences,bindObservedSpace} from './reference-observations';
+import {normalizeObservationIndices,validateObservations,observationSchema,observeReferences,bindObservedSpace,chainedObservation} from './reference-observations';
 import {mkdirSync,rmSync,readFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {randomUUID} from 'node:crypto';
@@ -110,4 +110,16 @@ test('a diagnosed continuation tags the source observation once and a recovery r
   const seed={spatialRelations:[{id:'rel',description:'墙在门后',critical:true,instanceIds:['w']}]};
   expect(withObservedRelationScales(seed,tagged).spatialRelations[0].scale).toBe('layout');expect(withObservedRelationScales(seed,fixture())).toBe(seed);
  }finally{for(const id of [source,target,recovery])rmSync(runDir(id),{recursive:true,force:true});}
+});
+test('a reused scene finds the observation up its own recovery chain, never across different references',()=>{
+ const [origin,mid,other]=[randomUUID(),randomUUID(),randomUUID()],images=[{id:'ref-a'}],observation={landmarks:[{id:'L1'}],relations:[]};
+ try{
+  for(const id of [origin,mid,other])mkdirSync(join(runDir(id),'generation'),{recursive:true});
+  save(join(runDir(origin),'job.json'),{id:origin,images});save(join(runDir(origin),'generation/reference-observations.json'),observation);
+  save(join(runDir(mid),'job.json'),{id:mid,images,recoverySourceJobId:origin});
+  save(join(runDir(other),'job.json'),{id:other,images:[{id:'ref-b'}],reuseSceneFrom:origin});
+  expect(chainedObservation(read(join(runDir(mid),'job.json')),['ref-a'])).toEqual({observation,jobId:origin});
+  expect(chainedObservation(read(join(runDir(other),'job.json')),['ref-b'])).toBeNull();
+  expect(chainedObservation({id:randomUUID(),images,reuseSceneFrom:randomUUID()},['ref-a'])).toBeNull();
+ }finally{for(const id of [origin,mid,other])rmSync(runDir(id),{recursive:true,force:true});}
 });
