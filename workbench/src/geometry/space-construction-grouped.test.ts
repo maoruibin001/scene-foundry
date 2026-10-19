@@ -44,7 +44,8 @@ test('strict voxel space uses grouped checkpoints; the derived core equals a han
   expect(spaceConstructionPrompt(tool.kit.instructions,tool.kit.version)).toContain('save_space_component_group');
   expect(()=>assertRoleTools('scene-space',tool.kit)).not.toThrow();
   expect(()=>assertRoleTools('scene-space',{...tool.kit,definitions:[...tool.kit.definitions,{name:'save_space_core',description:'',inputSchema:{}}]})).toThrow();
-  expect(modelTimeoutPolicy('high','scene-space',0,3600000,SPACE_CONSTRUCTION_GROUPED)).toEqual(modelTimeoutPolicy('high','scene-space'));
+  // Checkpointed construction gets the tool-call timer (recorded calls ran 12–14 minutes); the stage recovery budget still caps it.
+  expect(modelTimeoutPolicy('high','scene-space',0,3600000,SPACE_CONSTRUCTION_GROUPED)).toEqual(modelTimeoutPolicy('high','scene-refine'));
   await expect(f.putGroup(tool,f.near)).rejects.toThrow('先保存骨架');
   await f.putSkeleton(tool);await f.putGroup(tool,f.near);
   let summary=tool.summary();expect(summary.remainingLandmarkIds).toEqual(['far']);expect(summary.remainingRequiredComponents.map((r:any)=>r.landmarkId)).toEqual(['far']);

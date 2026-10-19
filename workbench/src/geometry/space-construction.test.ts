@@ -39,8 +39,9 @@ test('core contract removes only construction declarations; tool output does not
   expect(spaceCoreSchema(['objects'])).toEqual(expected);const tool=f.create();
   expect(spaceConstructionPrompt(tool.kit.instructions)).not.toContain('不要调用工具');
   expect(spaceConstructionPrompt(tool.kit.instructions)).toContain('验收不通过不会开始资产生成');
-  expect(modelTimeoutPolicy('high','scene-space',0,3600000,SPACE_CONSTRUCTION)).toEqual(modelTimeoutPolicy('high','scene-space'));
-  expect(modelTimeoutPolicy('high','scene-space',1,3600000,SPACE_CONSTRUCTION)).toEqual(modelTimeoutPolicy('high','scene-space',1));
+  // Checkpointed construction gets the tool-call timer (recorded calls ran 12–14 minutes); the stage recovery budget still caps it.
+  expect(modelTimeoutPolicy('high','scene-space',0,3600000,SPACE_CONSTRUCTION)).toEqual(modelTimeoutPolicy('high','scene-refine'));
+  expect(modelTimeoutPolicy('high','scene-space',1,3600000,SPACE_CONSTRUCTION)).toEqual(modelTimeoutPolicy('high','scene-refine',1));
   expect(stageContract({role:'scene-space',schemaContext:{derivedSpatialRelations:true}})).not.toBe(stageContract({role:'scene-space',schemaContext:{}}));
  }finally{f.clean();}
 });

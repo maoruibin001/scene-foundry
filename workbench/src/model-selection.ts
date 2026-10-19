@@ -29,7 +29,9 @@ export function modelTimeoutPolicy(effort:string,role:string,attempt=0,remaining
  // Repair includes inspection and real Engine previews. The high-effort
  // token-only timeout used to kill active repairs at ten minutes and redo them.
  const preview=role==='scene-space'&&['graybox-space-preview-v2','graybox-space-preview-v3','graybox-space-preview-v4','graybox-space-preview-v5','graybox-space-preview-v6','graybox-space-preview-v7','graybox-space-preview-v8','graybox-space-preview-v9','graybox-space-preview-v10','graybox-space-preview-v11','graybox-space-preview-v12','graybox-space-preview-v13','graybox-space-preview-v14','graybox-space-preview-v15'].includes(toolsContract??'');
- const base=role==='judge'?900000:role==='scene-refine'||preview?Math.max(900000,modelTimeoutMs(effort,role)):modelTimeoutMs(effort,role),timeoutMs=Math.min(Math.round(base*(attempt?1.5:1)),remainingMs);
+ // Initial space construction saves dozens of tool checkpoints; recorded high-effort calls took 12–14 minutes and were killed at the ten-minute cap.
+ const construction=role==='scene-space'&&(toolsContract??'').startsWith('space-checkpoint-');
+ const base=role==='judge'?900000:role==='scene-refine'||preview||construction?Math.max(900000,modelTimeoutMs(effort,role)):modelTimeoutMs(effort,role),timeoutMs=Math.min(Math.round(base*(attempt?1.5:1)),remainingMs);
  return {timeoutMs,maxTimeoutMs:role==='judge'?timeoutMs:Math.min(timeoutMs*2,remainingMs,45*60*1000),activityWindowMs:Math.min(5*60*1000,timeoutMs),extensionMs:Math.min(5*60*1000,timeoutMs)};
 }
 
