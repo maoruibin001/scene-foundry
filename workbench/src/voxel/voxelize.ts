@@ -3,6 +3,7 @@ import {validateScene,type SceneInput} from '../geometry/scene-contract';
 import {digest} from '../store';
 import {VOXEL_GRID_VERSION,VOXEL_LIMITS,compileVoxelScene,type VoxelProgram} from './program';
 import {prepareNativeRaster,rasterNativeVolume} from './native-raster';
+import type {MaterialEmission} from '../geometry/material-emission';
 
 type V=[number,number,number];
 const sub=(a:V,b:V)=>a.map((n,k)=>n-b[k]) as V;
@@ -26,20 +27,38 @@ export function triangleCellOverlap(vertices:V[],center:V,strictCellInterior=fal
  return true;
 }
 
-/** Weighted median-cut quantizes actual surface colors rather than asking a model to invent a palette. */
-export function measuredPalette(histogram:Map<number,number>,limit=64){
- if(!histogram.size)fail('没有可见表面颜色');
- let bins=[Array.from(histogram,([color,count])=>({color,count,v:rgb(color)}))];
- const range=(b:typeof bins[number])=>[0,1,2].map(k=>{let min=255,max=0;for(const x of b){min=Math.min(min,x.v[k]);max=Math.max(max,x.v[k]);}return max-min;});
+type Bin={color:number;count:number;v:V;finish?:number}[];
+function medianCut(bins:Bin[],limit:number){
+ const range=(b:Bin)=>[0,1,2].map(k=>{let min=255,max=0;for(const x of b){min=Math.min(min,x.v[k]);max=Math.max(max,x.v[k]);}return max-min;});
  while(bins.length<limit){let selected=-1,score=0;
   for(let i=0;i<bins.length;i++){const b=bins[i];if(b.length<2)continue;const s=Math.max(...range(b))*b.reduce((n,x)=>n+x.count,0);if(s>score){selected=i;score=s;}}
   if(selected<0)break;const bin=bins[selected],r=range(bin),axis=r.indexOf(Math.max(...r));bin.sort((a,b)=>a.v[axis]-b.v[axis]||a.color-b.color);
   const half=bin.reduce((n,x)=>n+x.count,0)/2;let sum=0,split=1;for(let i=0;i<bin.length-1;i++){sum+=bin[i].count;split=i+1;if(sum>=half)break;}
   bins.splice(selected,1,bin.slice(0,split),bin.slice(split));
  }
- return bins.map(b=>{const n=b.reduce((s,x)=>s+x.count,0);return pack([0,1,2].map(k=>Math.round(b.reduce((s,x)=>s+x.v[k]*x.count,0)/n)) as V);}).sort((a,b)=>a-b);
+ return bins;
 }
-
+const average=(b:Bin)=>{const n=b.reduce((s,x)=>s+x.count,0);return pack([0,1,2].map(k=>Math.round(b.reduce((s,x)=>s+x.v[k]*x.count,0)/n)) as V);};
+/** Weighted median-cut quantizes actual surface colors rather than asking a model to invent a palette. */
+export function measuredPalette(histogram:Map<number,number>,limit=64){
+ if(!histogram.size)fail('没有可见表面颜色');
+ return medianCut([Array.from(histogram,([color,count])=>({color,count,v:rgb(color)}))],limit).map(average).sort((a,b)=>a-b);
+}
+export type VoxelFinish={emission:MaterialEmission|null;roughness:number;metallic:number};
+const round=(n:number,step:number)=>+(Math.round(n/step)*step).toFixed(3);
+/** Emission is kept exactly; roughness/metallic are bucketed so finishes stay well under the palette size. */
+function finishKey(f:VoxelFinish,coarse:boolean){return JSON.stringify(f.emission?[f.emission.color.map(n=>round(n,.001)),round(f.emission.intensity,.01)]:null)+(coarse?'|'+(f.roughness<.3||f.metallic>=.5?'gloss':'matte'):'|'+round(f.roughness,.1)+'|'+round(f.metallic,.1));}
+/** The default matte finish adds no fields, so palettes from sources without gloss or emission are unchanged. */
+export function paletteFinish(f:VoxelFinish){return f.emission||f.roughness!==1||f.metallic!==0?{roughness:f.roughness,metallic:f.metallic,...(f.emission?{emission:f.emission}:{})}:{};}
+/**
+ * Median-cut seeded with one bin per source finish: bins never mix finishes, so a neon or wet surface keeps its declared emission/gloss
+ * after quantization instead of collapsing to a matte block, while the remaining slots still go to the widest color ranges.
+ */
+export function measuredFinishPalette(cells:{finish:number;color:number;count:number}[],limit=64){
+ if(!cells.length)fail('没有可见表面颜色');
+ const groups=[...new Set(cells.map(c=>c.finish))].sort((a,b)=>a-b);if(groups.length>limit)fail('材质表面类型超过体素颜色表上限');
+ return medianCut(groups.map(g=>cells.filter(c=>c.finish===g).map(c=>({...c,v:rgb(c.color)}))),limit).map(b=>({finish:b[0].finish!,color:average(b)}));
+}
 export function voxelizeScene(source:SceneInput,plan:any,referenceCount:number,textures:Record<string,Texture>,options:{resolution?:number;maxRasterTests?:number;paletteSize?:number}={}){
  validateScene(source,plan,referenceCount);
  if(source.entities.length>VOXEL_LIMITS.entities)fail('实体数量超过体素上限，不能删除主体来适配');
@@ -50,15 +69,18 @@ export function voxelizeScene(source:SceneInput,plan:any,referenceCount:number,t
  const dimensions=()=>extent.map(n=>Math.ceil(n/unit)+2) as V;let size=native.size??dimensions();
  while(size.reduce((a,b)=>a*b,1)>VOXEL_LIMITS.gridCells||Math.max(...size)>192){unit*=1.02;size=dimensions();}
  if(unit>1)fail('场景尺度超过受支持格尺寸');
- const origin=native.origin??compiled.bounds.min.map(n=>n-unit) as V,cells=size.reduce((a,b)=>a*b,1),owners=new Uint8Array(cells),colorGrid=new Uint32Array(cells),distances=new Float32Array(cells);distances.fill(Infinity);
+ const origin=native.origin??compiled.bounds.min.map(n=>n-unit) as V,cells=size.reduce((a,b)=>a*b,1),owners=new Uint8Array(cells),colorGrid=new Uint32Array(cells),finishGrid=new Uint8Array(cells),distances=new Float32Array(cells);distances.fill(Infinity);
+ const paletteLimit=Math.min(options.paletteSize??64,64),surfaceFinish=(m:any):VoxelFinish=>{const s=m.surface,e=s.emissive&&s.emissiveIntensity>0?{color:[...s.emissive] as [number,number,number],intensity:s.emissiveIntensity}:null;return {emission:e,roughness:Number.isFinite(s.roughness)?s.roughness:1,metallic:Number.isFinite(s.metallic)?s.metallic:0};};
+ const keys=(coarse:boolean)=>new Set(compiled.meshes.map(m=>finishKey(surfaceFinish(m.geometry.material),coarse))).size,coarse=keys(false)>paletteLimit/2;
+ const finishes:VoxelFinish[]=[],finishIds=new Map<string,number>(),finishOf=(m:any)=>{const f=surfaceFinish(m),key=finishKey(f,coarse);if(!finishIds.has(key)){finishIds.set(key,finishes.length);finishes.push({...f,roughness:round(f.roughness,.1),metallic:round(f.metallic,.1)});}return finishIds.get(key)!;};
  const entities=source.program.instances.map(i=>{const e=source.entities.find(e=>e.instanceId===i.id)!;return {id:i.id,label:i.label,category:e.category,role:e.role,requirementIds:i.requirementIds,operations:[]};});
  const ownerIds=new Map(entities.map((e,i)=>[e.id,i+1])),priority=(owner:number)=>owner?({ground:0,context:1,subject:2}[entities[owner-1].role]):-1;
  const index=(v:V)=>v[0]+size[0]*(v[1]+size[1]*v[2]);let rasterTests=0,overlaps=0;
  const maxTests=options.maxRasterTests??32_000_000;
- const write=(v:V,owner:number,color:number,distance:number)=>{const key=index(v),old=owners[key];if(old&&old!==owner)overlaps++;
+ const write=(v:V,owner:number,color:number,distance:number,finish:number)=>{const key=index(v),old=owners[key];if(old&&old!==owner)overlaps++;
   if(old&&old!==owner&&(priority(old)>priority(owner)||priority(old)===priority(owner)&&distances[key]<distance))return;
   if(old===owner&&distances[key]<distance)return;
-  owners[key]=owner;colorGrid[key]=color;distances[key]=distance;
+  owners[key]=owner;colorGrid[key]=color;finishGrid[key]=finish;distances[key]=distance;
  };
  const texturePixels=new Map<string,Buffer>();
  const sample=(material:any,uv:V)=>{
@@ -70,11 +92,11 @@ export function voxelizeScene(source:SceneInput,plan:any,referenceCount:number,t
   }
   return pack(value.map(encoded) as V);
  };
- for(const mesh of compiled.meshes){const g=mesh.geometry,owner=ownerIds.get(mesh.entityId)!,hits=new Map<number,{z:number;sign:number;color:number}[]>();
+ for(const mesh of compiled.meshes){const g=mesh.geometry,owner=ownerIds.get(mesh.entityId)!,finish=finishOf(g.material),hits=new Map<number,{z:number;sign:number;color:number}[]>();
   const volume=native.meshes.get(mesh.name);
   if(volume){
    const color=pack(g.material.surface.baseColor.slice(0,3).map(encoded) as V);
-   const mapped=rasterNativeVolume(volume,{unit,origin,size},cell=>write(cell,owner,color,0),maxTests-rasterTests);rasterTests+=mapped.gridWrites;
+   const mapped=rasterNativeVolume(volume,{unit,origin,size},cell=>write(cell,owner,color,0,finish),maxTests-rasterTests);rasterTests+=mapped.gridWrites;
    continue;
   }
   for(let t=0;t<g.indices.length;t+=3){const ids=g.indices.slice(t,t+3),vertices=ids.map((i:number)=>[0,1,2].map(k=>(g.positions[i*3+k]-origin[k])/unit) as V),edges=[sub(vertices[1],vertices[0]),sub(vertices[2],vertices[0])],normal=cross(edges[0],edges[1]);
@@ -86,7 +108,7 @@ export function voxelizeScene(source:SceneInput,plan:any,referenceCount:number,t
     const w=weights(a+.5,b+.5),plane=w.reduce((n,q,k)=>n+q*vertices[k][axis],0),uv=ids.reduce((r:V,id:number,k:number)=>[r[0]+w[k]*g.uvs[id*2],r[1]+w[k]*g.uvs[id*2+1],0],[0,0,0] as V),color=sample(g.material,uv);if(color===null)continue;
     const lo=Math.max(low(axis),Math.floor(plane-1.501)),hi=Math.min(high(axis),Math.floor(plane+1.501));
     for(let c=lo;c<=hi;c++){if(++rasterTests>maxTests)fail('体素化计算超出有界预算；几何与输入保留');const cell=[0,0,0] as V;cell[u]=a;cell[v]=b;cell[axis]=c;
-     if(triangleCellOverlap(vertices,cell.map(n=>n+.5) as V,native.meshes.size>0))write(cell,owner,color,Math.abs(c+.5-plane));
+     if(triangleCellOverlap(vertices,cell.map(n=>n+.5) as V,native.meshes.size>0))write(cell,owner,color,Math.abs(c+.5-plane),finish);
     }
    }
    // Closed meshes use winding intervals; open surfaces remain a bounded voxel shell.
@@ -104,20 +126,20 @@ export function voxelizeScene(source:SceneInput,plan:any,referenceCount:number,t
    if(unique.reduce((n,h)=>n+h.sign,0)!==0)continue;let winding=0;
    for(let i=0;i<unique.length-1;i++){winding+=unique[i].sign;if(!winding)continue;
     for(let z=Math.max(0,Math.ceil(unique[i].z-.5));z<Math.min(size[2],Math.ceil(unique[i+1].z-.5));z++){
-     if(++rasterTests>maxTests)fail('体素填充超出有界预算');const x=key%size[0],y=Math.floor(key/size[0]);if(!owners[index([x,y,z])])write([x,y,z],owner,unique[i].color,Infinity);
+     if(++rasterTests>maxTests)fail('体素填充超出有界预算');const x=key%size[0],y=Math.floor(key/size[0]);if(!owners[index([x,y,z])])write([x,y,z],owner,unique[i].color,Infinity,finish);
     }
    }
   }
  }
- const counts=new Uint32Array(entities.length+1),histogram=new Map<number,number>();let filled=0;
- for(let i=0;i<cells;i++)if(owners[i]){filled++;counts[owners[i]]++;histogram.set(colorGrid[i],(histogram.get(colorGrid[i])??0)+1);}
+ const counts=new Uint32Array(entities.length+1),histogram=new Map<number,number>(),FINISH=2**24;let filled=0;
+ for(let i=0;i<cells;i++)if(owners[i]){filled++;counts[owners[i]]++;const key=finishGrid[i]*FINISH+colorGrid[i];histogram.set(key,(histogram.get(key)??0)+1);}
  if(filled>VOXEL_LIMITS.filledCells)fail('占用格超出50万上限；未删除资产或降低验收标准');
  const lost=entities.filter((_,i)=>!counts[i+1]);if(lost.length)fail('离散化丢失实体：'+lost.map(e=>e.id).join(','));
- const colors=measuredPalette(histogram,Math.min(options.paletteSize??64,64)),cache=new Map<number,number>();
- const nearest=(color:number)=>{if(cache.has(color))return cache.get(color)!;const value=rgb(color);let best=0,d=Infinity;colors.forEach((c,i)=>{const v=rgb(c),s=v.reduce((n,x,k)=>n+(x-value[k])**2,0);if(s<d){d=s;best=i;}});cache.set(color,best+1);return best+1;};
+ const colors=measuredFinishPalette(Array.from(histogram,([key,count])=>({finish:Math.floor(key/FINISH),color:key%FINISH,count})),paletteLimit),cache=new Map<number,number>();
+ const nearest=(key:number)=>{if(cache.has(key))return cache.get(key)!;const finish=Math.floor(key/FINISH),value=rgb(key%FINISH);let best=-1,d=Infinity;colors.forEach((c,i)=>{if(c.finish!==finish)return;const v=rgb(c.color),s=v.reduce((n,x,k)=>n+(x-value[k])**2,0);if(s<d){d=s;best=i;}});cache.set(key,best+1);return best+1;};
  const runs:[number,number,number,number][]=[];
- for(let i=0;i<cells;i++)if(owners[i]){const owner=owners[i],color=nearest(colorGrid[i]),last=runs.at(-1);if(last&&last[0]+last[1]===i&&last[2]===owner&&last[3]===color)last[1]++;else runs.push([i,1,owner,color]);}
- const program:VoxelProgram={version:VOXEL_GRID_VERSION,name:source.program.name,size,cellSize:unit,origin,sourceSceneSha256:digest(JSON.stringify(source)),runs,palette:colors.map((c,i)=>({id:'voxel_color_'+i,color:'#'+c.toString(16).padStart(6,'0')})),entities,
+ for(let i=0;i<cells;i++)if(owners[i]){const owner=owners[i],color=nearest(finishGrid[i]*FINISH+colorGrid[i]),last=runs.at(-1);if(last&&last[0]+last[1]===i&&last[2]===owner&&last[3]===color)last[1]++;else runs.push([i,1,owner,color]);}
+ const program:VoxelProgram={version:VOXEL_GRID_VERSION,name:source.program.name,size,cellSize:unit,origin,sourceSceneSha256:digest(JSON.stringify(source)),runs,palette:colors.map((c,i)=>({id:'voxel_color_'+i,color:'#'+c.color.toString(16).padStart(6,'0'),...paletteFinish(finishes[c.finish])})),entities,
   cameras:source.cameras.map(c=>({...c,position:c.position as V,target:c.target as V,projection:c.projection??'perspective',orthographicHeight:c.orthographicHeight??null})),lighting:source.lighting,assumptions:source.assumptions};
  const result=compileVoxelScene(program,plan,referenceCount);
  for(const key of ['observedBindings','spatialRelations','spatialOpenings','spatialContacts'])if((source as any)[key])(result.scene as any)[key]=structuredClone((source as any)[key]);
@@ -127,6 +149,6 @@ export function voxelizeScene(source:SceneInput,plan:any,referenceCount:number,t
   if(source.spatialOpenings)result.scene.spatialOpenings=source.spatialOpenings.map(o=>({...structuredClone(o),center:transformPoint(o.center,instance(o.instanceId)),normal:direction(o.normal,o.instanceId),up:direction(o.up,o.instanceId)}));
   if(source.spatialContacts)result.scene.spatialContacts=source.spatialContacts.map(c=>({...structuredClone(c),points:c.points.map(point=>transformPoint(point,instance(c.aId)))}));
  }
- const report={...(source.voxelLattice?{spatialConstraintTransform:'frozen-isometric-world-bake-v1'}:{}),version:'geometry-voxelization-v1',sourceSceneSha256:program.sourceSceneSha256,sourceTriangles:compiled.triangles,requestedResolution:resolution,gridSize:size,cellSize:unit,origin,filled,measuredSourceColors:histogram.size,paletteSize:colors.length,rasterTests,overlapCandidates:overlaps,entities:entities.map((e,i)=>({id:e.id,cells:counts[i+1]})),geometryErrorBoundMeters:Math.sqrt(3)*unit,...(native.provenance.nativeMeshes?{nativeLattice:native.provenance}:{}),scope:'实际验证几何与材质采样后的整数占用格；图片还原仍须独立验收'};
+ const report={...(source.voxelLattice?{spatialConstraintTransform:'frozen-isometric-world-bake-v1'}:{}),version:'geometry-voxelization-v1',sourceSceneSha256:program.sourceSceneSha256,sourceTriangles:compiled.triangles,requestedResolution:resolution,gridSize:size,cellSize:unit,origin,filled,measuredSourceColors:histogram.size,paletteSize:colors.length,finishes:{version:'voxel-palette-finish-v1',count:finishes.length,emissive:finishes.filter(f=>f.emission).length,bucketing:coarse?'emission+gloss':'emission+roughness/metallic 0.1'},rasterTests,overlapCandidates:overlaps,entities:entities.map((e,i)=>({id:e.id,cells:counts[i+1]})),geometryErrorBoundMeters:Math.sqrt(3)*unit,...(native.provenance.nativeMeshes?{nativeLattice:native.provenance}:{}),scope:'实际验证几何与材质采样后的整数占用格；图片还原仍须独立验收'};
  return {program,...result,report};
 }

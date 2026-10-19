@@ -50,3 +50,21 @@ test('weighted measured palette is deterministic and bounded with many sampled c
  const h=new Map(Array.from({length:8000},(_,i)=>[(i*2001)&0xffffff,1]));
  expect(measuredPalette(h,16)).toHaveLength(16);expect(measuredPalette(h,16)).toEqual(measuredPalette(h,16));
 });
+test('source emission and gloss survive as separate palette finishes; matte sources keep the plain palette',()=>{
+ const matte=voxelizeScene(scene(),plan,1,{}, {resolution:24});
+ expect(matte.program.palette).toEqual([{id:'voxel_color_0',color:'#ff0000'}]);
+ const input=scene([{position:[-1,0,.5],shape:{type:'box',size:[1,1,1],radius:0}},{position:[1,0,.5],shape:{type:'box',size:[1,1,1],radius:0}}]);
+ input.program.materials.push({id:'neon',color:[1,0,0,1],roughness:.24,metallic:0,textureId:null,emission:{color:[1,0,0],intensity:3}} as any);
+ input.program.templates[0].parts[1].material='neon';
+ const r=voxelizeScene(input,plan,1,{}, {resolution:24}),palette=r.program.palette;
+ expect(palette.map(p=>p.color)).toEqual(['#ff0000','#ff0000']);
+ const lit=palette.find(p=>p.emission)!;expect(lit).toMatchObject({roughness:.2,metallic:0,emission:{color:[1,0,0],intensity:3}});
+ expect(palette.find(p=>!p.emission)).toEqual({id:expect.any(String),color:'#ff0000'});
+ const id=(x:number)=>palette[r.grid.colors[cellAt(r,[x,0,.5])]-1].id;
+ expect(id(1)).toBe(lit.id);expect(id(-1)).not.toBe(lit.id);
+ expect(r.report.finishes).toMatchObject({version:'voxel-palette-finish-v1',count:2,emissive:1});
+ const compiled=compileVoxelScene(JSON.parse(JSON.stringify(r.program)),plan,1).scene.program.materials.find((m:any)=>m.id===lit.id);
+ expect(compiled).toMatchObject({roughness:.2,metallic:0,emission:{color:[1,0,0],intensity:3}});
+ const invalid=structuredClone(r.program);(invalid.palette.find(p=>p.emission)!.emission as any).intensity=99;expect(()=>voxelGrid(invalid)).toThrow();
+ const rough=structuredClone(r.program);rough.palette[0].roughness=2;expect(()=>voxelGrid(rough)).toThrow();
+});

@@ -1,6 +1,7 @@
 import { VOXEL_LIMITS } from "./limits";
 import { validateScene, type SceneInput } from "../geometry/scene-contract";
 import { compileGeometryProgram, type Part } from "../geometry/program";
+import { validateMaterialEmission, type MaterialEmission } from "../geometry/material-emission";
 
 export const VOXEL_VERSION = "voxel-scene-v1";
 export const VOXEL_GRID_VERSION = "voxel-grid-v2";
@@ -11,10 +12,14 @@ export type VoxelEntity = { id: string; label: string; category: string; role: "
 export type VoxelProgram = {
   version: typeof VOXEL_VERSION | typeof VOXEL_GRID_VERSION; name: string; size: V; cellSize: number;
   origin?: V; runs?: [number, number, number, number][]; sourceSceneSha256?: string;
-  palette: { id: string; color: string }[]; entities: VoxelEntity[];
+  palette: VoxelPaletteEntry[]; entities: VoxelEntity[];
   cameras: { name: string; referenceIndex: number | null; position: V; target: V; projection: "perspective" | "orthographic"; fov: number; orthographicHeight: number | null }[];
   lighting: SceneInput["lighting"]; assumptions: string[];
 };
+/** A measured voxelization may carry its source surface finish; omitted fields are the matte default. */
+export type VoxelPaletteEntry = { id: string; color: string; roughness?: number; metallic?: number; emission?: MaterialEmission };
+const unitValue = (v: any) => v === undefined || typeof v === "number" && Number.isFinite(v) && v >= 0 && v <= 1;
+function validFinish(p: VoxelPaletteEntry) { try { validateMaterialEmission(p.emission); return unitValue(p.roughness) && unitValue(p.metallic) && p.emission !== null; } catch { return false; } }
 export type VoxelGrid = { size: V; cellSize: number; colors: Uint8Array; owners: Uint8Array; filled: number; operations: number; composition:{keptCells:number;replacedCells:number} };
 function assert(ok: unknown, reason: string): asserts ok { if (!ok) throw Error("VOXEL_CONTRACT: " + reason); }
 const integer = (v: any, lo: number, hi: number) => Number.isSafeInteger(v) && v >= lo && v <= hi;
@@ -90,7 +95,7 @@ export function decodedVoxelGrid(program:VoxelProgram):VoxelGrid {
  assert(cells<=VOXEL_LIMITS.gridCells&&Number.isFinite(program.cellSize)&&program.cellSize>0&&program.cellSize<=1,'体素网格范围或格尺寸超限');
  assert(program.origin?.length===3&&program.origin.every(n=>Number.isFinite(n)&&Math.abs(n)<=1000),'体素网格原点无效');
  assert(/^[a-f0-9]{64}$/.test(program.sourceSceneSha256??''),'体素化缺少冻结几何来源');
- assert(program.palette.length>0&&program.palette.length<=VOXEL_LIMITS.palette&&new Set(program.palette.map(p=>p.id)).size===program.palette.length&&program.palette.every(p=>id(p.id)&&/^#[a-fA-F0-9]{6}$/.test(p.color)),'体素颜色表无效');
+ assert(program.palette.length>0&&program.palette.length<=VOXEL_LIMITS.palette&&new Set(program.palette.map(p=>p.id)).size===program.palette.length&&program.palette.every(p=>id(p.id)&&/^#[a-fA-F0-9]{6}$/.test(p.color)&&validFinish(p)),'体素颜色表无效');
  assert(program.entities.length>0&&program.entities.length<=VOXEL_LIMITS.entities&&new Set(program.entities.map(e=>e.id)).size===program.entities.length&&program.entities.every(e=>/^[A-Za-z][A-Za-z0-9_-]{0,55}$/.test(e.id)&&['subject','context','ground'].includes(e.role)),'体素实体身份无效');
  assert(Array.isArray(program.runs)&&program.runs.length>0&&program.runs.length<=VOXEL_LIMITS.filledCells,'体素格记录为空或超限');
  const colors=new Uint8Array(cells),owners=new Uint8Array(cells),counts=new Uint32Array(program.entities.length+1);let filled=0,end=0;
@@ -128,7 +133,7 @@ export function voxelBoxes(grid: VoxelGrid) {
 export function compileVoxelScene(program: VoxelProgram, plan: any, referenceCount: number) {
   const grid = voxelGrid(program), surfaces = voxelSurfaces(grid), unit = program.cellSize;
   const origin=program.version===VOXEL_GRID_VERSION?program.origin!:[0,0,0];
-  const materials = program.palette.map(p => ({ id: p.id, color: paletteColor(p.color), roughness: 1, metallic: 0, textureId: null }));
+  const materials = program.palette.map(p => ({ id: p.id, color: paletteColor(p.color), roughness: p.roughness ?? 1, metallic: p.metallic ?? 0, textureId: null, ...(p.emission ? { emission: p.emission } : {}) }));
   const templates = program.entities.map((entity, index) => ({ id: "tpl_" + entity.id, parts: surfaces.filter(surface => surface.owner === index + 1).map((surface): Part => ({
     id: "color_" + surface.color, material: program.palette[surface.color - 1].id,
     position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1],
