@@ -4,7 +4,8 @@ export {CODEX_WORKER_INSTRUCTIONS} from './codex-input';
 import {discoverCodexRoute,routeArguments,routeSummary,routeForSelection,assertLauncherUnchanged,type CodexRoute} from './codex-route';
 import {codexPrompt} from './prompts';
 import {modelTimeoutPolicy,type ModelSettings} from './model-selection';
-import {mkdtempSync,readFileSync,writeFileSync,rmSync,statSync,existsSync} from 'node:fs';
+import {mkdtempSync,mkdirSync,readFileSync,writeFileSync,rmSync,statSync,existsSync} from 'node:fs';
+import {deflateSync,inflateSync} from 'node:zlib';
 import {createHash} from 'node:crypto';
 import {captureCodexProcess} from './codex-process';
 import {join} from 'node:path';
@@ -27,14 +28,35 @@ export function validateCodexImages(images:{path:string,mime:string}[]=[]){retur
  try{if(!statSync(image.path).isFile())throw Error('不是文件');const bytes=readFileSync(image.path),png=bytes.subarray(0,8).equals(Buffer.from([137,80,78,71,13,10,26,10])),jpeg=bytes[0]===255&&bytes[1]===216&&bytes[2]===255;if(!(png&&image.mime==='image/png'||jpeg&&image.mime==='image/jpeg'))throw Error('图片格式与声明不符');return {path:image.path,mime:image.mime,bytes:bytes.length,sha256:createHash('sha256').update(bytes).digest('hex')};}
  catch(error){throw Error('PROVIDER_INPUT_INVALID：参考图片不可用：'+image.path+'；'+String(error));}
 });}
+const PNG_SIGNATURE=Buffer.from([137,80,78,71,13,10,26,10]);
+const pngChunk=(type:string,data:Buffer)=>{const head=Buffer.alloc(8),tail=Buffer.alloc(4);head.writeUInt32BE(data.length);head.write(type,4,'latin1');tail.writeUInt32BE(Bun.hash.crc32(Buffer.concat([head.subarray(4),data]))>>>0);return Buffer.concat([head,data,tail]);};
+/** Same chunks and the same filtered scanlines under another deflate stream, so the decoded pixels are identical; checked before use. */
+export function losslessPngReencode(bytes:Buffer){
+ if(!bytes.subarray(0,8).equals(PNG_SIGNATURE))throw Error('不是 PNG');
+ const chunks:{type:string,data:Buffer}[]=[];for(let pos=8;pos<bytes.length;){const n=bytes.readUInt32BE(pos);chunks.push({type:bytes.toString('latin1',pos+4,pos+8),data:bytes.subarray(pos+8,pos+8+n)});pos+=12+n;}
+ const idat=Buffer.concat(chunks.filter(c=>c.type==='IDAT').map(c=>c.data)),raw=inflateSync(idat);
+ let packed=deflateSync(raw,{level:9});if(packed.equals(idat))packed=deflateSync(raw,{level:1});
+ if(packed.equals(idat)||!inflateSync(packed).equals(raw))throw Error('无损重编码未得到不同且像素一致的图片');
+ const first=chunks.findIndex(c=>c.type==='IDAT');
+ return Buffer.concat([PNG_SIGNATURE,...chunks.flatMap((c,i)=>c.type!=='IDAT'?[pngChunk(c.type,c.data)]:i===first?[pngChunk('IDAT',packed)]:[])]);
+}
+/** Recovery copies for a gateway that rejected a verified image's encoding; JPEG has no pixel-identical re-encode and is sent unchanged. */
+function reencodedImages(images:ReturnType<typeof validateCodexImages>,folder:string){
+ mkdirSync(folder,{recursive:true});
+ return images.map((image,i)=>{
+  if(image.mime!=='image/png')return image;
+  const bytes=losslessPngReencode(readFileSync(image.path)),path=join(folder,(i+1)+'.png');writeFileSync(path,bytes);
+  return {path,mime:image.mime,bytes:bytes.length,sha256:createHash('sha256').update(bytes).digest('hex'),reencodedFrom:{path:image.path,bytes:image.bytes,sha256:image.sha256},pixels:'identical'};
+ });
+}
 export function cliReceipt(log:string,model:string,effort=CODEX_EFFORT,expectedProvider='openai'){
  const selected=log.match(/^model: (.+)$/m)?.[1]?.trim(),provider=log.match(/^provider: (.+)$/m)?.[1]?.trim(),cliReasoningEffort=log.match(/^reasoning effort: (.+)$/m)?.[1]?.trim();
  if(selected!==model||provider!==expectedProvider||cliReasoningEffort!==effort)throw Error('MODEL_ROUTE_UNVERIFIED：Codex CLI 未确认所选模型与供应商');
  return {requestedModel:model,cliModel:selected,returnedModel:null,routeEvidence:'official Codex CLI execution header; server does not echo model',provider:'codex-cli',authentication:expectedProvider==='openai'?'chatgpt-subscription':'launcher-provider',cliProvider:provider,cliSandbox:log.match(/^sandbox: (.+)$/m)?.[1]?.trim()??null,cliVersion:log.match(/^OpenAI Codex (.+)$/m)?.[1]??null,id:log.match(/^session id: (.+)$/m)?.[1]??null,usage:{cliReportedTokens:Number(log.match(/tokens used\s*\n([\d,]+)/)?.[1]?.replaceAll(',','')??0)},requestedReasoning:effort,cliReasoningEffort};
 }
-export async function callCodex(input:{system:string,text:string,images?:{path:string,mime:string}[],role:string,signal?:AbortSignal,modelSettings?:ModelSettings,recoveryAttempt?:number,recoveryRemainingMs?:number,tools?:CodexToolKit},dir:string,model:string,schema:any){
+export async function callCodex(input:{system:string,text:string,images?:{path:string,mime:string}[],role:string,signal?:AbortSignal,modelSettings?:ModelSettings,recoveryAttempt?:number,recoveryRemainingMs?:number,reencodeImages?:boolean,tools?:CodexToolKit},dir:string,model:string,schema:any){
  assertRoleTools(input.role,input.tools);const inputSize=assertCodexInputSize(input,schema);input=withToolContinuation(input);schema=input.tools?.outputSchema??schema;
- input.signal?.throwIfAborted();const images=validateCodexImages(input.images);
+ input.signal?.throwIfAborted();const verified=validateCodexImages(input.images),images=input.reencodeImages?reencodedImages(verified,join(dir,input.role+'-reencoded-images')):verified;
  if(!activeRoute)throw Error('CODEX_ROUTE_UNVERIFIED：启动器路由尚未初始化');assertLauncherUnchanged(CODEX_BIN,activeRoute);const route=routeForModel(model)!;
  if(!codexLogin(model))throw Error('PROVIDER_NOT_CONFIGURED：请检查本地 Codex CLI 登录状态和启动器配置');
  const effort=input.modelSettings?.reasoningEffort??CODEX_EFFORT,timeoutPolicy=modelTimeoutPolicy(effort,input.role,input.recoveryAttempt,input.recoveryRemainingMs,input.tools?.version),{timeoutMs}=timeoutPolicy;
@@ -44,7 +66,7 @@ export async function callCodex(input:{system:string,text:string,images?:{path:s
  writeFileSync(schemaPath,JSON.stringify(schema));const started=Date.now();
  writeFileSync(join(dir,input.role+'-input-receipt.json'),JSON.stringify({executable:CODEX_BIN,executionRoute:routeSummary(route),requestedModel:model,requestedReasoning:effort,reasoningSummary:'auto',timeoutMs,images,inputSize,workerInstructionsSha256,toolsContract:input.tools?.version??null,startedAt:new Date(started).toISOString(),schemaSha256:createHash('sha256').update(JSON.stringify(schema)).digest('hex')},null,2));
  const toolServer=input.tools?serveCodexTools(input.tools,input.signal,join(dir,input.role+'-tool-calls.jsonl')):null;
- const args=[CODEX_BIN,'exec',...routeArguments(route),'--ignore-user-config','--ephemeral','--sandbox','read-only','--skip-git-repo-check','--model',model,'-c',`model_reasoning_effort="${effort}"`,'-c','model_reasoning_summary="auto"','-c','web_search="disabled"','-c',`model_instructions_file=${JSON.stringify(workerPath)}`,...(toolServer?.args??[]),'--output-schema',schemaPath,'-o',output,...(input.images??[]).flatMap(i=>['--image',i.path]),'-'];
+ const args=[CODEX_BIN,'exec',...routeArguments(route),'--ignore-user-config','--ephemeral','--sandbox','read-only','--skip-git-repo-check','--model',model,'-c',`model_reasoning_effort="${effort}"`,'-c','model_reasoning_summary="auto"','-c','web_search="disabled"','-c',`model_instructions_file=${JSON.stringify(workerPath)}`,...(toolServer?.args??[]),'--output-schema',schemaPath,'-o',output,...images.flatMap(i=>['--image',i.path]),'-'];
  try{
   const {code,timedOut,stderr:log,trace}=await captureCodexProcess({args,cwd:scratch,env:{...codexEnvironment(),PIPELINE_VALIDATION_JOB_ID:dir.match(/[/\\]runs[/\\]([a-f0-9-]{36})(?:[/\\]|$)/)?.[1]??'',PIPELINE_VALIDATION_ROLE:input.role},input:codexPrompt(input.system,input.text,!!input.tools),prefix:join(dir,input.role+'-'),...timeoutPolicy,signal:input.signal});input.signal?.throwIfAborted();
   if(timedOut&&trace.timeoutReason==='stalled')throw Error('PROVIDER_STALLED：Codex 连续 '+Math.round(timeoutPolicy.stallMs!/60000)+' 分钟没有任何输出（连接卡住），已在 '+Math.round(trace.durationMs/1000)+' 秒处停止；按临时连接故障重新发起当前调用');

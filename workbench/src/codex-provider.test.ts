@@ -23,3 +23,14 @@ test('全部输出契约不包含服务端不支持的正则前后查找',()=>{
  const walk=(s:any)=>{if(!s||typeof s!=='object')return;if(typeof s.pattern==='string')expect(s.pattern).not.toMatch(/\(\?[=!<]/);Object.values(s).forEach(v=>Array.isArray(v)?v.forEach(walk):walk(v));};
  for(const role of ['scene-refine','scene-spatial-refine','scene-space','scene-blockout','scene-surface','scene-layout','geometry-asset','scene-generation','geometry','plan','judge','repair'])walk(modelSchema(role));
 });
+test('无损重编码只换压缩流：像素一致、字节不同、校验和有效；非 PNG 拒绝',async()=>{
+ const {losslessPngReencode}=await import('./codex-provider');const {deflateSync,inflateSync}=await import('node:zlib');
+ const chunk=(type:string,data:Buffer)=>{const head=Buffer.alloc(8),tail=Buffer.alloc(4);head.writeUInt32BE(data.length);head.write(type,4,'latin1');tail.writeUInt32BE(Bun.hash.crc32(Buffer.concat([head.subarray(4),data]))>>>0);return Buffer.concat([head,data,tail]);};
+ const ihdr=Buffer.alloc(13);ihdr.writeUInt32BE(64,0);ihdr.writeUInt32BE(32,4);ihdr[8]=8;ihdr[9]=2;
+ const raw=Buffer.concat(Array.from({length:32},(_,y)=>Buffer.concat([Buffer.from([0]),Buffer.from(Array.from({length:64*3},(_,x)=>(x*7+y*13)&255))]))),packed=deflateSync(raw,{level:1});
+ const png=Buffer.concat([Buffer.from([137,80,78,71,13,10,26,10]),chunk('IHDR',ihdr),chunk('IDAT',packed.subarray(0,40)),chunk('IDAT',packed.subarray(40)),chunk('IEND',Buffer.alloc(0))]);
+ const out=losslessPngReencode(png);expect(out.equals(png)).toBe(false);
+ const parts:any[]=[];for(let p=8;p<out.length;){const n=out.readUInt32BE(p),type=out.toString('latin1',p+4,p+8),data=out.subarray(p+8,p+8+n);expect(out.readUInt32BE(p+8+n)).toBe(Bun.hash.crc32(Buffer.concat([Buffer.from(type,'latin1'),data]))>>>0);parts.push({type,data});p+=12+n;}
+ expect(parts.map(c=>c.type)).toEqual(['IHDR','IDAT','IEND']);expect(parts[0].data.equals(ihdr)).toBe(true);expect(inflateSync(parts[1].data).equals(raw)).toBe(true);
+ expect(()=>losslessPngReencode(Buffer.from([255,216,255,0]))).toThrow('PNG');
+});

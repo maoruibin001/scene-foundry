@@ -50,7 +50,7 @@ export async function callModel(input:{system:string,text:string,images?:{path:s
  try{return await withProviderRecovery(input,dir,context=>callModelOnce({...input,...context},dir),{policy:standardJob(job)?{...ACTIVE_RECOVERY_POLICY,maxElapsedMs:Math.min(ACTIVE_RECOVERY_POLICY.maxElapsedMs,remaining)}:ACTIVE_RECOVERY_POLICY});}
  catch(error){if(deadline?.aborted&&!job?.quality)throw Error('FIRST_SCORE_WINDOW_EXPIRED：首轮时间窗已到，保存结果；未完成评分不称为成功');throw error;}
 }
-async function callModelOnce(input:{system:string;text:string;images?:{path:string,mime:string}[];maxTokens:number;role:string;signal?:AbortSignal;schemaContext?:ModelSchemaContext;modelSettings?:ModelSettings;reservedCalls?:number;tools?:CodexToolKit;recoveryAttempt:number;recoveryRemainingMs:number},dir:string){
+async function callModelOnce(input:{system:string;text:string;images?:{path:string,mime:string}[];maxTokens:number;role:string;signal?:AbortSignal;schemaContext?:ModelSchemaContext;modelSettings?:ModelSettings;reservedCalls?:number;tools?:CodexToolKit;recoveryAttempt:number;recoveryRemainingMs:number;reencodeImages?:boolean},dir:string){
  return useModelPermit(dir+':'+input.role,input.signal,async()=>{
  input.signal?.throwIfAborted();assertProviderOpen();assertStorageAvailable(undefined,input.role==='judge'?512*1024**2:2*1024**3);
  if(PROVIDER==='codex-cli')assertCodexInputSize(input,modelSchema(input.role,input.schemaContext));

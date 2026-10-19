@@ -45,3 +45,19 @@ test('卡住的连接按临时故障重试，不占超时次数：两次卡住�
  expect(result).toBe('ok');expect(n).toBe(3);expect(read(join(dir,'scene-space-recovery.json')).attempts.map((a:any)=>a.fault)).toEqual(['transient','transient',undefined]);
  expect(modelTimeoutPolicy('high','scene-space',0,3600000,'space-checkpoint-v2').stallMs).toBe(10*60*1000);expect(modelTimeoutPolicy('xhigh','judge').stallMs).toBeNull();
  }finally{rmSync(dir,{recursive:true,force:true})}});
+
+test('网关拒收已校验图片的编码时，只以像素一致的无损重编码重发一次；重编码后仍拒收则停止',async()=>{
+ const rejected="Error: PROVIDER_CODEX_FAILED：ERROR: {\"error\":{\"message\":\"litellm.BadRequestError: Hosted_vllmException - {\\\"error\\\":{\\\"message\\\":\\\"Invalid 'input[6].content[22].image_url'. Expected a base64-encoded data URL with an image MIME type (e.g. 'data:image/png;base64,aW1nIGJ5dGVzIGhlcmU='), but got an invalid base64-encoded value.\\\",\\\"type\\\":\\\"UpstreamParamError\\\",\\\"code\\\":\\\"3002\\\"}\",\"code\":\"400\"}}";
+ expect(providerFault(rejected)).toMatchObject({kind:'image-encoding',recoverable:true});
+ expect(providerFault('PROVIDER_CODEX_FAILED：invalid base64-encoded value').kind).toBe('unknown');
+ for(const again of [false,true]){
+  const dir=mkdtempSync(join(tmpdir(),'image-encoding-')),seen:any[]=[];
+  try{
+   const run=withProviderRecovery({role:'judge'},dir,async context=>{seen.push(context.reencodeImages??false);if(!context.reencodeImages||again)throw Error(rejected);return 'ok';},{wait:async()=>{}});
+   if(again)await expect(run).rejects.toThrow('image_url');else expect(await run).toBe('ok');
+   expect(seen).toEqual([false,true]);
+   const state=read(join(dir,'judge-recovery.json'));
+   expect(state.status).toBe(again?'blocked':'completed');expect(state.attempts[0].recoveryAction).toBe('lossless-image-reencode');expect(state.attempts[1].imageEncoding).toBe('lossless-reencode');
+  }finally{rmSync(dir,{recursive:true,force:true});}
+ }
+});
