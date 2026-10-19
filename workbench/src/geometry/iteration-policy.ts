@@ -1,9 +1,10 @@
 import {candidateProgress} from './candidate-selection';
+import {NoActionableChange} from '../contracts';
 /** 保留每轮证据；显式 null 解除总轮数限制，无改善仍须诊断策略。 */
 export const MAX_VISUAL_REPAIRS=2;
 export const MIN_MEANINGFUL_GAIN=2;
 export type CycleResult={index:number;status:string;score:number|null;startedAt:number;endedAt:number;rawDimensions?:any[];dimensionWeights?:Record<string,number>;dimensionFloor?:number;specRules?:any[];hardFailures?:string[];dimensions?:any[];criteria?:any[];criticalMissing?:string[];policyVersion?:string;selection?:any};
-export type IterationResult={cycles:CycleResult[];bestIndex:number;firstDraft:CycleResult;stopReason:'passed'|'limit'|'no-improvement'|'budget'|'runtime-evidence'};
+export type IterationResult={cycles:CycleResult[];bestIndex:number;firstDraft:CycleResult;stopReason:'passed'|'limit'|'no-improvement'|'budget'|'runtime-evidence'|'no-actionable-repair'};
 export async function boundedIterations(options:{
  maxRepairs:number|null;firstStartedAt?:number;signal:AbortSignal;canRefine:()=>boolean;
  refineBlockedReason?:()=>Exclude<IterationResult['stopReason'],'passed'>;
@@ -16,7 +17,8 @@ export async function boundedIterations(options:{
  const cycles:CycleResult[]=[];let bestIndex=0,noGain=0,stopReason:IterationResult['stopReason']='limit';
  for(let index=0;options.maxRepairs===null||index<=options.maxRepairs;index++){
   options.signal.throwIfAborted();const startedAt=index===0?(options.firstStartedAt??Date.now()):Date.now();
-  if(index)await options.refine(bestIndex,index);
+  // A repair that proves no legal change exists ends the cycle with the best candidate; any other error still propagates.
+  if(index)try{await options.refine(bestIndex,index);}catch(error){if(!(error instanceof NoActionableChange))throw error;stopReason='no-actionable-repair';break;}
   options.signal.throwIfAborted();const result=await options.evaluate(index);options.signal.throwIfAborted();
   if(!['passed','failed','needs_review'].includes(result.status)||!Number.isFinite(result.score)||(result.score??-1)<0||(result.score??101)>100)throw Error('轮次评分未完成或无效');
   const previous=cycles[bestIndex],cycle={index,...result,startedAt,endedAt:Date.now(),selection:candidateProgress(previous,result)};await options.snapshot(cycle);cycles.push(cycle);

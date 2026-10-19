@@ -11,6 +11,7 @@ import {cameraPreflight} from './camera-preflight';
 import {renderRepairPreview} from './repair-engine-preview';
 import {reviewedCandidates,REVIEWED_SELECTION_SCHEMA} from './reviewed-candidates';
 import {previewPerformance} from './preview-performance';
+import {NoActionableChange} from '../contracts';
 
 export const REPAIR_TOOL_VERSION='repair-feedback-v5';
 export const REPAIR_TOOL_PROMPT='本次提供 scene_feedback 专用工具。可以查询已有部件，用 check_scene_patch 计算完整候选补丁的结构、机位净空和所有机位的投影；用 render_scene_patch 查看同一候选在 ForgeaX Engine 中的真实画面。首次检查或直接预览时提交完整 scene-refinement-v5 JSON 字符串，均相对原始场景应用，不累积上次修改。check_scene_patch返回patchSha256后，render_scene_patch优先仅传patchSha256引用本轮已检查补丁，无需重写大型JSON；只有候选改变时再传完整patchJson，两者不能同时提供。观察工具返回画面后可改进，最终只输出 {"selectedPatchSha256":"成功预览返回的64位摘要","reason":"中文选择理由"}，不重复输出完整补丁；管线按摘要取回原始补丁，重新校验后继续。可用 inspect_visual_region 选择某参考图及对应渲染区域，按顺序查看原图、来源场景、最近一次成功预览的局部像素与明暗分布。坐标分别基于完整原图和完整渲染图，包含原图黑边，不能照抄同一矩形假定对应物体；源图和候选同区域也未自动对齐。主要破损、布褶、纹理与日光层次难以判断时，先放大检查，再修改。灰度统计不是质量分，不能靠匹配亮度冒充还原。最多查询部件8次、局部看图6次、几何检查6次、真实预览2次；不要求用完。工具图不代表验收通过；不得调评分、删除需求或调用其他工具。';
@@ -62,7 +63,12 @@ export function createRepairTools(options:{source:any;textures:any;observation?:
   {name:'render_scene_patch',description:'验证并构建候选，在固定 ForgeaX Engine 中采集全部参考机位。可仅传已检查的patchSha256。大约1至3分钟；这是修改反馈，不是最终评分。',inputSchema:renderInput}
  ];
  for(const tool of definitions)(tool as any).annotations={readOnlyHint:false,destructiveHint:false,openWorldHint:false,idempotentHint:false};
- const kit:CodexToolKit={version:REPAIR_TOOL_VERSION,instructions:REPAIR_TOOL_PROMPT,definitions,outputSchema:REVIEWED_SELECTION_SCHEMA,resolveOutput:reviewed.resolve,continuation:()=>{
+ const kit:CodexToolKit={version:REPAIR_TOOL_VERSION,instructions:REPAIR_TOOL_PROMPT,definitions,outputSchema:REVIEWED_SELECTION_SCHEMA,resolveOutput:value=>{
+  // No successful preview and a final keep-as-is candidate: the model found no legal change inside the frozen constraints.
+  // That ends the repair honestly instead of failing the job or spending a correction call on an invented digest.
+  if(!reviewed.hashes().length&&audited.filter(r=>r.patchSha256).at(-1)?.noChange)throw new NoActionableChange('REPAIR_NO_LEGAL_CHANGE：本轮没有成功预览，最后一份候选为保留原状；修正模型确认在现有约束内没有合法改法，停止视觉修正并保留此前最佳候选。模型理由：'+String(value?.reason??'').slice(0,600));
+  return reviewed.resolve(value);
+ },continuation:()=>{
   const saved=reviewed.context();return {text:JSON.stringify({counts,limits,enginePreviewsRemaining:Math.max(0,2-counts.enginePreviews),candidates:saved.candidates,retainedWork:retainedWork(),instructions:'以下附图依候选顺序排列。恢复不会重置额度。retainedWork保存已经查到的真实部件与最新未完成补丁，优先接着明确错误修复，不从头分析或重复查询。未完成或失败补丁不算已通过，必须重新检查并成功预览才能提交。已有成功候选必须比较其实际画面；若额度用完，选择现有成功候选。最终只输出selectedPatchSha256与中文reason，管线取回原始补丁并重新校验。尚未独立评分，不宣称提分。'}),images:saved.images};
  },async call(name,args){
   signal.throwIfAborted();if(!(name in limits))throw Error('未知修复工具');if(busy)throw Error('前一次工具尚未结束，请等候结果');
@@ -115,7 +121,7 @@ export function createRepairTools(options:{source:any;textures:any;observation?:
 
    }
    row.status='passed';return {content};
-  }catch(error){row.status='failed';row.error=String(error);return {content:[text({error:String(error),counts,limits,quality:'not-assessed'})],isError:true};}
+  }catch(error){row.status='failed';row.error=String(error);if(error instanceof NoActionableChange)row.noChange=true;return {content:[text({error:String(error),counts,limits,quality:'not-assessed'})],isError:true};}
   finally{row.endedAt=Date.now();row.durationMs=row.endedAt-row.startedAt;busy=false;persist();options.onEvent?.('修复反馈 '+name+' · '+(row.status==='passed'?'完成':'未通过：'+row.error)+' · '+Math.round(row.durationMs/1000)+'秒');}
  }};
  return {kit,assertReviewed(patch:any){if(!reviewed.has(patch))throw Error('REPAIR_PREVIEW_REQUIRED：最终补丁与成功的 Engine 候选预览不一致。先预览该补丁，或选择已成功预览的候选，不可声称未执行的自检。');},counts};

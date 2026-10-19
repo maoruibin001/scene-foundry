@@ -10,6 +10,8 @@ import {serveCodexTools,withToolContinuation} from '../codex-tools';
 import {digest} from '../store';
 import {stable} from '../validated-cache';
 import {validateRegion} from './visual-region';
+import {NoActionableChange} from '../contracts';
+import {recordedRun} from '../recorded-runs';
 const pose={position:[0,0,0],rotation:[0,0,0],scale:[1,1,1]},plan={requirements:[{id:'R1',critical:true,count:null}]};
 const scene=()=>({version:'scene-v1',program:{version:'geometry-v1',name:'通用物体',materials:[{id:'base',color:[1,1,1,1],roughness:.7,metallic:0,textureId:null}],templates:[{id:'subject',parts:[{...pose,id:'body',material:'base',shape:{type:'box',size:[1,1,1],radius:0}}]}],instances:[{...pose,id:'one',label:'主体',template:'subject',requirementIds:['R1']}]},entities:[{instanceId:'one',category:'物体',role:'subject'}],cameras:[{name:'参考',referenceIndex:1,position:[3,-4,2],target:[0,0,0],fov:1},{name:'检查',referenceIndex:null,position:[-3,4,2],target:[0,0,0],fov:1}],textures:[],textureReuse:[],lighting:{direction:[.5,.5,-.7],color:[1,1,1],intensity:1,ambientColor:[1,1,1],ambientIntensity:.2,points:[]},assumptions:[]});
 const patch=()=>({version:'scene-refinement-v5',reason:'依据画面调整材质',instances:[],cameras:[],materials:[{id:'base',color:[.5,.5,.5,1],roughness:.7,metallic:0,textureId:null}],parts:[],removeParts:[],addTemplates:[],addEntities:[],textures:[],textureReuse:[],lighting:null,assumptions:[],surfaceUpdates:[],screenTargets:[],removeInstances:[]});
@@ -125,5 +127,41 @@ test('新恢复会话取得原部件与失败补丁，不重新查询、不重�
   expect(()=>recovered.assertReviewed(p)).toThrow();
   writeFileSync(join(folder,'2/patch.json'),JSON.stringify({...p,reason:'篡改'}));
   expect(()=>recovered.kit.continuation!()).toThrow('摘要不符');
+ }finally{rmSync(folder,{recursive:true,force:true});}
+});
+
+test('最后一份候选为保留原状且没有成功预览时，最终选择记为没有合法改法；其他缺失预览仍须返工',async()=>{
+ const keep=()=>({...patch(),reason:'冻结种子不能削切，保留原状',materials:[]}),selection={selectedPatchSha256:'7'.repeat(64),reason:'没有合法改法，停止修改'};
+ const f=fixture();try{
+  const r=await f.kit.call('check_scene_patch',{patchJson:JSON.stringify(keep())});expect(r.isError).toBe(true);
+  const audit=JSON.parse(readFileSync(join(f.folder,'tool-audit.json'),'utf8'));expect(audit.attempts[0].noChange).toBe(true);
+  let error:any;try{f.kit.resolveOutput!(selection);}catch(e){error=e;}
+  expect(error).toBeInstanceOf(NoActionableChange);expect(String(error)).toContain('REPAIR_NO_LEGAL_CHANGE');expect(String(error)).toContain('没有合法改法，停止修改');
+  // The flag survives a restored tool process.
+  const restored=createRepairTools({source:f.source,textures:{},folder:f.folder,signal:new AbortController().signal,images:[],refs:[],apply:p=>applyRefinement(f.source as any,p,plan,1,'simple'),validate:()=>{}});
+  expect(()=>restored.kit.resolveOutput!(selection)).toThrow(NoActionableChange);
+ }finally{rmSync(f.folder,{recursive:true,force:true});}
+ // A rejected real change, or an invented digest beside a successful preview, is still a missing preview.
+ const g=fixture();try{const p:any=patch();p.cameras=[{...g.source.cameras[0],position:[.49,0,0],target:[0,4,0]}];
+  expect((await g.kit.call('render_scene_patch',{patchJson:JSON.stringify(p)})).isError).toBe(true);
+  expect(()=>g.kit.resolveOutput!(selection)).toThrow('REPAIR_PREVIEW_REQUIRED');
+  expect((await g.kit.call('render_scene_patch',{patchJson:JSON.stringify(patch())})).isError).toBeUndefined();
+  expect((await g.kit.call('check_scene_patch',{patchJson:JSON.stringify(keep())})).isError).toBe(true);
+  let error:any;try{g.kit.resolveOutput!(selection);}catch(e){error=e;}
+  expect(String(error)).toContain('REPAIR_PREVIEW_REQUIRED');expect(error).not.toBeInstanceOf(NoActionableChange);
+ }finally{rmSync(g.folder,{recursive:true,force:true});}
+});
+
+test.skipIf(!recordedRun('2a20938c'))('recorded temple r9 cycle 2: the keep-as-is candidate becomes a typed abstention instead of REPAIR_PREVIEW_REQUIRED',async()=>{
+ // Read-only replay of the recorded 2026-10-18 cycle; the tool audit is written to a fresh temporary folder.
+ const root=recordedRun('2a20938c')!,batch=join(root,'generation/iteration-2/refinement/batch-1'),read=(f:string)=>JSON.parse(readFileSync(join(root,f),'utf8'));
+ const source=read('iterations/1/voxel-source-scene.json'),recordedPlan=read('plan.json'),kept=read('generation/iteration-2/refinement/batch-1/feedback/2/patch.json');
+ const apply=(p:any)=>applyRefinement(source,p,recordedPlan,1,'complex');
+ expect(()=>apply(kept)).toThrow(NoActionableChange);
+ const folder=mkdtempSync(join(tmpdir(),'r9-abstain-'));try{
+  const t=createRepairTools({source,textures:{},folder,signal:new AbortController().signal,images:[],refs:[],apply,validate:p=>assertCameraPreflight(apply(p))});
+  expect((await t.kit.call('check_scene_patch',{patchJson:JSON.stringify(kept)})).isError).toBe(true);
+  const selection=JSON.parse(readFileSync(join(batch,'scene-refine-response.txt'),'utf8'));
+  expect(()=>t.kit.resolveOutput!(selection)).toThrow('REPAIR_NO_LEGAL_CHANGE');
  }finally{rmSync(folder,{recursive:true,force:true});}
 });

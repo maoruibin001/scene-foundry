@@ -236,9 +236,10 @@ export async function runGeneralScene({job,plan,dir,signal,stage,command,preview
  });}
  });
  job.visualIterations={...result,maxRepairs,status:'completed'};
- if(result.bestIndex!==lastIndex){resetPreview(job.id);restoreIteration(dir,job,result.bestIndex);job.previewUrl=await preview(job.id);}
+ // An abstained repair has already rewritten the job's repair-goal fields; restore the retained candidate even when it is the last one.
+ if(result.bestIndex!==lastIndex||result.stopReason==='no-actionable-repair'){resetPreview(job.id);restoreIteration(dir,job,result.bestIndex);job.previewUrl=await preview(job.id);}
  job.selectedIteration=result.bestIndex;
- signal.throwIfAborted();event(job,'complete',maxRepairs!==0?'生成与修正结束：'+({passed:job.deliveryAssessment?.standard==='profile70'?'所选权重70分目标与共同底线通过，停止提分':job.deliveryAssessment?.standard==='basic70'?'已通过70分基础交付，停止提分':'已通过全部门槛',limit:'达到修正轮数上限',budget:'预算不足以继续修正','no-improvement':'本轮提升不足，保留此前最佳候选','runtime-evidence':'场景与独立评分已保留；录屏证据未通过，停止无关的视觉重写，需修复运行采集'}[result.stopReason])+'；首稿 '+job.firstDraft.score+' 分，最佳 '+job.quality.score+' 分':job.validationKind==='visual-refinement'?'视觉反馈修正结束；原评分保留，本次不计首轮认证':job.validationKind==='checkpoint-continuation'?'检查点续跑结束；本次结果不计首轮认证':job.status==='passed'?'首轮生成通过全部门槛':'首轮生成未通过质量门槛；保留结果，不自动改写首轮成绩');
+ signal.throwIfAborted();event(job,'complete',maxRepairs!==0?'生成与修正结束：'+({passed:job.deliveryAssessment?.standard==='profile70'?'所选权重70分目标与共同底线通过，停止提分':job.deliveryAssessment?.standard==='basic70'?'已通过70分基础交付，停止提分':'已通过全部门槛',limit:'达到修正轮数上限',budget:'预算不足以继续修正','no-improvement':'本轮提升不足，保留此前最佳候选','no-actionable-repair':'修正模型确认在现有约束内没有合法改法，保留此前最佳候选','runtime-evidence':'场景与独立评分已保留；录屏证据未通过，停止无关的视觉重写，需修复运行采集'}[result.stopReason])+'；首稿 '+job.firstDraft.score+' 分，最佳 '+job.quality.score+' 分':job.validationKind==='visual-refinement'?'视觉反馈修正结束；原评分保留，本次不计首轮认证':job.validationKind==='checkpoint-continuation'?'检查点续跑结束；本次结果不计首轮认证':job.status==='passed'?'首轮生成通过全部门槛':'首轮生成未通过质量门槛；保留结果，不自动改写首轮成绩');
  }catch(error){
   if(job.visualIterations?.cycles?.length){resetPreview(job.id);restoreIteration(dir,job,job.visualIterations.bestIndex);job.visualIterations.status='interrupted';event(job,'candidate-retained','执行中断，保留已验收的最佳候选及全部轮次；本次交付未完成');}
   saveDelivery(job,dir);throw error;

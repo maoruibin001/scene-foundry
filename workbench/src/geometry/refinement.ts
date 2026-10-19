@@ -26,7 +26,7 @@ import {scoringGuidance} from '../quality';
 import {repairGoalContext,repairGoalReferences,validateRepairGoals,assertPlannedRepair,REPAIR_GOALS_PROMPT} from './repair-goals';
 import {readFileSync,existsSync,mkdirSync} from 'node:fs';
 import {join,relative} from 'node:path';
-import {callValidated} from '../contracts';
+import {callValidated,NoActionableChange} from '../contracts';
 import {read,save,digest,runDir,event} from '../store';
 import {COMPLEXITIES,complexityPolicy,sceneBudget} from '../complexity';
 import {sceneSchema,validateScene,type SceneInput} from './scene-contract';
@@ -134,7 +134,8 @@ export function applyRefinement(source:SceneInput,patch:any,plan:any,references:
  const budget=sceneBudget(level,source,references>0&&Array.isArray((source as any).observedBindings)),entities=next.entities.filter(e=>e.role!=='ground'),parts=p.instances.reduce((n,i)=>n+p.templates.find(t=>t.id===i.template)!.parts.length,0);
  require(parts<=budget.maxParts&&p.materials.length<=budget.maxMaterials,'修正后的部件或材质超过原复杂度预算：展开部件 '+parts+'/'+budget.maxParts+'；材质 '+p.materials.length+'/'+budget.maxMaterials+'；替换已有部件或先移除有证据的冗余部分，不追加上限');
  require(entities.length>=budget.minEntities&&entities.length<=budget.maxEntities&&new Set(entities.map(e=>e.category)).size>=budget.minKinds,'修正后未满足原复杂度');
- require(digest(JSON.stringify({...next,assumptions:[]}))!==digest(JSON.stringify({...source,assumptions:[]})),'没有任何可执行的场景变化');
+ // A keep-as-is patch is a legitimate conclusion, not a format error: no correction call is spent on it.
+ if(digest(JSON.stringify({...next,assumptions:[]}))===digest(JSON.stringify({...source,assumptions:[]})))throw new NoActionableChange('没有任何可执行的场景变化');
  return next;
 }
 
@@ -221,18 +222,23 @@ export async function refineScene(job:any,plan:any,images:{path:string;mime:stri
   const cached=await validatedCache.use(key,validateBase,compute,{jobId:job.id,pipelineVersion:job.pipelineVersion,dir:batchFolder},signal);
   return cached.reuse?persistValidatedReuse(batchFolder,'scene-refine',cached.result,cached.reuse,started):cached.result;
  }));
- const failed=responses.filter(r=>r.status==='rejected');
+ const abstained=responses.flatMap((r,i)=>r.status==='rejected'&&r.reason instanceof NoActionableChange?[{batchId:batches[i].id,goalIds:batches[i].goals.map((g:any)=>g.id),reason:String(r.reason)}]:[]);
+ const failed=responses.filter(r=>r.status==='rejected'&&!(r.reason instanceof NoActionableChange));
  if(failed.length){save(join(folder,'repair-batch-failures.json'),failed.map(r=>String((r as PromiseRejectedResult).reason)));throw (failed[0] as PromiseRejectedResult).reason;}
- const successful=responses.map(r=>(r as PromiseFulfilledResult<any>).value);
- const result={value:{...mergeRefinementPatches(successful.map(r=>r.value)),version:'scene-refinement-batches-v1',batches:successful.map(r=>r.value)},receipt:{method:'repair-batches-v2',batches:successful.map((r,i)=>({id:batches[i].id,receipt:r.receipt}))}};
+ if(abstained.length){save(join(folder,'repair-batch-abstained.json'),{scope:'修正模型确认这些批次在现有约束内没有合法改法；不计为已修复，也不放宽约束',abstained});event(job,'refinement',abstained.length+'/'+batches.length+' 个修正批次没有合法改法，未改动对应目标');}
+ if(abstained.length===batches.length)throw new NoActionableChange(abstained.map(a=>a.reason).join('；'));
+ const kept=responses.flatMap((r,i)=>r.status==='fulfilled'?[{batch:batches[i],response:r.value}]:[]),successful=kept.map(k=>k.response);
+ // Only the batches that produced a change are held to their goals; abstained goals stay open for the next assessment.
+ const plannedGoals=abstained.length?{...repairGoals,goals:kept.flatMap(k=>k.batch.goals)}:repairGoals;
+ const result={value:{...mergeRefinementPatches(successful.map(r=>r.value)),version:'scene-refinement-batches-v1',batches:successful.map(r=>r.value)},receipt:{method:'repair-batches-v2',batches:kept.map(k=>({id:k.batch.id,receipt:k.response.receipt})),...(abstained.length?{abstained}:{})}};
  // 单批次有效不代表组合有效：原三角形、部件、范围和目标约束再统一检查。
- const merged=applyRefinement(source,result.value,plan,images.length,job.complexity);assertDetail(merged);assertPlannedRepair(source,merged,repairGoals);save(join(folder,'camera-preflight.json'),assertCameraPreflight(merged));
+ const merged=applyRefinement(source,result.value,plan,images.length,job.complexity);assertDetail(merged);assertPlannedRepair(source,merged,plannedGoals);save(join(folder,'camera-preflight.json'),assertCameraPreflight(merged));
 
  signal.throwIfAborted();require(digest(JSON.stringify(read(sourceSceneFile(job,sourceDir))))===sourceDigest,'修正期间原场景发生变化');
  const scene=applyRefinement(source,result.value,plan,images.length,job.complexity),unchanged=source.program.templates.filter(t=>JSON.stringify(t)===JSON.stringify(scene.program.templates.find(x=>x.id===t.id))).length;
  if(detailBasis)save(join(folder,'voxel-detail-validation.json'),assertDetail(scene));
  if(focus)save(join(folder,'focus-result.json'),{focus,after:assertRefinementFocus(source,scene,focus),quality:'not-assessed'});
- save(join(folder,'repair-goals-result.json'),assertPlannedRepair(source,scene,repairGoals));
+ save(join(folder,'repair-goals-result.json'),assertPlannedRepair(source,scene,plannedGoals));
  const removedInstances=(result.value.removeInstances??[]).map((r:any)=>({instanceId:r.instanceId,reason:r.reason}));
  save(join(folder,'screen-fit.json'),{scope:'最终候选复核；合并形状与机位后再定位',reports:fitScreenTargets(scene,result.value.screenTargets??[]).reports});
  save(join(folder,'patch.json'),result.value);save(join(folder,'scene.json'),scene);save(join(folder,'receipt.json'),{sourceJobId:sourceId,sourceIteration:from?.iteration??null,sourceDigest,sceneDigest:digest(JSON.stringify(scene)),unchangedTemplates:unchanged,changedTemplates:source.program.templates.length-unchanged,addedTemplates:scene.program.templates.length-source.program.templates.length,removedInstances,quality:'not-assessed',modelReceipt:result.receipt});
