@@ -11,7 +11,7 @@ import {read,save,digest,runDir,event,ROOT} from '../store';
 import {versions} from '../versions';
 import {SPATIAL_SOURCES,sameSpatialCompiler} from './spatial-recovery';
 import {stable} from '../validated-cache';
-import {canRecoverGrayboxPreview} from './graybox-timeout-checkpoint';
+import {canRecoverGrayboxPreview,canReuseCompletedGrayboxRepair} from './graybox-timeout-checkpoint';
 import {spaceSchema} from './layout-stages';
 import {prepareVisibilityEvidence} from './visibility-evidence';
 import {ensureProjectionEvidence} from './projection-evidence';
@@ -104,6 +104,12 @@ export function jointFitBlockedRound(folder:string,round:number,error:unknown){
  const blocked={round,folder,error:String(error).slice(0,1200),candidates,scope:'本轮候选均因跨机位退步不能采用；不是下一轮来源，避免重复相同退步'};
  save(join(folder,'joint-fit-blocked.json'),blocked);return blocked;
 }
+/** The saved selection must still be a reviewed, selectable preview under the recovery's own contract, with the same hashes it was saved with. */
+function reviewedCompletedRepair(preview:any,completed:any){
+ const selected=preview.assertReviewed(completed.patch),keys=['patchSha256','spaceSha256','canonicalSceneSha256','renderSceneSha256','receiptSha256','compositionSha256'];
+ if(keys.some(k=>selected[k]!==completed.receipt.preview[k]))throw Error('GRAYBOX_CHECKPOINT_REJECTED：已完成补丁与本次恢复的实际预览摘要不一致');
+ return {patch:completed.patch,preview:selected,scope:'来源已完成的模型选择；复用前重新核验，仍须独立空间与成品评分'};
+}
 export async function repairGrayboxSpace(space:any,ctx:any,sourceFolder:string,feedback:any,folder:string,validate:(space:any)=>any){
  mkdirSync(folder,{recursive:true});
  const templateBounds=templateBoundsRule(ctx.job),apply=(patch:any)=>applyGrayboxSpaceRepair(space,patch,validate,{templateBounds});
@@ -116,25 +122,27 @@ export async function repairGrayboxSpace(space:any,ctx:any,sourceFolder:string,f
  save(join(folder,'reference-composition.json'),composition);
  const canonical=read(join(sourceFolder,'scene.json')),rejected=spatialRejectedFeedback(ctx,sourceFolder,folder);
  const buildScene=(next:any,patch:any)=>assertNotRejectedSpatialScene(rejected.attempts,buildGrayboxPartScene(canonical,next,patch,ctx.plan,ctx.images.length));
- let checkpoint:any=null;
+ let checkpoint:any=null,completed:any=null;
  if(ctx.job.recoverySourceJobId&&basename(folder)==='space-repair-0'){
   const previous=join(runDir(ctx.job.recoverySourceJobId),'generation',basename(folder)),audit=join(previous,'preview/graybox-preview-audit.json');
   if(existsSync(audit)){
-   const sourceJob=read(join(runDir(ctx.job.recoverySourceJobId),'job.json'));
-   if(!canRecoverGrayboxPreview({target:ctx.job,source:sourceJob,sourceFolder:previous,expectedBasis:ctx.job.spatialRepairSource,execution:read(join(previous,'scene-space-execution.json')),recovery:read(join(previous,'scene-space-recovery.json'))})||stable(sourceJob.plan)!==stable(ctx.plan))throw Error('GRAYBOX_CHECKPOINT_REJECTED：恢复来源、真正超时或原始目标不匹配，不重跑相同制作');
+   const sourceJob=read(join(runDir(ctx.job.recoverySourceJobId),'job.json')),receiptFile=join(previous,'repair-receipt.json');
+   completed=existsSync(receiptFile)&&existsSync(join(previous,'patch.json'))&&canReuseCompletedGrayboxRepair({target:ctx.job,source:sourceJob,sourceFolder:previous,repairReceipt:read(receiptFile),seedFolder:sourceFolder,contract:GRAYBOX_SPACE_REPAIR})?{receipt:read(receiptFile),receiptSha256:digest(readFileSync(receiptFile)),patch:read(join(previous,'patch.json'))}:null;
+   if(!completed&&!canRecoverGrayboxPreview({target:ctx.job,source:sourceJob,sourceFolder:previous,expectedBasis:ctx.job.spatialRepairSource,execution:read(join(previous,'scene-space-execution.json')),recovery:read(join(previous,'scene-space-recovery.json'))})||stable(sourceJob.plan)!==stable(ctx.plan))throw Error('GRAYBOX_CHECKPOINT_REJECTED：恢复来源、真正超时或原始目标不匹配，不重跑相同制作');
    const recorded=versions.get(sourceJob.pipelineVersion.id).files;
    if(!sameSpatialCompiler(Object.fromEntries(SPATIAL_SOURCES.map(f=>[f,recorded['workbench/src/geometry/'+f]])),Object.fromEntries(SPATIAL_SOURCES.map(f=>[f,digest(readFileSync(join(ROOT,'src/geometry',f)))]))))throw Error('GRAYBOX_CHECKPOINT_REJECTED：实际几何编译或Engine生成源码改变，不能复用旧预览');
    cpSync(join(previous,'preview'),join(folder,'preview'),{recursive:true,mode:constants.COPYFILE_FICLONE,filter:p=>!['project','materials'].includes(basename(p))&&!/^command-\d+\.log$/.test(basename(p))});
-   checkpoint={sourceJobId:sourceJob.id,sourceFolder:previous,sourceAuditSha256:digest(readFileSync(audit)),originalModelCompleted:false,modelCalls:0,quality:'not-assessed'};
+   checkpoint=completed?{sourceJobId:sourceJob.id,sourceFolder:previous,sourceRepairReceiptSha256:completed.receiptSha256,originalModelCompleted:true,modelCalls:0,quality:'not-assessed'}:{sourceJobId:sourceJob.id,sourceFolder:previous,sourceAuditSha256:digest(readFileSync(audit)),originalModelCompleted:false,modelCalls:0,quality:'not-assessed'};
   }
  }
  const preview=createGrayboxSpacePreview({space,sourceScene:canonical,observation:ctx.observation,images:ctx.images,folder:join(folder,'preview'),signal:ctx.signal,voxel:ctx.job.sceneKind==='voxel',templateBounds,jointFitNet:jointFitRule(ctx.job),spaceFit:spaceFitRule(ctx.job),schema:grayboxSpaceRepairSchema({voxel:ctx.job.sceneKind==='voxel',voxelLattice:space.voxelLattice,templateBounds}),
   apply,
   buildScene});
- const saved=checkpoint?preview.onlyReviewedCheckpoint():null;
+ const saved=completed?reviewedCompletedRepair(preview,completed):checkpoint?preview.onlyReviewedCheckpoint():null;
  if(checkpoint&&!saved)throw Error('GRAYBOX_CHECKPOINT_REJECTED：需要唯一已核验的实拍候选；多个或未完成候选不能自动选择');
- if(saved){save(join(folder,'timeout-checkpoint-recovery.json'),{...checkpoint,preview:saved.preview,scope:saved.scope});event(ctx.job,'graybox-checkpoint-reused','模型最终选择超时；唯一合法实拍候选已核验，复用检查点继续独立空间评分，不重新制作或标记模型完成');}
- const result=saved?{value:saved.patch,receipt:{kind:'verified-graybox-timeout-checkpoint',...checkpoint}}:await callValidated({role:'scene-space',modelSettings:ctx.job.modelSettings,signal:ctx.signal,maxTokens:6500,schemaContext:{grayboxRepair:true,voxel:ctx.job.sceneKind==='voxel',voxelLattice:space.voxelLattice,...(templateBounds?{templateBounds}:{})},
+ if(saved&&completed){save(join(folder,'completed-repair-recovery.json'),{...checkpoint,preview:saved.preview,scope:saved.scope});event(ctx.job,'graybox-repair-reused','来源已完成模型选择的局部补丁在本恢复契约下重新核验一致，复用后继续独立空间评分，不重复同一修正');}
+ else if(saved){save(join(folder,'timeout-checkpoint-recovery.json'),{...checkpoint,preview:saved.preview,scope:saved.scope});event(ctx.job,'graybox-checkpoint-reused','模型最终选择超时；唯一合法实拍候选已核验，复用检查点继续独立空间评分，不重新制作或标记模型完成');}
+ const result=saved?{value:saved.patch,receipt:completed?{kind:'verified-completed-graybox-repair',...checkpoint,modelReceipt:completed.receipt.modelReceipt}:{kind:'verified-graybox-timeout-checkpoint',...checkpoint}}:await callValidated({role:'scene-space',modelSettings:ctx.job.modelSettings,signal:ctx.signal,maxTokens:6500,schemaContext:{grayboxRepair:true,voxel:ctx.job.sceneKind==='voxel',voxelLattice:space.voxelLattice,...(templateBounds?{templateBounds}:{})},
   tools:preview.kit,
   images:[...ctx.images,...frameNames.map(f=>({path:join(sourceFolder,'runtime',f),mime:'image/png'})),...rejected.images,...evidence.images],
   system:GRAYBOX_REPAIR_PROMPT+(templateBounds?'\n'+GRAYBOX_TEMPLATE_BOUNDS_PROMPT+(space.voxelLattice?GRAYBOX_TEMPLATE_BOUNDS_VOXEL_PROMPT(space.voxelLattice.cellSize):''):'')+(ctx.job.sceneKind==='voxel'?'\n'+voxelGeometryGuidance(space.voxelLattice):'')+'\n'+COMPACT_BLOCKOUT_RULES+'\n'+VISIBILITY_PROMPT+(feedback?.acceptanceBlockers?'\n'+ACCEPTANCE_BLOCKERS_PROMPT:'')+'\n'+preview.kit.instructions+'\n若输入有rejectedCandidates，额外图片在来源Engine画面之后、编号图之前，按rejectedEngineFrames排列。它们是已独立失败的改动和实拍，不是来源或新参考目标；比较其具体退步与当前较好来源，避免重复那些几何。只在当前来源上修正，不能累积失败候选或采信它的成功宣称。完全相同的失败几何和机位将在测量/渲染前拒绝。',

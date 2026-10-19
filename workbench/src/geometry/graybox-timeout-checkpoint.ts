@@ -31,6 +31,27 @@ function validFolder(folder:any,sourceId:string){
  return folder.endsWith('/runs/'+sourceId+'/generation/space-repair-0');
 }
 
+/**
+ * The direct source finished its repair selection (model completed, receipt saved, space stage passed) and failed later in its own run.
+ * The recovery re-verifies that patch against its own preview contract instead of asking for the same repair again; hash checks are separate.
+ * The later failure does not matter to the saved selection, and the recovery's own calls still pass the budget and ledger gates.
+ */
+export function canReuseCompletedGrayboxRepair(input:{target:any;source:any;sourceFolder:string;repairReceipt:any;seedFolder:string;contract:string}):boolean{
+ try{
+  const {target,source,sourceFolder,repairReceipt:r,seedFolder,contract}=input;
+  if(!object(target)||!object(source)||!object(r)||!uuid(source.id)||target.recoverySourceJobId!==source.id||source.status!=='failed'||cancelled(source)||cancelled(target)||!validFolder(sourceFolder,source.id))return false;
+  if(source.stages?.space?.status!=='passed'||source.blockout?.currentRound!==0)return false;
+  const root=source.executionRecoveryRoot??source.id;
+  if(!nonempty(root)||target.executionRecoveryRoot!==root||!nonempty(source.reuseMode)||target.reuseMode!==source.reuseMode)return false;
+  for(const key of ['prompt','modelSettings','policy','plan','sceneKind','baselineId','complexity','matchingLevel','generationMode','assessmentProtocol','executionRoute','spatialRepairSource'])if(!same(target[key],source[key]))return false;
+  if(!same(source.images?.map((i:any)=>i?.id),target.images?.map((i:any)=>i?.id)))return false;
+  for(const key of ['engineSha','generatorSha','assessmentProtocolSha256'])if(!nonempty(source.profile?.[key])||source.profile[key]!==target.profile?.[key])return false;
+  const d=source.spatialDiagnosis,n=target.spatialDiagnosis;
+  if(!object(d)||!object(n)||d.contract!==contract||n.contract!==contract||!nonempty(d.revisionId)||n.revisionId!==d.revisionId)return false;
+  return r.contract===contract&&r.sourceFolder===seedFolder&&r.modelReceipt?.stopReason==='completed'&&object(r.preview)&&nonempty(r.preview.patchSha256);
+ }catch{return false;}
+}
+
 /** A deadline checkpoint is transport recovery only; actual candidate/hash validation is separate. */
 export function canRecoverGrayboxPreview(input:GrayboxTimeoutCheckpointInput):boolean{
  try{

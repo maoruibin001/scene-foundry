@@ -40,3 +40,12 @@ test('异常或非JSON参数返回false，不抛出或执行操作',()=>{
  for(const f of [null,{}, {source:null}] as any[])expect(canRecoverGrayboxPreview(f)).toBe(false);
  const cyclic=fixture();cyclic.target.policy.self=cyclic.target.policy;expect(canRecoverGrayboxPreview(cyclic)).toBe(false);
 });
+
+test('来源已完成修正选择后在后续步骤失败，恢复可复用该补丁；未完成、取消、换来源或换契约均拒绝',async()=>{
+ const {canReuseCompletedGrayboxRepair}=await import('./graybox-timeout-checkpoint');
+ const completed=()=>{const f=fixture();f.source.status='failed';f.source.error='Error: 灰模预览恢复契约或额度发生变化';f.source.stages={space:{status:'passed'},graybox:{status:'failed'}};f.source.blockout={currentRound:0};f.source.plan={requirements:['r']};f.target.plan={requirements:['r']};f.target.stages=f.source.stages;
+  return {target:f.target,source:f.source,sourceFolder:f.sourceFolder,seedFolder:'/owned/data/runs/'+f.expectedBasis.jobId+'/generation/blockout/0',contract:'graybox-space-repair-v8',repairReceipt:{contract:'graybox-space-repair-v8',sourceFolder:'/owned/data/runs/'+f.expectedBasis.jobId+'/generation/blockout/0',preview:{patchSha256:'p'.repeat(64)},modelReceipt:{stopReason:'completed'}}};};
+ expect(canReuseCompletedGrayboxRepair(completed())).toBe(true);
+ const changes=[(f:any)=>f.source.status='blocked',(f:any)=>f.source.cancelRequestedAt=1,(f:any)=>f.source.stages.space.status='failed',(f:any)=>f.source.blockout.currentRound=1,(f:any)=>f.target.abortCause='user',(f:any)=>f.target.recoverySourceJobId='other',(f:any)=>f.target.executionRecoveryRoot='other',(f:any)=>f.target.prompt='changed',(f:any)=>f.target.plan={requirements:['other']},(f:any)=>f.target.images[0].id='other',(f:any)=>f.target.modelSettings.model='other',(f:any)=>f.target.profile.generatorSha='other',(f:any)=>f.target.spatialRepairSource.round=1,(f:any)=>f.target.spatialDiagnosis.revisionId='other',(f:any)=>f.contract='graybox-space-repair-v9',(f:any)=>f.repairReceipt.contract='graybox-space-repair-v7',(f:any)=>f.seedFolder='/owned/data/runs/other/generation/blockout/1',(f:any)=>f.repairReceipt.modelReceipt.stopReason='max_tokens',(f:any)=>delete f.repairReceipt.preview,(f:any)=>f.sourceFolder='/owned/data/runs/other/generation/space-repair-0'];
+ for(const change of changes){const f=completed();change(f);expect(canReuseCompletedGrayboxRepair(f)).toBe(false);}
+});
