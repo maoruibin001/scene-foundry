@@ -6,15 +6,18 @@ import {applyGrayboxSpaceRepair,grayboxSpaceRepairSchema} from './graybox-space-
 import {createGrayboxSpacePreview} from './graybox-space-preview';
 import {buildGrayboxPartScene} from './graybox-local-parts';
 import {validateSpace} from './layout-stages';
-import {bindObservedSpace} from './reference-observations';
+import {bindObservedSpace,withObservedRelationScales} from './reference-observations';
 import {spatialInstances} from './spatial-order';
 import {templateBoundsRule} from './graybox-repair-policy';
 import {jointFitRule} from './graybox-joint-fit';
 import {spaceFitRule} from './graybox-space-fit';
 
-/** Re-open the actual selection evidence for normal handoff and later checkpoint recovery. */
+/**
+ * Re-open the actual selection evidence for normal handoff and later checkpoint recovery. A diagnosed continuation repaired the source
+ * round's space with its observation's relation scales copied on, so the same copy is applied here before the preview contract is compared.
+ */
 export function reviewedGrayboxGeometry(repairFolder:string,ctx:any){
- const receipt=read(join(repairFolder,'repair-receipt.json')),source=read(join(receipt.sourceFolder,'scene.json')),space=read(join(receipt.sourceFolder,'space.json')),patch=read(join(repairFolder,'patch.json'));
+ const receipt=read(join(repairFolder,'repair-receipt.json')),source=read(join(receipt.sourceFolder,'scene.json')),space=withObservedRelationScales(read(join(receipt.sourceFolder,'space.json')),ctx.observation),patch=read(join(repairFolder,'patch.json'));
  const contractVersion=read(join(repairFolder,'preview/graybox-preview-audit.json')).version,templateBounds=templateBoundsRule(ctx.job);
  const preview=createGrayboxSpacePreview({space,sourceScene:source,observation:contractVersion==='graybox-space-preview-v2'?undefined:ctx.observation,contractVersion,images:ctx.images,folder:join(repairFolder,'preview'),signal:ctx.signal,voxel:ctx.job.sceneKind==='voxel',templateBounds,jointFitNet:jointFitRule(ctx.job),spaceFit:spaceFitRule(ctx.job),schema:grayboxSpaceRepairSchema({voxel:ctx.job.sceneKind==='voxel',templateBounds}),
   apply:p=>applyGrayboxSpaceRepair(space,p,v=>{const s=validateSpace(v,ctx.plan,ctx.images.length,ctx.job.complexity);return ctx.observation?bindObservedSpace(s,ctx.observation):s;},{templateBounds}),buildScene:(s,p)=>buildGrayboxPartScene(source,s,p,ctx.plan,ctx.images.length),render:async()=>{throw Error('read-only geometry verification cannot render');}});
