@@ -56,7 +56,7 @@ try{
  const transfer=await page.evaluate(async({recording,destination})=>{const blob=await(await fetch(recording)).blob();const r=await fetch(destination,{method:'POST',headers:{'Content-Type':'video/webm'},body:blob});if(!r.ok)throw Error('录屏保存失败');return await r.json()},{recording,destination:sink.url});
  const receipt=await sink.receipt;if(transfer.sha256!==receipt.sha256||transfer.bytes!==receipt.bytes)throw Error('录屏来源摘要不一致');
  await writeFile(join(output,'video-frame-targets.json'),JSON.stringify({targets,...recordingFrame,observations:observations.map(s=>s.at-recordingStartedAt),preserveIncomplete:true}));
- await timed('原始录屏取帧',()=>promisify(execFile)(reconstructionPython(),[fileURLToPath(new URL('./video-frames.py',import.meta.url)),join(output,'scene-tour.webm'),output,join(output,'video-frame-targets.json')],{timeout:30000,maxBuffer:1024*1024}));
+ await timed('原始录屏取帧',()=>promisify(execFile)(reconstructionPython(),[fileURLToPath(new URL('./video-frames.py',import.meta.url)),join(output,'scene-tour.webm'),output,join(output,'video-frame-targets.json')],{timeout:plan.decodeTimeoutMs,maxBuffer:1024*1024}));
  const videoFrames=JSON.parse(await readFile(join(output,'video-frames.json'),'utf8'));
  const motion=recordedMotion(videoFrames,receipt,observations,recordingStartedAt,plan.continuousFrames);
  for(const frame of videoFrames.frames){
