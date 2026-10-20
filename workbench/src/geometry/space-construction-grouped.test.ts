@@ -10,6 +10,7 @@ import {assertRoleTools} from '../codex-tools';
 import {savedStage,persistStageReuse} from './saved-stage';
 import {modelTimeoutPolicy} from '../model-selection';
 import {digest,read,save,runDir} from '../store';
+import {stable} from '../validated-cache';
 
 const body=(v:any)=>JSON.parse(v.content[0].text);
 const lattice={version:'voxel-lattice-v1',cellSize:.25,origin:[0,0,0]};
@@ -113,6 +114,20 @@ test('skeleton changes keep compatible groups, drop invalidated groups explicitl
  }finally{f.clean();}
 });
 
+test('a skeleton over the template cap is rejected on save, not after every group is built on it; an older saved one still loads',async()=>{
+ // Harbor c4b13acf: a 37-template skeleton was accepted, five groups were built on it, and only the last group save failed the full plan.
+ const f=fixture();try{
+  const wide=structuredClone(f.skeleton);wide.program.templates=Array.from({length:17},(_,i)=>({...f.skeleton.program.templates[0],id:'shape'+i}));
+  const tool=f.create();
+  await expect(f.putSkeleton(tool,wide)).rejects.toThrow('骨架模板最多 16 个，当前 17 个');
+  expect(tool.summary().writes).toBe(0);expect(tool.summary().templateBudget).toEqual({used:0,maximum:16});
+  await f.putSkeleton(tool);expect(tool.summary().templateBudget).toEqual({used:1,maximum:16});
+  expect(tool.kit.instructions).toContain('最多16个');
+  const row:any={version:SPACE_CONSTRUCTION_GROUPED,jobId:f.options.jobId,rootJobId:f.options.rootJobId,inputKey:f.options.inputKey,writes:1,skeleton:wide,groups:[],core:null,spatialOpenings:null,spatialContacts:null};
+  save(join(f.folder,'checkpoint.json'),{...row,checksum:digest(stable(row))});
+  expect(f.create().summary().templateBudget).toEqual({used:17,maximum:16});
+ }finally{f.clean();}
+});
 test('removal cannot leave dangling references; identical saves consume no write; replacement by groupId',async()=>{
  const f=fixture();try{
   const tool=f.create();await f.putSkeleton(tool);await f.putGroup(tool,f.far);

@@ -7,6 +7,7 @@ import {SPACE_PROMPT,spacePlanningSchema} from './layout-stages';
 import {assertLatticeVector,validateVoxelLattice,validateVoxelSpace,voxelSpaceGrid} from '../voxel/scene-lattice';
 import {validateVoxelLandmarkCoverage,voxelComponentRequirements} from '../voxel/landmark-coverage';
 import {VOXEL_LIMITS} from '../voxel/limits';
+import {ASSET_STEP_LIMITS} from './surface-part-budget';
 
 export const SPACE_CONSTRUCTION='space-checkpoint-v1';
 /** Strict voxel planning saves the shared skeleton, then landmark component groups. */
@@ -220,7 +221,7 @@ function createGroupedSpaceConstruction(options:{folder:string;jobId:string;root
   const s=current(),done=covered(s.groups),used=s.groups.reduce((n,g)=>n+g.instances.length,0);
   return {version:SPACE_CONSTRUCTION_GROUPED,draftSha256:s.checksum,saved:{skeleton:s.skeleton!==null,groups:s.groups.length,core:s.core!==null,spatialOpenings:s.spatialOpenings!==null,spatialContacts:s.spatialContacts!==null},writes:s.writes,maximumWrites:MAX_WRITES_GROUPED,complete:complete(s),spaceSha256:complete(s)?digest(stable(validate(planOf(s)))):null,
    groups:s.groups.map(g=>({groupId:g.groupId,landmarkIds:g.landmarkIds,instanceIds:g.instances.map(i=>i.id)})),remainingLandmarkIds:landmarkIds.filter(id=>!done.has(id)),remainingRequiredComponents:required.filter(r=>!done.has(r.landmarkId)).map(r=>({landmarkId:r.landmarkId,label:r.label,geometryScope:r.geometryScope})),
-   instanceBudget:{used,maximum:limit,reservedForRemaining:budget(s.groups).reserve},quality:'not-assessed',fullData:'inspect_space_draft',scope:'仅规划检查点；全部声明完成后仍须独立 Engine 灰模验收'};
+   instanceBudget:{used,maximum:limit,reservedForRemaining:budget(s.groups).reserve},templateBudget:{used:s.skeleton?.program.templates.length??0,maximum:ASSET_STEP_LIMITS.templates},quality:'not-assessed',fullData:'inspect_space_draft',scope:'仅规划检查点；全部声明完成后仍须独立 Engine 灰模验收'};
  };
  const commit=(next:{skeleton:any;groups:Group[];spatialOpenings:any[]|null;spatialContacts:any[]|null},extra:any={})=>{
   const body={...next,core:next.skeleton?derivedCore(next.skeleton,next.groups):null};
@@ -232,7 +233,7 @@ function createGroupedSpaceConstruction(options:{folder:string;jobId:string;root
  const parse=(text:any,label:string)=>{check(typeof text==='string'&&text.length<=MAX_SECTION_CHARS,label+' JSON 无效或过大');try{return JSON.parse(text);}catch{check(false,label+' JSON 无法解析');}};
  const kit:CodexToolKit={
   version:SPACE_CONSTRUCTION_GROUPED,
-  instructions:'先用 save_space_skeleton 保存 scene-space-skeleton-v1：voxelLattice、全部共享模板 bounds、机位、program 名称和 assumptions，不含实例、实体或绑定。随后按原图地标分组调用 save_space_component_group：每组声明 landmarkIds，并给出本组新建的 instances、一一对应的 entities，以及对本组每个地标恰好一条 observedBindings；绑定可引用已保存组的实例（例如 void 引用承载墙体），但每个新实例必须被本组地标绑定。每次保存会累计核对共同格网、实例总上限'+VOXEL_LIMITS.entities+'个（尚未覆盖的关键 object/component 预留独立实例）及独立拥有关系，并一次列出全部冲突；失败不覆盖旧状态。同一 groupId 再保存即替换该组，remove_space_component_group 删除一组，被其他组绑定引用的实例不能移除。所有地标覆盖后程序确定推导核心布局，再用 save_space_constraints 分别保存 spatialOpenings 和 spatialContacts（无则显式 []）。修改组件组或使旧组失效的骨架变更会清除已存约束。expectedDraftSha256 使用最新状态；返回摘要列出剩余地标与实例预算，inspect_space_draft 读回完整数据。最终只输出 selectedSpaceSha256 和中文 reason；须为全部声明完成后的当前 spaceSha256。这里只保存规划，不证明还原质量，不能跳过后续灰模独立验收；检查点不增加模型调用、修正轮数、时间或预览额度。',
+  instructions:'先用 save_space_skeleton 保存 scene-space-skeleton-v1：voxelLattice、全部共享模板 bounds（最多'+ASSET_STEP_LIMITS.templates+'个，同形或同类物体共用模板）、机位、program 名称和 assumptions，不含实例、实体或绑定。随后按原图地标分组调用 save_space_component_group：每组声明 landmarkIds，并给出本组新建的 instances、一一对应的 entities，以及对本组每个地标恰好一条 observedBindings；绑定可引用已保存组的实例（例如 void 引用承载墙体），但每个新实例必须被本组地标绑定。每次保存会累计核对共同格网、实例总上限'+VOXEL_LIMITS.entities+'个（尚未覆盖的关键 object/component 预留独立实例）及独立拥有关系，并一次列出全部冲突；失败不覆盖旧状态。同一 groupId 再保存即替换该组，remove_space_component_group 删除一组，被其他组绑定引用的实例不能移除。所有地标覆盖后程序确定推导核心布局，再用 save_space_constraints 分别保存 spatialOpenings 和 spatialContacts（无则显式 []）。修改组件组或使旧组失效的骨架变更会清除已存约束。expectedDraftSha256 使用最新状态；返回摘要列出剩余地标与实例预算，inspect_space_draft 读回完整数据。最终只输出 selectedSpaceSha256 和中文 reason；须为全部声明完成后的当前 spaceSha256。这里只保存规划，不证明还原质量，不能跳过后续灰模独立验收；检查点不增加模型调用、修正轮数、时间或预览额度。',
   outputSchema:obj({selectedSpaceSha256:sha,reason:{type:'string',minLength:1}}),
   definitions:[
    {name:'save_space_skeleton',description:'保存共享格网、模板、机位等骨架。若已有组件组在新骨架下失效，则全部组件组和约束一起清除。',inputSchema:obj({expectedDraftSha256:sha,skeletonJson:{type:'string',maxLength:MAX_SECTION_CHARS,description:'骨架 JSON：'+JSON.stringify(skeletonSchema)}}),annotations:{readOnlyHint:false,destructiveHint:false,openWorldHint:false}},
@@ -255,6 +256,9 @@ function createGroupedSpaceConstruction(options:{folder:string;jobId:string;root
    check(hash(args?.expectedDraftSha256)&&args.expectedDraftSha256===s.checksum,'基线摘要不符，请读取最新检查点');
    if(name==='save_space_skeleton'){
     const skeleton=parse(args.skeletonJson,'骨架');assertSkeleton(skeleton);
+    // Checked on save, not in verify: a skeleton saved before this check still loads, and fails only when the plan completes.
+    const templateCount=skeleton.program.templates.length;
+    check(templateCount<=ASSET_STEP_LIMITS.templates,'骨架模板最多 '+ASSET_STEP_LIMITS.templates+' 个，当前 '+templateCount+' 个；完整规划会因此被拒绝。同形或同类物体共用一个模板，用实例的位置、scale 与朝向区分，不能删除地标');
     if(stable(skeleton)===stable(s.skeleton))return reply({...summary(),unchanged:true});
     let groups=s.groups,dropped:string[]=[];
     if(groups.length){try{assertGroups(skeleton,groups);}catch(error){dropped=groups.map(g=>g.groupId);groups=[];}}
