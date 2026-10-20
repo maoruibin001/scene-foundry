@@ -42,7 +42,7 @@ import {alignCameras} from './camera-alignment';
 import {join} from 'node:path';
 import {mkdirSync,existsSync,cpSync,readFileSync} from 'node:fs';
 import {DATA,ROOT,UPLOADS,save,read,runDir,saveJob,event,digest} from '../store';
-import {validateScene,semanticCounts} from './scene-contract';
+import {validateScene,semanticCounts,categoryRequirements} from './scene-contract';
 import {assembleScene,validateAsset} from './layout';
 import {checkpoints} from './checkpoints';
 import {surfacePartBudget} from './surface-part-budget';
@@ -63,7 +63,7 @@ function prepareScene(job:any,plan:any,dir:string,value:any,textures:any,provena
  value=bindReferenceFrames(value,(job.images??[]).map((i:any)=>({path:join(UPLOADS,i.file)})));const result={value};save(join(dir,'generated-scene.json'),result.value);job.sceneProgram={version:result.value.version,file:'generated-scene.json'};
   const prepared=prepareGeometryProject(join(dir,'project'),result.value.program,textures,{id:'scene-'+job.id,summary:plan.summary,scene:result.value,provenance:{pipelineVersion:job.pipelineVersion,references:(job.images??[]).map((i:any)=>i.id),textures:provenance,modelSettings:job.modelSettings}});
   job.bounds=prepared.bounds;job.objectCount=prepared.meshes;job.entityCount=result.value.program.instances.length;job.complexityReport=sceneComplexity(result.value,job.complexity,prepared.meshes,job.sceneKind);
-  job.structure={passed:true,semanticCounts:semanticCounts(result.value.entities),checks:[{id:'geometry-contract',passed:true},{id:'requirement-bindings',passed:true},{id:'texture-provenance',passed:true}],geometry:{triangles:prepared.triangles,suspects:[],scope:'仅证明网格契约、来源和需求绑定；空间接触、遮挡和穿插由实际画面验收，未冒充碰撞检测'},assumptions:result.value.assumptions};
+  job.structure={passed:true,semanticCounts:semanticCounts(result.value.entities),categoryRequirements:categoryRequirements(result.value),checks:[{id:'geometry-contract',passed:true},{id:'requirement-bindings',passed:true},{id:'texture-provenance',passed:true}],geometry:{triangles:prepared.triangles,suspects:[],scope:'仅证明网格契约、来源和需求绑定；空间接触、遮挡和穿插由实际画面验收，未冒充碰撞检测'},assumptions:result.value.assumptions};
   save(join(dir,'surface-audit.json'),surfaceAudit(value,textures));
   const observationPath=join(dir,'generation/reference-observations.json');save(join(dir,'reference-projection.json'),referenceProjection(value,existsSync(observationPath)?read(observationPath):null));
   save(join(dir,'reference-composition.json'),referenceComposition(value,existsSync(observationPath)?read(observationPath):null,sceneVisibility(value,textures)));

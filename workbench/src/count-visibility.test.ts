@@ -28,6 +28,18 @@ test('任何明确数量要求在缺少可靠类别映射时保守保留核查',
  const f:any=fixture();f.job.plan.requirements.push({id:'chairs',critical:true,count:2});
  expect(run(f).status).toBe('needs_review');
 });
+test('明确数量只约束其绑定的类别，其他类别的部分可见仍为警告',()=>{
+ const f:any=fixture();f.job.plan.requirements.push({id:'chairs',critical:true,count:2});
+ f.job.structure.semanticCounts.chair=2;f.job.structure.categoryRequirements={foliage:['foliage'],chair:['chairs']};
+ expect(run(f).status).toBe('passed');expect(run(f).warnings[0].id).toBe('count-visibility:foliage');
+ f.counts=[{kind:'chair',visibleMin:1,visibleMax:1}];expect(run(f).status).toBe('needs_review');
+});
+test('类别映射未覆盖全部明确数量或缺少该类别时保守保留核查',()=>{
+ const f:any=fixture();f.job.plan.requirements.push({id:'chairs',critical:true,count:2});
+ f.job.structure.categoryRequirements={foliage:['foliage']};expect(run(f).status).toBe('needs_review');
+ f.job.structure.categoryRequirements={chair:['chairs']};expect(run(f).status).toBe('needs_review');
+ f.job.structure.categoryRequirements={foliage:['chairs','foliage'],chair:['chairs']};expect(run(f).status).toBe('needs_review');
+});
 test('画面至少数量超过实际总数仍为真正矛盾',()=>{
  const f=fixture();f.counts[0].visibleMin=4;f.counts[0].visibleMax=5;
  expect(run(f).status).toBe('needs_review');expect(run(f).warnings).toHaveLength(0);

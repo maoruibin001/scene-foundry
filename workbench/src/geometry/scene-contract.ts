@@ -16,6 +16,12 @@ export function semanticCounts(entities:{category:string}[]):Record<string,numbe
  for(const e of entities)counts[e.category]=(counts[e.category]??0)+1;
  return counts;
 }
+/** Requirements each semantic category binds through its instances, so an exact count stays scoped to the categories it constrains. */
+export function categoryRequirements(scene:{entities:{instanceId:string;category:string}[];program:{instances:{id:string;requirementIds?:string[]}[]}}):Record<string,string[]>{
+ const instances=new Map(scene.program.instances.map(i=>[i.id,i])),bound:Record<string,Set<string>>=Object.create(null);
+ for(const e of scene.entities){const set=bound[e.category]??=new Set();for(const id of instances.get(e.instanceId)?.requirementIds??[])set.add(id);}
+ return Object.fromEntries(Object.entries(bound).map(([k,v])=>[k,[...v].sort()]));
+}
 export type SceneInput={voxelLattice?:VoxelLattice;spatialContacts?:SpatialContact[];spatialOpenings?:SpatialOpening[];textureReuse?:{textureId:string;assetId:string;reason:string}[];version:'scene-v1';program:GeometryProgram;entities:{instanceId:string;role:'subject'|'context'|'ground';category:string}[];cameras:{projection?:'perspective'|'orthographic';orthographicHeight?:number|null;frame?:{width:number;height:number};name:string;referenceIndex:number|null;position:number[];target:number[];fov:number}[];textures:{id:string;referenceIndex:number;quad:number[][];size:number;description:string}[];lighting:SceneLighting;assumptions:string[]};
 export function sceneSchema(ids?:string[],options:{voxel?:boolean;voxelLattice?:VoxelLattice}={}){return obj({spatialContacts:contactsSchema(),spatialOpenings:openingsSchema(),textureReuse:arr(obj({textureId:str,assetId:str,reason:str})),version:{type:'string',enum:['scene-v1']},program:geometryProgramSchema(ids,options),entities:arr(obj({instanceId:str,role:{type:'string',enum:['subject','context','ground']},category:categorySchema})),cameras:arr(obj({name:str,referenceIndex:{type:['integer','null']},position:coordinateVectorSchema(),target:coordinateVectorSchema(),fov:{type:'number',minimum:CAMERA_FOV.min,maximum:CAMERA_FOV.max},projection:{type:'string',enum:['perspective','orthographic']},orthographicHeight:{type:['number','null']}})),textures:arr(obj({id:str,referenceIndex:{type:'integer'},quad:{type:'array',minItems:4,maxItems:4,items:{type:'array',minItems:2,maxItems:2,items:num}},size:{type:'integer',enum:[256,512]},description:str})),lighting:lightingSchema(),assumptions:arr(str)});}
 const assert=(ok:any,message:string)=>{if(!ok)throw Error(message)};

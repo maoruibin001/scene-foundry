@@ -13,11 +13,14 @@ export function commonDelivery(job:any,review:any,runtime:any,quality:any,spec:a
   ...(job.policy.deliveryStandard==='profile70'?(job.plan.acceptanceCriteria??[]).filter((c:any)=>c.critical&&review.criteria?.find((r:any)=>r.id===c.id)?.verdict==='missing').map((c:any)=>c.requirementId):[])])];
  const confirmedDefects=(spec.rules??[]).filter((r:any)=>['mandatory','conditional'].includes(r.kind)&&r.status==='failed').map((r:any)=>r.id);
  // Authored instances and visible instances have different scopes. Preserve uncertain
- // visibility as a warning only when the plan does not require an exact count.
- const exactCountRequired=(job.plan.requirements??[]).some((r:any)=>r.count!=null);
+ // visibility as a warning only for categories no exact count binds. Without a binding
+ // for every counted requirement, any exact count keeps all categories strict.
+ const counted=(job.plan.requirements??[]).filter((r:any)=>r.count!=null).map((r:any)=>r.id),bindings=job.structure?.categoryRequirements;
+ const scoped=!!bindings&&counted.every((id:string)=>Object.values(bindings).some((ids:any)=>Array.isArray(ids)&&ids.includes(id)));
+ const exactFor=(kind:string)=>scoped?(Array.isArray(bindings[kind])?bindings[kind]:[]).some((id:string)=>counted.includes(id))||!Array.isArray(bindings[kind]):counted.length>0;
  const partialVisibility=countContradictions.filter((c:any)=>{
   const actual=job.structure?.semanticCounts?.[c.kind];
-  return !exactCountRequired&&Number.isInteger(actual)&&Number.isInteger(c.visibleMin)&&Number.isInteger(c.visibleMax)
+  return !exactFor(c.kind)&&Number.isInteger(actual)&&Number.isInteger(c.visibleMin)&&Number.isInteger(c.visibleMax)
    &&c.visibleMin>0&&c.visibleMax>=c.visibleMin&&actual>c.visibleMax;
  });
  const reasons=[
