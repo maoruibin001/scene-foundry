@@ -32,7 +32,7 @@ entityCounts.kind 必须来自输入 countKinds，每个类别恰有一条区间
 export function judgePromptFor(version:string){return version==='scene-quality-v8'?JUDGE_PROMPT
  .replace('五维评分','六维评分').replace('五个维度','六个维度')
  .replace("'material'|'readability'","'material'|'lighting'|'readability'")
- +'\nscene-quality-v8将 lighting 与 material/readability 分开：材质评颜色、纹理、UV、粗糙度和法线；光照独立评原图对应的方向、明暗、阴影与层次；readability只评信息清晰与层次，不重复光照缺陷。六维即使权重为0也逐一给独立真实分数，不能为迎合目标权重改分。所选权重的实现度与原始视觉分均须70，旧固定70/80为单列基准。':JUDGE_PROMPT;}
+ +'\nscene-quality-v8将 lighting 与 material/readability 分开：材质评颜色、纹理、UV、粗糙度和法线；光照独立评原图对应的方向、明暗、阴影与层次；readability只评信息清晰与层次，不重复光照缺陷。六维即使权重为0也逐一给独立真实分数，不能为迎合目标权重改分。交付按所选权重的综合分须70，原始视觉分单列参考；旧固定70/80为单列基准。':JUDGE_PROMPT;}
 
 export function correctionPrompt(message:string,rejectedValue?:unknown){
  const context='\n上次输出未通过校验：'+message+'\n请按同一份原始输入和需求，返回完整的修正 JSON。不得削弱或遗漏需求。';

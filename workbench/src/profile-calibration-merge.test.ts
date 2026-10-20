@@ -35,3 +35,15 @@ test('human calibration cannot lift an insufficient independent visual score thr
  expect(result.goalAssessment.status).toBe('failed');expect(result.deliveryAssessment.status).toBe('failed');
  expect(result.goalAssessment.unroundedRawScore).toBeLessThan(70);
 });
+
+test('a plan frozen without a raw minimum delivers on the composite; plans frozen at raw 70 still gate it',()=>{
+ const f=fixture(3.4),quality=qualityGate(f.plan,f.review,f.runtime.hard,f.job.policy,(_id,score)=>score+.2);
+ expect(quality.score).toBe(72);expect(quality.diagnostic?.score).toBe(68);
+ const legacy=profileDelivery({...f.job,pipelinePlan:{scoring:{rawMinimumScore:70}}},f.review,f.runtime,quality,{status:'passed',rules:[]});
+ expect(legacy.deliveryAssessment.reasons).toContain('原始维度加权分未达到70');
+ expect(profileDelivery(f.job,f.review,f.runtime,quality,{status:'passed',rules:[]}).deliveryAssessment.reasons).toContain('原始维度加权分未达到70');
+ const composite=profileDelivery({...f.job,pipelinePlan:{scoring:{rawMinimumScore:null}}},f.review,f.runtime,quality,{status:'passed',rules:[]});
+ expect(composite.deliveryAssessment).toMatchObject({score:72,rawScore:68});
+ expect(composite.deliveryAssessment.reasons).not.toContain('原始维度加权分未达到70');
+ expect(composite.goalAssessment.status).toBe('passed');
+});

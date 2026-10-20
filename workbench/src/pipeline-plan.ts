@@ -60,7 +60,7 @@ export function compilePipelinePlan(input:any,context:{engineSha:string;generato
  ];
  const body={version:PIPELINE_PLAN_VERSION,compilerSha256,presetId:choice.pipelinePreset,label:p.label,description:p.description,weights:choice.scoreWeights,focus:[...p.focus],tools:toolIds,capabilities:PIPELINE_CAPABILITIES,stages,
   resources:{parallelSurface,assetVisualChecks:p.assetVisualChecks,assetPreviewCandidates:2,modelSettings:context.modelSettings??null,stageReasoning:'existing-phase-capped',callsPolicy:'inherits-user-cumulative-policy',noGain:2,minGain:2},
-  scoring:{version:'scene-quality-v8',standard:'profile70',minimumScore:70,rawMinimumScore:70,independentDimensions:true,history:'original receipts immutable'},
+  scoring:{version:'scene-quality-v8',standard:'profile70',minimumScore:70,rawMinimumScore:null,independentDimensions:true,history:'original receipts immutable'},
   commonChecks:['complete-assets','critical-requirements','spatial-3.5','engine-hard-checks','trusted-evidence','required-specification','no-count-contradictions'],
   protectedDimensions:['coverage','spatial','shape'],engineSha:context.engineSha,generatorSha:context.generatorSha,
  };
@@ -81,7 +81,7 @@ export function validateFrozenPipelinePlan(value:any){
  const text=(v:any)=>typeof v==='string'&&v.trim().length>0;
  if(!/^[a-f0-9]{64}$/.test(value.compilerSha256??'')||!text(value.label)||!text(value.description)||!text(value.engineSha)||!text(value.generatorSha))fail('冻结制作计划来源不完整');
  if(!value.resources||typeof value.resources.parallelSurface!=='boolean'||!Number.isInteger(value.resources.assetVisualChecks)||value.resources.assetVisualChecks<0||value.resources.assetVisualChecks>4||value.resources.assetPreviewCandidates!==2||value.resources.noGain!==2||value.resources.minGain!==2||!Object.hasOwn(value.resources,'modelSettings'))fail('冻结制作资源契约不完整');
- if(value.scoring?.version!=='scene-quality-v8'||value.scoring.standard!=='profile70'||value.scoring.minimumScore!==70||value.scoring.rawMinimumScore!==70||value.scoring.independentDimensions!==true)fail('冻结评分契约不完整');
+ if(value.scoring?.version!=='scene-quality-v8'||value.scoring.standard!=='profile70'||value.scoring.minimumScore!==70||![70,null].includes(value.scoring.rawMinimumScore)||value.scoring.independentDimensions!==true)fail('冻结评分契约不完整');
  const stages=['plan','observe','space','blockout','surface','materials','assets','runtime','judge','repair'];
  if(!Array.isArray(value.stages)||value.stages.length!==stages.length||value.stages.some((s:any,i:number)=>!s||s.id!==stages[i]||!text(s.label)||!text(s.reason)||!/^[a-f0-9]{64}$/.test(s.contractId??'')||!Array.isArray(s.dependsOn)||new Set(s.dependsOn).size!==s.dependsOn.length||s.dependsOn.some((d:string)=>!stages.slice(0,i).includes(d))||!Array.isArray(s.tools)||s.tools.some((t:string)=>!toolIds.includes(t))))fail('冻结阶段契约不完整');
  if(!Array.isArray(value.tools)||value.tools.length!==toolIds.length||new Set(value.tools).size!==toolIds.length||toolIds.some(t=>!value.tools.includes(t))||!Array.isArray(value.capabilities)||toolIds.some(t=>value.capabilities.filter((c:any)=>c.id===t&&c.state==='ready'&&typeof c.version==='string'&&c.version).length!==1))fail('冻结工具契约不完整');

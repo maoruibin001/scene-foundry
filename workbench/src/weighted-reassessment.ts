@@ -27,11 +27,13 @@ export function weightedDimensionScores(implementation:any[],visual:any[],weight
  return {score:round(unroundedScore),rawScore:round(unroundedRawScore),unroundedScore,unroundedRawScore,dimensions,rawDimensions};
 }
 
+/** Plans frozen with rawMinimumScore 70 keep gating the raw visual score; newer plans report it alongside the composite. */
+const rawGated=(job:any)=>job.pipelinePlan?.scoring?.rawMinimumScore!==null;
 export function profileDelivery(job:any,review:any,runtime:any,quality:any,spec:any,countContradictions:any[]=[],objections:any[]=[]){
  const weights=validateDimensionWeights(job.policy.dimensionWeights),scores=weightedDimensionScores(quality.dimensions,review.dimensions,weights);
  const signature=scoringSignature(PROFILE_QUALITY_VERSION,weights),binding=assessmentBinding(job,review,quality,spec,runtime);
  const commonDeliveryAssessment={...commonDelivery(job,review,runtime,quality,spec,countContradictions,objections),...binding,scoringSignature:signature};
- const scoringReasons=[...(scores.unroundedScore+1e-9<70?['综合分未达到70']:[]),...(scores.unroundedRawScore+1e-9<70?['原始维度加权分未达到70']:[])];
+ const scoringReasons=[...(scores.unroundedScore+1e-9<70?['综合分未达到70']:[]),...(rawGated(job)&&scores.unroundedRawScore+1e-9<70?['原始维度加权分未达到70']:[])];
  const goalAssessment={version:'profile-goal-assessment-v1',standard:'profile70',scoringVersion:PROFILE_QUALITY_VERSION,scoringSignature:signature,dimensionWeights:weights,threshold:70,
   ...scores,status:scoringReasons.length?'failed':'passed',reasons:scoringReasons,...binding};
  const deliveryAssessment={standard:'profile70',threshold:70,score:scores.score,rawScore:scores.rawScore,dimensionWeights:weights,scoringVersion:PROFILE_QUALITY_VERSION,scoringSignature:signature,
@@ -73,7 +75,7 @@ export function reweightResult(job:any,weights:Record<string,number>){
  const confidenceValid=Number.isFinite(job.review.confidence)&&job.review.confidence>=0&&job.review.confidence<=1;
  const commonQuality={...job.quality,confidenceValid,confidence:confidenceValid?job.review.confidence:null,hardFailures:[...new Set([...(job.quality.hardFailures??[]),...HARD_CHECKS.filter(k=>hard[k]!==true)])]};
  const commonJob={...job,policy:{...job.policy,deliveryStandard:'profile70',confidenceFloor:Math.max(EVIDENCE_POLICY.confidenceFloor,job.policy.confidenceFloor)}};
- const reasons=[...(scores.unroundedScore+1e-9<70?['综合分未达到70']:[]),...(scores.unroundedRawScore+1e-9<70?['原始维度加权分未达到70']:[])];
+ const reasons=[...(scores.unroundedScore+1e-9<70?['综合分未达到70']:[]),...(rawGated(job)&&scores.unroundedRawScore+1e-9<70?['原始维度加权分未达到70']:[])];
  const signature=scoringSignature(job.policy.version,selectedWeights),binding=assessmentBinding(job,job.review,job.quality,job.spec,runtime);
  const commonDeliveryAssessment={...commonDelivery(commonJob,job.review,runtime,commonQuality,job.spec,contradictions,objections),...binding,scoringSignature:signature};
  const id=hash({kind:'weighted-reassessment-v1',scoringSignature:signature,...binding});

@@ -20,7 +20,7 @@ test('reference summary uses actual catalog labels and saved custom weights with
  const record=reference(),catalog=structuredClone(pipelinePresetCatalog());record.generationSettings.scoreWeights.lighting=30;record.generationSettings.scoreWeights.material=10;
  catalog.presets.find(p=>p.id==='effects').label='测试成图标签';catalog.dimensions.find(d=>d.id==='lighting').label='测试光照标签';
  const before=JSON.stringify(record),html=referencePipelineSummary(record,catalog);
- expect(html).toContain('测试成图标签');expect(html).toContain('测试光照标签 30%');expect(html).toContain('材质表面 10%');expect(html).toContain('已保存的自定义权重');expect(html).toContain('综合分与原始加权分均 ≥70');expect(html).toContain('六维预设仍待真实场景校准');expect(JSON.stringify(record)).toBe(before);
+ expect(html).toContain('测试成图标签');expect(html).toContain('测试光照标签 30%');expect(html).toContain('材质表面 10%');expect(html).toContain('已保存的自定义权重');expect(html).toContain('所选权重综合分 ≥70（原始加权分单列参考）');expect(html).toContain('六维预设仍待真实场景校准');expect(JSON.stringify(record)).toBe(before);
 });
 
 test('historical reference has no implicit preset and missing saved weights never borrow current defaults',()=>{
