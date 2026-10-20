@@ -39,7 +39,8 @@ export function commonDelivery(job:any,review:any,runtime:any,quality:any,spec:a
 }
 export function basicDelivery(job:any,review:any,runtime:any,quality:any,spec:any,strictStatus:string,countContradictions:any[]=[],objections:any[]=[]){
  const common=commonDelivery(job,review,runtime,quality,spec,countContradictions,objections),score=quality.score,rawScore=quality.diagnostic?.score;
- const reasons=[...(!Number.isFinite(score)||score<70?['综合分未达到70']:[]),...(!Number.isFinite(rawScore)||rawScore<70?['原始维度加权分未达到70']:[]),...common.failures];
+ // Policies frozen before rawScoreGate existed keep gating the raw score; new ones report it alongside the composite.
+ const reasons=[...(!Number.isFinite(score)||score<70?['综合分未达到70']:[]),...(job.policy.rawScoreGate!==false&&(!Number.isFinite(rawScore)||rawScore<70)?['原始维度加权分未达到70']:[]),...common.failures];
  return {standard:'basic70',threshold:70,status:reasons.length?'failed':common.pending.length?'needs_review':'passed',score,rawScore,strictStatus,
   reasons:[...reasons,...common.pending],warnings:common.warnings,
   scope:'完整场景的70分基础交付；局部细节和待复核项保留，不等于80分完整规范通过'};

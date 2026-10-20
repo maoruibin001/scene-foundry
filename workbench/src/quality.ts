@@ -12,7 +12,7 @@ export type QualityPolicy = {deliveryStandard?:'basic70'|'strict'|'profile70';ve
 export const DEFAULT_POLICY:QualityPolicy = {version:'scene-quality-v4.1', dimensionWeights:{...CURRENT_WEIGHTS}, score:80, dimensionFloor:3, confidenceFloor:0.65, successRate:0.90, minPerMode:30, minWilsonLower:0.80, maxAttempts:2, minSubmittedFps:10};
 export const ATOMIC_POLICY:QualityPolicy={...DEFAULT_POLICY,version:ATOMIC_QUALITY_VERSION,dimensionWeights:{...CURRENT_WEIGHTS}};
 export const EVIDENCE_POLICY:QualityPolicy={...DEFAULT_POLICY,version:EVIDENCE_QUALITY_VERSION,dimensionWeights:{...CURRENT_WEIGHTS}};
-export function creationPolicy(){const policy=process.env.PIPELINE_QUALITY_VERSION===EVIDENCE_QUALITY_VERSION?{...EVIDENCE_POLICY}:process.env.PIPELINE_QUALITY_VERSION===ATOMIC_QUALITY_VERSION?{...ATOMIC_POLICY}: {...DEFAULT_POLICY};if(process.env.PIPELINE_DELIVERY_STANDARD==='basic70'){if(policy.version!==EVIDENCE_QUALITY_VERSION)throw Error('基础70分交付需要完整原始维度评分');return {...policy,deliveryStandard:'basic70' as const};}return policy;}
+export function creationPolicy(){const policy=process.env.PIPELINE_QUALITY_VERSION===EVIDENCE_QUALITY_VERSION?{...EVIDENCE_POLICY}:process.env.PIPELINE_QUALITY_VERSION===ATOMIC_QUALITY_VERSION?{...ATOMIC_POLICY}: {...DEFAULT_POLICY};if(process.env.PIPELINE_DELIVERY_STANDARD==='basic70'){if(policy.version!==EVIDENCE_QUALITY_VERSION)throw Error('基础70分交付需要完整原始维度评分');return {...policy,deliveryStandard:'basic70' as const,rawScoreGate:false};}return policy;}
 export const DIMENSIONS = [
  {id:'coverage',label:'需求实现',weight:CURRENT_WEIGHTS.coverage}, {id:'spatial',label:'空间与构图',weight:CURRENT_WEIGHTS.spatial},
  {id:'shape',label:'主体形态',weight:CURRENT_WEIGHTS.shape}, {id:'material',label:'材质与色彩',weight:CURRENT_WEIGHTS.material},

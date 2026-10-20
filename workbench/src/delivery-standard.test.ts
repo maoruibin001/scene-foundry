@@ -24,6 +24,11 @@ test('基础档双分门槛独立，不能用高综合分抵消低原始分',()=
  const b=fixture();b.quality.score=69.99;expect(run(b).status).toBe('failed');
  const c=fixture();c.quality.score=70;c.quality.diagnostic.score=70;expect(run(c).status).toBe('passed');
 });
+test('a policy frozen with rawScoreGate false delivers on the composite and still reports the raw score',()=>{
+ const f:any=fixture();f.job.policy.rawScoreGate=false;f.quality.score=81;f.quality.diagnostic.score=67.76;
+ expect(run(f)).toMatchObject({status:'passed',score:81,rawScore:67.76});
+ f.quality.score=69.99;expect(run(f).reasons).toEqual(['综合分未达到70']);
+});
 test('灰模补位或缺资产草稿不能按基础成品交付',()=>{
  const f:any=fixture();f.job.partialOutput={completed:15,total:16};expect(run(f).status).toBe('needs_review');
  delete f.job.partialOutput;f.job.assessmentScope='partial';expect(run(f).status).toBe('needs_review');
