@@ -1,4 +1,5 @@
 import {voxelGeometryGuidance} from '../voxel/construction-guidance';
+import {relationInstanceScale,RELATION_INSTANCE_SCALE_PROMPT} from './relation-instance-scale';
 import {QUARTER_TURNS,type VoxelLattice} from '../voxel/scene-lattice';
 import {VOXEL_GEOMETRY_GUIDANCE} from '../voxel/construction-guidance';
 import {CROWN_RULES} from './branch-crown';
@@ -120,6 +121,9 @@ export async function repairGrayboxSpace(space:any,ctx:any,sourceFolder:string,f
  // Policy jobs measure parts, which the saved instance-only visibility cannot carry.
  const composition=observedBindingRule(ctx.job)?referenceComposition(source,ctx.observation,undefined,{version:PART_REFERENCE_COMPOSITION}):referenceComposition(source,ctx.observation,read(join(folder,'visibility.json')));
  save(join(folder,'reference-composition.json'),composition);
+ // Voxel rounds already get measured acceptance blockers; ordinary rounds otherwise see only the landmark union box.
+ const instanceScale=ctx.job.sceneKind==='voxel'?null:relationInstanceScale(source,ctx.observation,feedback);
+ if(instanceScale)save(join(folder,'relation-instance-scale.json'),instanceScale);
  const canonical=read(join(sourceFolder,'scene.json')),rejected=spatialRejectedFeedback(ctx,sourceFolder,folder);
  const buildScene=(next:any,patch:any)=>assertNotRejectedSpatialScene(rejected.attempts,buildGrayboxPartScene(canonical,next,patch,ctx.plan,ctx.images.length,groupParts));
  let checkpoint:any=null,completed:any=null;
@@ -145,8 +149,8 @@ export async function repairGrayboxSpace(space:any,ctx:any,sourceFolder:string,f
  const result=saved?{value:saved.patch,receipt:completed?{kind:'verified-completed-graybox-repair',...checkpoint,modelReceipt:completed.receipt.modelReceipt}:{kind:'verified-graybox-timeout-checkpoint',...checkpoint}}:await callValidated({role:'scene-space',modelSettings:ctx.job.modelSettings,signal:ctx.signal,maxTokens:6500,schemaContext:{grayboxRepair:true,voxel:ctx.job.sceneKind==='voxel',voxelLattice:space.voxelLattice,...(templateBounds?{templateBounds}:{}),...(groupParts!==BLOCKOUT_PART_LIMIT?{groupParts}:{})},
   tools:preview.kit,
   images:[...ctx.images,...frameNames.map(f=>({path:join(sourceFolder,'runtime',f),mime:'image/png'})),...rejected.images,...evidence.images],
-  system:GRAYBOX_REPAIR_PROMPT+(templateBounds?'\n'+GRAYBOX_TEMPLATE_BOUNDS_PROMPT+(space.voxelLattice?GRAYBOX_TEMPLATE_BOUNDS_VOXEL_PROMPT(space.voxelLattice.cellSize):''):'')+(ctx.job.sceneKind==='voxel'?'\n'+voxelGeometryGuidance(space.voxelLattice):'')+'\n'+COMPACT_BLOCKOUT_RULES+'\n'+VISIBILITY_PROMPT+(feedback?.acceptanceBlockers?'\n'+ACCEPTANCE_BLOCKERS_PROMPT:'')+'\n'+preview.kit.instructions+'\n若输入有rejectedCandidates，额外图片在来源Engine画面之后、编号图之前，按rejectedEngineFrames排列。它们是已独立失败的改动和实拍，不是来源或新参考目标；比较其具体退步与当前较好来源，避免重复那些几何。只在当前来源上修正，不能累积失败候选或采信它的成功宣称。完全相同的失败几何和机位将在测量/渲染前拒绝。',
-  text:JSON.stringify({input:ctx.job.prompt,plan:ctx.plan,previousSpace:space,sharedInterfaces:blockoutSharedInterfaces(space),actualGraybox:source.program,observation:ctx.observation,referenceComposition:composition,feedback,rejectedCandidates:rejected.context,visibility:evidence.context,
+  system:GRAYBOX_REPAIR_PROMPT+(templateBounds?'\n'+GRAYBOX_TEMPLATE_BOUNDS_PROMPT+(space.voxelLattice?GRAYBOX_TEMPLATE_BOUNDS_VOXEL_PROMPT(space.voxelLattice.cellSize):''):'')+(ctx.job.sceneKind==='voxel'?'\n'+voxelGeometryGuidance(space.voxelLattice):'')+'\n'+COMPACT_BLOCKOUT_RULES+'\n'+VISIBILITY_PROMPT+(feedback?.acceptanceBlockers?'\n'+ACCEPTANCE_BLOCKERS_PROMPT:'')+(instanceScale?'\n'+RELATION_INSTANCE_SCALE_PROMPT:'')+'\n'+preview.kit.instructions+'\n若输入有rejectedCandidates，额外图片在来源Engine画面之后、编号图之前，按rejectedEngineFrames排列。它们是已独立失败的改动和实拍，不是来源或新参考目标；比较其具体退步与当前较好来源，避免重复那些几何。只在当前来源上修正，不能累积失败候选或采信它的成功宣称。完全相同的失败几何和机位将在测量/渲染前拒绝。',
+  text:JSON.stringify({input:ctx.job.prompt,plan:ctx.plan,previousSpace:space,sharedInterfaces:blockoutSharedInterfaces(space),actualGraybox:source.program,observation:ctx.observation,referenceComposition:composition,...(instanceScale?{relationInstanceScale:instanceScale}:{}),feedback,rejectedCandidates:rejected.context,visibility:evidence.context,
    diagnosedStrategy:ctx.job.spatialDiagnosis?.reason??null,imageOrder:{references:ctx.images.length,engineFrames:runtime.referenceFrames,rejectedEngineFrames:rejected.attempts.flatMap(a=>a.frames.map(f=>({jobId:a.jobId,round:a.round,file:f.file,referenceIndex:f.referenceIndex,sha256:f.sha256}))),diagnosticMaps:evidence.context.diagnosticImages},
    source:{spaceSha256:digest(JSON.stringify(space)),renderSceneSha256:digest(readFileSync(join(sourceFolder,'render-scene.json'))),runtimeDigest:runtime.distManifestDigest}})},folder,patch=>{apply(patch);preview.assertReviewed(patch);return patch;});
  const applied=apply(result.value),local=applyGrayboxLocalParts(canonical,applied.value,result.value.parts,result.value.groups??[],true,groupParts),scene=buildScene(applied.value,result.value);
