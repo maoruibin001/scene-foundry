@@ -19,7 +19,7 @@ import {callValidated} from '../contracts';
 import {scoringGuidance} from '../quality';
 import {refinementBaseline} from './refinement-baseline';
 import {chainedObservation} from './reference-observations';
-import {applyRefinement,REFINEMENT_PROMPT} from './refinement';
+import {applyRefinement,REFINEMENT_PROMPT,VOXEL_DETAIL_REFINE_GUIDANCE,voxelDetailGuard} from './refinement';
 import {createRepairTools,REPAIR_TOOL_PROMPT} from './repair-tools';
 import {repairTextureEvidence,repairReusableTextureEvidence} from './repair-texture-evidence';
 import {repairBudget,repairGeometryBudget} from './repair-budget';
@@ -35,6 +35,7 @@ export function editableSceneContext(source:any){
 export async function refineWithEvidence(job:any,plan:any,images:any[],dir:string,signal:AbortSignal){
  const sourceDir=runDir(job.reuseSceneFrom),sourceJob=read(join(sourceDir,'job.json'));
  const originalSource=read(sourceSceneFile(job,sourceDir)),sourceDigest=digest(JSON.stringify(originalSource)),source=bindReferenceFrames(originalSource,images),runtime=read(join(sourceDir,'runtime/runtime.json')),textures=read(join(sourceDir,'materials/texture-registry.json'));
+ const detail=voxelDetailGuard(job,job.reuseSceneFrom,textures);detail?.assert(originalSource);
  const refs=images.map(i=>digest(readFileSync(i.path))),frames=runtime.images.filter((f:string)=>/^reference-/.test(f));
  if(JSON.stringify(refs)!==JSON.stringify(job.images.map((i:any)=>i.id))||!frames.length)throw Error('参考输入或机位证据不完整');
  for(const f of frames)if(digest(readFileSync(join(sourceDir,'runtime',f)))!==runtime.hashes[runtime.images.indexOf(f)])throw Error('运行画面摘要不符');
@@ -49,7 +50,8 @@ export async function refineWithEvidence(job:any,plan:any,images:any[],dir:strin
  const chained=chainedObservation(sourceJob,refs),observation=chained?.observation??null,observationJobId=chained?.jobId??null;
  const support=supportDiagnostics(source);save(join(folder,'support-diagnostics.json'),support);save(join(folder,'surface-audit.json'),surfaceAudit(source,textures));
  const apply=(patch:any)=>applyRefinement(correctedOpeningSource(source,patch),patch,plan,images.length,job.complexity);
- const validate=(patch:any)=>{const scene=apply(patch);resolveTextureReuse(scene,refs);assertCameraPreflight(scene);return patch;};
+ // Frozen voxel-detail identities are checked before preview, so a rejected candidate costs a tool turn rather than the whole repair.
+ const validate=(patch:any)=>{const scene=apply(patch);detail?.assert(scene);resolveTextureReuse(scene,refs);assertCameraPreflight(scene);return patch;};
  const feedback=createRepairTools({source,textures,observation,folder:join(folder,'feedback'),signal,images,refs,sourceFrames:currentFrames,validate,apply,onEvent:m=>event(job,'repair-feedback',m)});
  // 接续同一来源的已校验但因环境故障未完成的候选，先用真实预览核验，再交给模型。
  const priorRounds=optimizationState()?.rounds??[];
@@ -72,13 +74,14 @@ export async function refineWithEvidence(job:any,plan:any,images:any[],dir:strin
  const text={diagnosedStrategy,previousRepairs,priorRoundAudits,reflectionRule:'无明显提升或关键维度退步时，必须解释证据、表示能力、生成策略或评审粒度中的可验证原因，并改变对应机制。previousRepairs包含已核验但可能未被选优的修正，需结合实际改动和未解决项，不能仅调高思考深度或重试旧策略。',originalPrompt:job.prompt,requirements:plan.requirements,deliveryStandard:job.policy?.deliveryStandard??'strict',scoring:scoringGuidance(job.policy),sourceScore:baseline.quality,review:baseline.review,
   surfaceAudit:compactSurfaceAudit(source,textures),support,projection:referenceProjection(source,observation),referenceComposition:referenceComposition(source,observation,sceneVisibility(source,textures)),observationJobId,referenceFraming:{current:source.cameras.map((c:any)=>({name:c.name,frame:c.frame??{width:1600,height:900}})),historical:originalSource.cameras.map((c:any)=>({name:c.name,frame:c.frame??{width:1600,height:900}})),note:'当前附图来自修复后按原图比例重新采集的真实Engine预览；它没有重评，不替换历史得分。机位仍是原机位，构图缺陷需要结合原图修正，不能靠画幅修复宣称质量通过。'},experiment:job.optimizationRound,repairBudget:repairBudget(job.complexity),geometryBudget,
   sourceScene:editableSceneContext(source),actualFrameNames:currentFrames.map((f:any)=>f.path),textureEvidence:used.context,reusableTextures:reusable.context,
-  contextRule:'所有模板、实例和材质都可按证据联动修改，无额外规划阶段冻结的局部范围。密集形状数组标注Omitted与来源哈希，需改具体几何时先用inspect_scene_parts读取；surfaceUpdates不需要顶点。原场景、图片、需求与评分不可更改。'};
+  contextRule:'所有模板、实例和材质都可按证据联动修改，无额外规划阶段冻结的局部范围'+(detail?'；体素精修基线仍冻结材料ID集合、模板与实例身份，只改已有材质的属性和表面':'')+'。密集形状数组标注Omitted与来源哈希，需改具体几何时先用inspect_scene_parts读取；surfaceUpdates不需要顶点。原场景、图片、需求与评分不可更改。'};
  save(join(folder,'source.json'),{sourceJobId:sourceJob.id,sourceVersion:sourceJob.pipelineVersion,sourceCriteria:sourceJob.plan?.acceptanceCriteria??null,sourceDigest,referenceSha256:refs,frameNames:frames,qualityBefore:baseline.quality,originalQuality:sourceJob.quality,modelSettings:job.modelSettings,method:'evidence-led-v2',baselineProfile:job.profile,repairBudget:repairBudget(job.complexity)});
  save(join(folder,'evidence-input.json'),text);
  event(job,'refinement','合并诊断、选目标和修改：直接对照参考图与完整当前场景，在同次模型执行中通过工具看实际预览并选择候选');
- const system=(REFINEMENT_PROMPT+(source.voxelLattice?'\n'+voxelGeometryGuidance(source.voxelLattice):'')).replace('不删除或缩小sourceScene.spatialOpenings约束。','保留开口身份；推断尺寸可按本轮openingUpdates协议纠正。').replace('必须绑定到repairGoals已选materialIds或已获准新增几何的新材质。共享纹理的所有引用材质都必须在范围内，否则给已选材质建立独立声明，不改变其他表面；','必须绑定到本轮实际修改的材质。共享纹理的引用表面须一起核对，不适配时建立独立声明；')+'\n'+OPENING_REFINEMENT_PROMPT+'\n本轮采用证据驱动整体修正，不存在另一个模型预先锁定的repairGoals范围。你必须自行从画面与本轮假设选择最有价值的关联缺陷并实施可见改变；可以调整所有必要的已有模板与材质，但遵守相同最终场景预算。避免泛泛改色、缩放或堆小物体。采集、投影和预览现已沿用参考图画幅。先核对画面主结构占比、透视和垂直支承；不要把旧横图的占比照搬到竖图。surfaceAudit列出真实材质绑定和UV异常：颜色、alpha、roughness和metallic已进入Engine，不能假定未导出；结合纹理证据检查不合适的照片裁切、拉伸、透明表面后方遮挡及支承阴影。几何拼接需修改实际端点、交接面与轮廓，不能用改色掩盖缝隙。第一版先完成一个有明显视觉差异的完整候选，尽早真实预览；第二次仅纠正从预览确认的问题，不要求用完。不能把已经用过的失败策略重新包装。若本轮假设被原图否定，明确说明并选择有证据的替代改动。最终reason列明：问题归因、实际改动、预览观察及仍未解决项。如果关键需求缺少背侧或遮挡区域的观察证据，区分真实缺失和未取证；保留参考机位对齐，针对缺证据补充检查机位或调整已有检查机位，保持已覆盖区域的证据，在真实预览中核对，不再次只写暂缓。不要预测得分。\n'+REPAIR_TOOL_PROMPT;
+ const system=(REFINEMENT_PROMPT+(source.voxelLattice?'\n'+voxelGeometryGuidance(source.voxelLattice):'')).replace('不删除或缩小sourceScene.spatialOpenings约束。','保留开口身份；推断尺寸可按本轮openingUpdates协议纠正。').replace('必须绑定到repairGoals已选materialIds或已获准新增几何的新材质。共享纹理的所有引用材质都必须在范围内，否则给已选材质建立独立声明，不改变其他表面；','必须绑定到本轮实际修改的材质。共享纹理的引用表面须一起核对，不适配时建立独立声明；')+(detail?VOXEL_DETAIL_REFINE_GUIDANCE:'')+'\n'+OPENING_REFINEMENT_PROMPT+'\n本轮采用证据驱动整体修正，不存在另一个模型预先锁定的repairGoals范围。你必须自行从画面与本轮假设选择最有价值的关联缺陷并实施可见改变；可以调整所有必要的已有模板与材质，但遵守相同最终场景预算。避免泛泛改色、缩放或堆小物体。采集、投影和预览现已沿用参考图画幅。先核对画面主结构占比、透视和垂直支承；不要把旧横图的占比照搬到竖图。surfaceAudit列出真实材质绑定和UV异常：颜色、alpha、roughness和metallic已进入Engine，不能假定未导出；结合纹理证据检查不合适的照片裁切、拉伸、透明表面后方遮挡及支承阴影。几何拼接需修改实际端点、交接面与轮廓，不能用改色掩盖缝隙。第一版先完成一个有明显视觉差异的完整候选，尽早真实预览；第二次仅纠正从预览确认的问题，不要求用完。不能把已经用过的失败策略重新包装。若本轮假设被原图否定，明确说明并选择有证据的替代改动。最终reason列明：问题归因、实际改动、预览观察及仍未解决项。如果关键需求缺少背侧或遮挡区域的观察证据，区分真实缺失和未取证；保留参考机位对齐，针对缺证据补充检查机位或调整已有检查机位，保持已覆盖区域的证据，在真实预览中核对，不再次只写暂缓。不要预测得分。\n'+REPAIR_TOOL_PROMPT;
  const result=await callValidated({role:'scene-refine',schemaContext:{repairComplexity:job.complexity,voxelLattice:source.voxelLattice},modelSettings:job.modelSettings,signal,maxTokens:16000,reservedCalls:2,images:[...images,...currentFrames,...used.images,...reusable.images],system,text:JSON.stringify(text),tools:feedback.kit},folder,v=>{validate(v);feedback.assertReviewed(v);return v;});
  const scene=apply(result.value);
+ if(detail)save(join(folder,'voxel-detail-validation.json'),detail.assert(scene));
  if(digest(JSON.stringify(read(sourceSceneFile(job,sourceDir))))!==sourceDigest)throw Error('来源场景在修改期间变化');
  const unchanged=source.program.templates.filter((t:any)=>stable(t)===stable(scene.program.templates.find((x:any)=>x.id===t.id))).length;
  save(join(folder,'patch.json'),result.value);save(join(folder,'scene.json'),scene);save(join(folder,'receipt.json'),{method:'evidence-led-v1',sourceJobId:sourceJob.id,sourceDigest,sceneDigest:digest(JSON.stringify(scene)),unchangedTemplates:unchanged,changedTemplates:source.program.templates.length-unchanged,modelReceipt:result.receipt,quality:'not-assessed'});

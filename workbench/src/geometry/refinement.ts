@@ -153,6 +153,17 @@ ${VISIBILITY_PROMPT}
 ${CAMERA_CHANGE_PROMPT}
 ${GEOMETRY_RULES}`;
 
+/** Prompt rule for every quality refinement of a voxel-detail-v1 scene. */
+export const VOXEL_DETAIL_REFINE_GUIDANCE='\n本任务采用voxel-detail-v1：保持已接受原生灰模种子的完整有序操作、ID和姿态，以及共同格距、模板/实例/实体身份、实例姿态、材料ID集合、关系、开口与接触约束。只可在原模板冻结bounds及分配预算内修正新增细节、材质属性/表面、光照和相机；不得增加模板或实例、改种子、封堵任何原来明确通透的开口采样或侵入其他实体格。修正候选预览和最终合并都会复核这些冻结约束。';
+/** The sealed detail basis of a voxel-detail-v1 source; every refinement path holds candidates to it before preview. */
+export function voxelDetailGuard(job:any,sourceId:string,textures:Record<string,any>){
+ const file=join(runDir(sourceId),'generation/voxel-detail-basis.json');
+ if(job.voxelDetailPolicy!==VOXEL_DETAIL_POLICY)return null;
+ if(!existsSync(file))throw Error('VOXEL_DETAIL_BASIS_MISSING：质量修正缺少已封存精修基线，停止模型调用，不能从当前候选反推或放宽原约束');
+ const basis=validateVoxelDetailBasis(read(file));
+ return {basis,identity:digest(stable(basis)),assert:(value:any)=>assertVoxelDetailScene(value,basis,textures)};
+}
+
 export async function refineScene(job:any,plan:any,images:{path:string;mime:string}[],dir:string,signal:AbortSignal,from?:{dir:string;jobId:string;version:any;iteration:number}){
  const sourceDir=from?.dir??runDir(job.reuseSceneFrom),sourceId=from?.jobId??job.reuseSceneFrom;
  const detailBasisFile=join(runDir(sourceId),'generation/voxel-detail-basis.json');
@@ -202,7 +213,7 @@ export async function refineScene(job:any,plan:any,images:{path:string;mime:stri
  event(job,'refinement','将 '+repairGoals.goals.length+' 个修复目标分为 '+batches.length+' 个独立调用；仅传入选中部件，复用其余场景');
  const responses=await Promise.allSettled(batches.map(async batch=>{
   const batchFolder=join(folder,batch.id);mkdirSync(batchFolder,{recursive:true});
- const request:any={role:'scene-refine',schemaContext:{repairComplexity:job.complexity,voxelLattice:source.voxelLattice},modelSettings:job.modelSettings,signal,maxTokens:16000,reservedCalls:1,images:inputImages,system:REFINEMENT_PROMPT+(source.voxelLattice?'\n'+voxelGeometryGuidance(source.voxelLattice):'')+(detailBasis?'\n本任务采用voxel-detail-v1：保持已接受原生灰模种子的完整有序操作、ID和姿态，以及共同格距、模板/实例/实体身份、实例姿态、材料ID集合、关系、开口与接触约束。只可在原模板冻结bounds及分配预算内修正新增细节、材质属性/表面、光照和相机；不得增加模板或实例、改种子、封堵任何原来明确通透的开口采样或侵入其他实体格。修正候选预览和最终合并都会复核这些冻结约束。':'')+'\n本轮必须落实repairGoals所选目标，只改其中允许的已有模板、实例、材质、机位或光照；每个目标必须有对应的真实数据变化。保留未选对象。目标范围不等于已经修好，最终由独立画面验收判断。\n'+FOCUSED_REFINEMENT_PROMPT,text:JSON.stringify(repairExecutionContext({requirementFeedback,surfaceBindings:surfaceBindings(source),repairReflection:reflection,textureEvidence:textureEvidence.context,textureEvidenceRule:goalInput.textureEvidenceRule,repairBudget:editBudget,geometryBudget,originalPrompt:job.prompt,deliveryStandard:job.policy?.deliveryStandard??'strict',scoring:scoringGuidance(job.policy),previousRepairs,repairGoals:batch,repairFocus:focus,frozenPlan:plan,referenceImages:images.length,actualFrameNames:frameNames,geometryVisibility:visibility.context,cameraChangeFeedback,review,openingDiagnostics,budget:complexityPolicy(job.complexity,images.length>0&&Array.isArray((source as any).observedBindings)),sourceScene:repairSourceContext(source,anchors,batch),reusableTextures:reusableTextureEvidence.context}))};
+ const request:any={role:'scene-refine',schemaContext:{repairComplexity:job.complexity,voxelLattice:source.voxelLattice},modelSettings:job.modelSettings,signal,maxTokens:16000,reservedCalls:1,images:inputImages,system:REFINEMENT_PROMPT+(source.voxelLattice?'\n'+voxelGeometryGuidance(source.voxelLattice):'')+(detailBasis?VOXEL_DETAIL_REFINE_GUIDANCE:'')+'\n本轮必须落实repairGoals所选目标，只改其中允许的已有模板、实例、材质、机位或光照；每个目标必须有对应的真实数据变化。保留未选对象。目标范围不等于已经修好，最终由独立画面验收判断。\n'+FOCUSED_REFINEMENT_PROMPT,text:JSON.stringify(repairExecutionContext({requirementFeedback,surfaceBindings:surfaceBindings(source),repairReflection:reflection,textureEvidence:textureEvidence.context,textureEvidenceRule:goalInput.textureEvidenceRule,repairBudget:editBudget,geometryBudget,originalPrompt:job.prompt,deliveryStandard:job.policy?.deliveryStandard??'strict',scoring:scoringGuidance(job.policy),previousRepairs,repairGoals:batch,repairFocus:focus,frozenPlan:plan,referenceImages:images.length,actualFrameNames:frameNames,geometryVisibility:visibility.context,cameraChangeFeedback,review,openingDiagnostics,budget:complexityPolicy(job.complexity,images.length>0&&Array.isArray((source as any).observedBindings)),sourceScene:repairSourceContext(source,anchors,batch),reusableTextures:reusableTextureEvidence.context}))};
   const validateBase=(v:any)=>{if(batch.goals.every(g=>['surface','lighting'].includes(g.kind))&&(v.parts.length||v.removeParts.length||v.addTemplates.length||v.instances.length||v.screenTargets?.length||v.removeInstances.length||v.cameras.length))throw Error('表面修复只允许surfaceUpdates、材质、纹理和光照，不得重写几何或机位');const next=applyRefinement(source,v,plan,images.length,job.complexity);resolveTextureReuse(next,refs);assertDetail(next);assertPlannedRepair(source,next,batch);if(focus)assertRefinementFocus(source,next,focus);
    // 新裁切片段在后续提取步骤检查像素；此处只编译几何，避免用伪造纹理预填充。
    const compiled=compileGeometryProgram({...next.program,materials:next.program.materials.map(m=>({...m,textureId:null,surfaceDetail:null}))});assertCameraPreflight(next,compiled);return v;};
