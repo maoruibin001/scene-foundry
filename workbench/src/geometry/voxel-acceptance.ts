@@ -4,6 +4,14 @@ export const VOXEL_ACCEPTANCE='voxel-objective-acceptance-v1';
 /** Only new voxel jobs created under the policy accept a graybox on objective evidence; historical and ordinary jobs keep the judge threshold. */
 export function voxelAcceptanceRule(job:any){return job?.voxelAcceptancePolicy===VOXEL_ACCEPTANCE;}
 /**
+ * Ordinary jobs created under this policy accept a graybox on the same objective evidence. Replaying the saved rounds of 2026-10-20
+ * (canal c846b566/2e6b7d9e/5d427056, workshop ea8eda57/8aa4e73e): the 3.5 judge threshold passed 2 of 16 rounds; the objective checks
+ * passed 11, rejected every round with a critical landmark invisible or a critical relation missing or under 2.5, and voxel village
+ * 95942de1, admitted at a judge 3.0, scored a composite 78.6.
+ */
+export const ORDINARY_ACCEPTANCE='ordinary-objective-acceptance-v1';
+export function objectiveGateRule(job:any,space:any){return (voxelAcceptanceRule(job)&&!!space?.voxelLattice)||job?.grayboxAcceptancePolicy===ORDINARY_ACCEPTANCE;}
+/**
  * Calibrated on 26 voxel graybox rounds (tower, temple, mecha; 2026-10-16/17). The judge scored every correct layout 2.8–3.2 and stopped
  * on the 3.5 proportion threshold, while the one mirrored mecha scored 2.3–2.4. Measured landmark extents separate them without the judge:
  * centre-x error .030–.058 against .383–.406 when mirrored; weighted critical edge residual .037–.086 against .243–.261; complete-extent

@@ -1,7 +1,7 @@
 import {test,expect} from 'bun:test';
 import {readFileSync} from 'node:fs';
 import {basename,join} from 'node:path';
-import {objectiveAcceptance,objectiveBlockers,objectiveMarginal,objectiveProgressScore,objectiveRepairFeedback,voxelAcceptanceRule,withObjectiveAcceptance,VOXEL_ACCEPTANCE,OBJECTIVE_PROGRESS} from './voxel-acceptance';
+import {objectiveAcceptance,objectiveBlockers,objectiveGateRule,objectiveMarginal,objectiveProgressScore,objectiveRepairFeedback,voxelAcceptanceRule,withObjectiveAcceptance,ORDINARY_ACCEPTANCE,VOXEL_ACCEPTANCE,OBJECTIVE_PROGRESS} from './voxel-acceptance';
 import {scoreProgress,IMPROVEMENT_LIMITS} from '../improvement-governance';
 import {selectSpatialCandidate} from './blockout-selection';
 import {recordedRun} from '../recorded-runs';
@@ -155,4 +155,13 @@ test.skipIf(!recordedRun('c086a0b9'))('recorded cyberpunk street: with facade ro
  const tiered={...s,spatialRelations:s.spatialRelations.map((r:any)=>({...r,scale:detail.has(r.id)?'detail':'layout'}))};
  const o=withObjectiveAcceptance(g,tiered,c,obs).objective;
  expect(o.passed).toBe(true);expect(o.deferredDetail.relations.map((r:any)=>r.id)).toContain('rel_left_balcony_openings');
+});
+
+test('ordinary jobs under the ordinary policy use the objective gate; voxel still needs its lattice; older jobs keep the judge threshold',()=>{
+ const ordinary={spatialRelations:[]},voxel={voxelLattice:{version:'voxel-lattice-v1'},spatialRelations:[]};
+ expect(objectiveGateRule({grayboxAcceptancePolicy:ORDINARY_ACCEPTANCE},ordinary)).toBe(true);
+ expect(objectiveGateRule({grayboxAcceptancePolicy:null},ordinary)).toBe(false);
+ expect(objectiveGateRule({},ordinary)).toBe(false);
+ expect(objectiveGateRule({voxelAcceptancePolicy:VOXEL_ACCEPTANCE},voxel)).toBe(true);
+ expect(objectiveGateRule({voxelAcceptancePolicy:VOXEL_ACCEPTANCE},ordinary)).toBe(false);
 });
