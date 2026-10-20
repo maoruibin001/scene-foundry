@@ -411,3 +411,14 @@ test('joint-fit-net-v1 只在当前契约与策略任务开放；审计契约区
   const old=createGrayboxSpacePreview({...f.options,folder:join(f.folder,'v14'),contractVersion:'graybox-space-preview-v14',jointFitNet:true});expect(old.kit.instructions).not.toContain('joint-fit-net-v1');
  }finally{f.close();}
 });
+
+test('template-bounds-group-parts-v1 只进入当前预览契约：说明给出每模板额度，契约摘要区分，旧契约不放宽',async()=>{
+ const f=fixture();try{
+  const options={...f.options,contractVersion:GRAYBOX_SPACE_PREVIEW,templateBounds:true,groupParts:16,schema:grayboxSpaceRepairSchema({templateBounds:true,groupParts:16})};
+  const t=createGrayboxSpacePreview(options);expect(t.kit.instructions).toContain('template-bounds-group-parts-v1');expect(t.kit.instructions).toContain('groupPartLimits');
+  expect((await t.kit.call('measure_graybox_space',f.patch())).isError).not.toBe(true);
+  expect(()=>createGrayboxSpacePreview({...options,groupParts:undefined})).toThrow('契约');
+  const plain=createGrayboxSpacePreview({...options,folder:join(f.folder,'plain'),groupParts:undefined});expect(plain.kit.instructions).not.toContain('groupPartLimits');
+  const old=createGrayboxSpacePreview({...options,folder:join(f.folder,'v14'),contractVersion:'graybox-space-preview-v14'});expect(old.kit.instructions).not.toContain('groupPartLimits');
+ }finally{f.close();}
+});

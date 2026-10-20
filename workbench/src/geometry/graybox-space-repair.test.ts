@@ -1,6 +1,7 @@
 import {test,expect} from 'bun:test';
 import {applyGrayboxSpaceRepair,grayboxSpaceRepairSchema,GRAYBOX_SPACE_REPAIR} from './graybox-space-repair';
 import {modelSchema} from '../model-schema';
+import {GRAYBOX_REPAIR_POLICY,GRAYBOX_GROUP_PARTS_POLICY,GRAYBOX_GROUP_PART_LIMIT,grayboxRepairPolicyFor,grayboxGroupParts,templateBoundsRule} from './graybox-repair-policy';
 import {validateVoxelSpace} from '../voxel/scene-lattice';
 const space=()=>({version:'scene-space-v1',program:{templates:[{id:'tree',label:'植物',description:'原始轮廓',origin:'根部原点',maxParts:32,bounds:{min:[-1,-1,0],max:[1,1,3]}}],instances:[{id:'front',label:'近景',template:'tree',position:[1,2,0],rotation:[0,0,0],scale:[1,1,1],requirementIds:['R1']},{id:'back',label:'远景',template:'tree',position:[1,5,0],rotation:[0,0,0],scale:[1,1,1],requirementIds:['R1']}]},cameras:[{name:'参考',referenceIndex:1,position:[0,-2,1.5],target:[0,5,1.5],fov:1}],entities:[{instanceId:'front',category:'植物',role:'subject'},{instanceId:'back',category:'植物',role:'context'}],observedBindings:[{landmarkId:'plant',instanceIds:['front','back']}],spatialRelations:[{id:'REL1',critical:true,description:'两侧围合',instanceIds:['front','back']}],spatialOpenings:[],spatialContacts:[],assumptions:['不可见背面推断']});
 const patch=()=>({version:GRAYBOX_SPACE_REPAIR,reason:'原图两侧植物夹住步道，实际近景位置偏右；依据实例编号向路径移动。',instances:[{id:'front',position:[.5,2,0],rotation:[0,0,0],scale:[1,1,1]}],templates:[],parts:[],cameras:[],contacts:[],checks:[{relationIds:['REL1'],evidence:'实际参考机位近景植物与步道之间有空隙',expectedChange:'下一轮参考机位的通道边界由植物衔接'}]});
@@ -71,4 +72,17 @@ test('体素格网任务同样可扩展模板bounds：格网上的扩展被接�
  expect(next.value.program.templates[0].bounds).toEqual(grow.bounds);expect(next.value.voxelLattice).toEqual(voxel().voxelLattice);
  expect(()=>applyGrayboxSpaceRepair(voxel(),{...patch(),instances:[],templates:[{...grow,bounds:{min:[-1,-1,0],max:[1,1.25,5]}}]},check,on)).toThrow('不在共同格网上');
  expect(()=>applyGrayboxSpaceRepair(voxel(),{...patch(),instances:[],templates:[grow]},check)).toThrow('额度');
+});
+test('普通场景诊断续接采用按简报放宽的整组部件策略；体素、普通续接与新任务保持冻结策略',()=>{
+ const groups=(o:any)=>grayboxSpaceRepairSchema(o).properties.groups.items.properties.parts.maxItems;
+ expect(groups({templateBounds:true})).toBe(8);expect(groups({templateBounds:true,groupParts:GRAYBOX_GROUP_PART_LIMIT})).toBe(16);
+ expect(modelSchema('scene-space',{grayboxRepair:true,templateBounds:true,groupParts:16})).toEqual(grayboxSpaceRepairSchema({templateBounds:true,groupParts:16}));
+ const old={grayboxRepairPolicy:GRAYBOX_REPAIR_POLICY};
+ expect(grayboxRepairPolicyFor('general',true,old)).toBe(GRAYBOX_GROUP_PARTS_POLICY);
+ expect(grayboxRepairPolicyFor('voxel',true,old)).toBe(GRAYBOX_REPAIR_POLICY);
+ expect(grayboxRepairPolicyFor('general',false,old)).toBe(GRAYBOX_REPAIR_POLICY);
+ expect(grayboxRepairPolicyFor('general',false,{})).toBeNull();
+ expect(grayboxRepairPolicyFor('general',false,null)).toBe(GRAYBOX_REPAIR_POLICY);
+ expect([grayboxGroupParts(old),grayboxGroupParts({grayboxRepairPolicy:GRAYBOX_GROUP_PARTS_POLICY})]).toEqual([8,16]);
+ expect(templateBoundsRule({grayboxRepairPolicy:GRAYBOX_GROUP_PARTS_POLICY})).toBe(true);
 });

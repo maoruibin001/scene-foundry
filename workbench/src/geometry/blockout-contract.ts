@@ -14,9 +14,9 @@ export function blockoutTemplateInput(space:any,brief:any){const ids=new Set(spa
 export function blockoutSharedInterfaces(space:any){return space.program.templates.map(brief=>({templateId:brief.id,spatialContacts:assetContacts(space,brief.id)})).filter(item=>item.spatialContacts.length);}
 const types=new Set(['box','tube','lathe','extrusion','cushion','branchCrown','grid','voxelVolume']);
 /** Wire contract for composition only. Finished assets keep the full geometry contract. */
-export function compactBlockoutSchema(options:{voxel?:boolean;voxelLattice?:VoxelLattice}={}){
+export function compactBlockoutSchema(options:{voxel?:boolean;voxelLattice?:VoxelLattice;partLimit?:number}={}){
  const schema:any=structuredClone(geometryProgramSchema(undefined,options).properties.templates),part=schema.items.properties.parts.items;
- schema.items.properties.parts.minItems=1;schema.items.properties.parts.maxItems=BLOCKOUT_PART_LIMIT;
+ schema.items.properties.parts.minItems=1;schema.items.properties.parts.maxItems=options.partLimit??BLOCKOUT_PART_LIMIT;
  for(const k of ['material','uvProjection','uvTransform','smoothAngle','uvScale'])delete part.properties[k];
  part.required=Object.keys(part.properties);
  part.properties.id={type:'string',pattern:BLOCKOUT_PART_ID.source};
@@ -34,10 +34,11 @@ export function compactBlockoutSchema(options:{voxel?:boolean;voxelLattice?:Voxe
  return {type:'object',properties:{templates:schema},required:['templates'],additionalProperties:false};
 }
 
-export function assertBlockoutGeneration(value:any){
+/** partLimit is raised only for policy group rebuilds; first-pass blockouts keep the shared cap. */
+export function assertBlockoutGeneration(value:any,partLimit=BLOCKOUT_PART_LIMIT){
  if(!Array.isArray(value?.templates))throw Error('灰模需要templates数组');
  for(const t of value.templates){
-  if(!Array.isArray(t.parts)||!t.parts.length||t.parts.length>BLOCKOUT_PART_LIMIT)throw Error(`灰模每模板仅允许1–${BLOCKOUT_PART_LIMIT}个轮廓部件；不制作逐叶或逐花细节`);
+  if(!Array.isArray(t.parts)||!t.parts.length||t.parts.length>partLimit)throw Error(`灰模每模板仅允许1–${partLimit}个轮廓部件；不制作逐叶或逐花细节`);
   const ids=t.parts.map((p:any)=>p?.id),bad=ids.filter((id:any,i:number)=>typeof id!=='string'||!BLOCKOUT_PART_ID.test(id)||ids.indexOf(id)!==i);
   if(bad.length)throw Error(`灰模模板 ${t.id} 部件 ID 无效或重复：${bad.map(String).join('、')}；部件 ID 须以英文字母开头、仅含英文字母数字下划线或连字符且模板内唯一，中文只写在说明中`);
   for(const p of t.parts){
@@ -59,8 +60,8 @@ export function assertBlockoutGeneration(value:any){
  return value;
 }
 
-export function expandBlockoutGeometry(value:any){
- assertBlockoutGeneration(value);
+export function expandBlockoutGeometry(value:any,partLimit=BLOCKOUT_PART_LIMIT){
+ assertBlockoutGeneration(value,partLimit);
  return {...value,templates:value.templates.map((t:any)=>({...t,parts:t.parts.map((p:any)=>({...p,material:'blockout',uvScale:[1,1],uvProjection:null,uvTransform:null,smoothAngle:null}))}))};
 }
 

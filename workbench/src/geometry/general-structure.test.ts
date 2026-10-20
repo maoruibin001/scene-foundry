@@ -2,6 +2,8 @@ import {test,expect} from 'bun:test';
 import {rmSync} from 'node:fs';
 import {join} from 'node:path';
 import {applyGrayboxLocalParts} from './graybox-local-parts';
+import {GRAYBOX_GROUP_PART_LIMIT,groupPartLimit} from './graybox-repair-policy';
+import {BLOCKOUT_PART_LIMIT} from './blockout-contract';
 import {compileGeometryProgram} from './program';
 import {assetGeometryBasis,assetGeometryBasisMatches} from './asset-geometry-basis';
 import {assetInput} from './asset-input';
@@ -93,4 +95,13 @@ test('结构依据文件缺失或被修改时不注册为可恢复资产，原�
   const changed=structuredClone(basis);changed.template.parts[0].position[0]=.1;save(basisFile,changed);
   expect(()=>f.store.register(f.registration)).toThrow('结构来源');expect(f.store.verify(snapshot.id).id).toBe(snapshot.id);
  }finally{rmSync(f.root,{recursive:true,force:true});}
+});
+test('template-bounds-group-parts-v1 按冻结简报放宽整组重建部件数：不少于8、不超过16与maxParts；默认仍为8',()=>{
+ const f=generalStructureFixture(),stack=(n:number)=>({templateId:'frame',parts:Array.from({length:n},(_,i)=>box('tier'+i,[.2,.2,.2],[-.8+i*.12,0,.2+i*.15]))});
+ const wide=structuredClone(f.space);wide.program.templates.find((t:any)=>t.id==='frame').maxParts=12;
+ expect(()=>applyGrayboxLocalParts(f.source,wide,[],[stack(9)])).toThrow('1–8');
+ expect(applyGrayboxLocalParts(f.source,wide,[],[stack(12)],true,GRAYBOX_GROUP_PART_LIMIT).templates.find((t:any)=>t.id==='frame').parts).toHaveLength(12);
+ expect(()=>applyGrayboxLocalParts(f.source,wide,[],[stack(13)],true,GRAYBOX_GROUP_PART_LIMIT)).toThrow('1–12');
+ expect(()=>applyGrayboxLocalParts(f.source,f.space,[],[stack(9)],true,GRAYBOX_GROUP_PART_LIMIT)).toThrow('1–8');
+ expect([groupPartLimit({maxParts:4},GRAYBOX_GROUP_PART_LIMIT),groupPartLimit({maxParts:22},GRAYBOX_GROUP_PART_LIMIT),groupPartLimit({maxParts:22},BLOCKOUT_PART_LIMIT)]).toEqual([8,16,8]);
 });

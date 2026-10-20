@@ -4,7 +4,8 @@ import {validateAsset} from './layout';
 import {stable} from '../validated-cache';
 import {validateScene} from './scene-contract';
 import {spatialInstances} from './spatial-order';
-import {compactBlockoutSchema,assertBlockoutGeneration,expandBlockoutGeometry} from './blockout-contract';
+import {compactBlockoutSchema,assertBlockoutGeneration,expandBlockoutGeometry,BLOCKOUT_PART_LIMIT} from './blockout-contract';
+import {groupPartLimit} from './graybox-repair-policy';
 
 export const GRAYBOX_PART_EDITS=24;
 const fields=['templateId','partId','position','rotation','scale'];
@@ -16,8 +17,8 @@ export function grayboxPartEditSchema(options:{voxel?:boolean;voxelLattice?:Voxe
  return {type:'array',maxItems:GRAYBOX_PART_EDITS,items:{type:'object',properties:{templateId:p.id,partId:p.id,position:p.position,rotation:p.rotation,scale:p.scale,shape:{anyOf:[...shape.anyOf,{type:'null'}]}},required:fields,additionalProperties:false}};
 }
 
-/** Existing identities, materials and budgets stay fixed; a few coarse contours may be replaced. */
-export function applyGrayboxLocalParts(source:any,space:any,edits:any[],groups:any[]=[],generalGroups=true){
+/** Existing identities, materials and budgets stay fixed; a few coarse contours may be replaced. groupParts above the blockout cap sizes rebuilds by each brief. */
+export function applyGrayboxLocalParts(source:any,space:any,edits:any[],groups:any[]=[],generalGroups=true,groupParts=BLOCKOUT_PART_LIMIT){
  fail(Array.isArray(edits)&&edits.length<=GRAYBOX_PART_EDITS,'部件编辑额度无效');
  const templates=structuredClone(source.program.templates),seen=new Set(),changed:string[]=[];
  fail(Array.isArray(groups)&&groups.length<=3,'组群重建最多3个已有模板');
@@ -28,7 +29,7 @@ export function applyGrayboxLocalParts(source:any,space:any,edits:any[],groups:a
   const t=templates.find(t=>t.id===group.templateId);fail(t&&space.program.templates.some(t=>t.id===group.templateId),'组群只能重建已有模板');
   fail(!edits.some(e=>e.templateId===group.templateId),'组群与局部部件不能重复修改同一模板');
   if(!generalGroups)fail(group.parts.some(p=>p.shape?.type==='branchCrown'),'历史组群重建须有连接式branchCrown结构依据');
-  const expanded=expandBlockoutGeometry({templates:[{id:group.templateId,parts:group.parts}]}).templates[0];
+  const expanded=expandBlockoutGeometry({templates:[{id:group.templateId,parts:group.parts}]},groupPartLimit(space.program.templates.find(t=>t.id===group.templateId),groupParts)).templates[0];
   if(stable(t.parts)!==stable(expanded.parts)){t.parts=expanded.parts;changed.push(group.templateId+'/*');}
  }
  fail(new Set(edits.map(e=>e?.templateId)).size<=4,'最多调整4个已有模板');
@@ -58,13 +59,13 @@ export function applyGrayboxLocalParts(source:any,space:any,edits:any[],groups:a
 }
 
 /** The normal gate must use exactly the reviewed geometry rather than regenerating old proxies. */
-export function assertGrayboxPartHandoff(source:any,space:any,patch:any,scene:any){
- const expected=applyGrayboxLocalParts(source,space,patch.parts,patch.groups??[],['graybox-space-repair-v5','graybox-space-repair-v6','graybox-space-repair-v7','graybox-space-repair-v8'].includes(patch.version));
+export function assertGrayboxPartHandoff(source:any,space:any,patch:any,scene:any,groupParts=BLOCKOUT_PART_LIMIT){
+ const expected=applyGrayboxLocalParts(source,space,patch.parts,patch.groups??[],['graybox-space-repair-v5','graybox-space-repair-v6','graybox-space-repair-v7','graybox-space-repair-v8'].includes(patch.version),groupParts);
  if(stable(scene.program.templates)!==stable(expected.templates)||stable(scene.program.materials)!==stable(source.program.materials))throw Error('GRAYBOX_PREVIEW_GEOMETRY_FROZEN：实际几何必须与已有部件补丁完全一致');
  return expected;
 }
 
-export function buildGrayboxPartScene(source:any,space:any,patch:any,plan:any,referenceCount:number){
- const local=applyGrayboxLocalParts(source,space,patch.parts,patch.groups??[],['graybox-space-repair-v5','graybox-space-repair-v6','graybox-space-repair-v7','graybox-space-repair-v8'].includes(patch.version));
+export function buildGrayboxPartScene(source:any,space:any,patch:any,plan:any,referenceCount:number,groupParts=BLOCKOUT_PART_LIMIT){
+ const local=applyGrayboxLocalParts(source,space,patch.parts,patch.groups??[],['graybox-space-repair-v5','graybox-space-repair-v6','graybox-space-repair-v7','graybox-space-repair-v8'].includes(patch.version),groupParts);
  return validateScene({...source,cameras:space.cameras,spatialContacts:space.spatialContacts,program:{...source.program,templates:local.templates,instances:spatialInstances(space.program.instances)}},plan,referenceCount);
 }
