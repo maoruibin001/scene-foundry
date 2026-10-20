@@ -68,3 +68,12 @@ test('验收结构最低成本提前满足详细资产预算，旧非枝冠不�
  const tooMany={program:{...program(),templates:[{id:'tree',parts:[part(shape({stems:2,leafPairs:2})),{...part(shape({stems:2,leafPairs:2})),id:'second'}]}]}};
  layout.program.templates[0].maxParts=1;expect(()=>assertProceduralBudget(tooMany,layout)).toThrow('部件');
 });
+
+test('one budget error names every over-budget crown template so a single correction can fix them all',async()=>{
+ // Canal ecb030b1: the correction fixed the named tpl_willow, then failed on tpl_bank_plants.
+ const {assertProceduralBudget}=await import('./procedural-handoff');
+ const dense=shape({stems:16,leafPairs:20}),base=program(dense),scene={program:{...base,templates:[base.templates[0],{...base.templates[0],id:'plants'}],instances:[...base.instances,{...base.instances[0],id:'plants1',template:'plants'}]}};
+ const layout:any={program:{templates:[{id:'tree',maxParts:8},{id:'plants',maxParts:8},{id:'other',maxParts:64}],instances:[...scene.program.instances,...Array.from({length:3},(_,n)=>({id:'other'+n,template:'other'}))]}};
+ let message='';try{assertProceduralBudget(scene,layout);}catch(e){message=String(e);}
+ expect(message).toContain('tree 保留枝冠');expect(message).toContain('plants 保留枝冠');
+});

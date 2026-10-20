@@ -16,8 +16,10 @@ export function assertProceduralBudget(scene:any,layout:any){
   const budget=assetTriangleBudget(layout,brief),maximumParts=assetPartCapacity(layout,brief).maxParts;
   const minimumTriangles=seeds.reduce((n:number,p:any)=>n+shapeTriangles(p.shape.type==='branchCrown'?{...p.shape,segments:2}:p.shape),0);
   const row={templateId:t.id,minimumTriangles,maximumTriangles:budget.maximum,minimumParts:seeds.length,maximumParts,instances:budget.instances};rows.push(row);
-  if(minimumTriangles>budget.maximum||seeds.length>maximumParts)throw Error('PROCEDURAL_BUDGET_INFEASIBLE：'+t.id+' 保留枝冠最低需 '+minimumTriangles+' 三角形/'+seeds.length+' 部件，详细资产额度 '+budget.maximum+' 三角形/'+maximumParts+' 部件，实例数 '+budget.instances+'。请在空间验收前减少枝叶结构密度或冠组数量并重新预览；不能改变既有总预算，也不能验收后丢弃结构。');
  }
+ // Name every over-budget template at once: canal ecb030b1's only correction fixed the named tpl_willow, then failed on tpl_bank_plants.
+ const over=rows.filter(r=>r.minimumTriangles>r.maximumTriangles||r.minimumParts>r.maximumParts);
+ if(over.length)throw Error('PROCEDURAL_BUDGET_INFEASIBLE：'+over.map(r=>r.templateId+' 保留枝冠最低需 '+r.minimumTriangles+' 三角形/'+r.minimumParts+' 部件，详细资产额度 '+r.maximumTriangles+' 三角形/'+r.maximumParts+' 部件，实例数 '+r.instances).join('；')+'。请在空间验收前减少枝叶结构密度或冠组数量并重新预览；不能改变既有总预算，也不能验收后丢弃结构。');
  return rows;
 }
 const structure=(s:any)=>{validateCrown(s);const {segments,layer,...rest}=s;return rest;};
