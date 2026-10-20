@@ -23,7 +23,9 @@ export function reserveValidationRound(job:any,source:any,file=process.env.PIPEL
   const state=readBoundary(file);
   const previous=state.rounds.find((r:any)=>r.jobId===job.id);if(previous)return previous;
   if(state.unlimited!==true&&state.rounds.length>=state.maxRounds)throw Error(`VALIDATION_ROUND_LIMIT：已达到授权的 ${state.maxRounds} 轮验证上限，失败与中断也计入`);
-  const root=source?.retryRoot??source?.id??job.retryRoot??job.id;
+  // A source this batch already admitted keeps the root its row recorded; refinements start a new retry chain but not a new input.
+  const sourceRow=source?state.rounds.find((r:any)=>r.jobId===source.id&&r.batchId===state.id):null;
+  const root=sourceRow?.executionRoot??source?.retryRoot??source?.id??job.retryRoot??job.id;
   const fresh=source==null&&root===job.id&&job.validationKind==='generation';
   if(!state.executionRoots.includes(root)&&!(state.allowFreshInputs===true&&fresh))throw Error('VALIDATION_INPUT_NOT_AUTHORIZED：该输入不在本批验收范围');
   const mode=state.generationMode??'first-pass',repairs=mode==='qualified'?null:mode==='bounded'?2:0;

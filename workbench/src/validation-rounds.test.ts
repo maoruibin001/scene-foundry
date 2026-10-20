@@ -17,6 +17,13 @@ test('no unbounded iteration, unapproved input or route is admitted',()=>fixture
  expect(()=>reserveValidationRound({...job('a'),modelSettings:{model:'other'}},{id:'root'},f)).toThrow('VALIDATION_ROUTE_MISMATCH');
  expect(JSON.parse(readFileSync(f,'utf8')).rounds).toEqual([]);
 }));
+test('a refinement of an admitted job inherits its recorded root; rows from another batch or unknown jobs do not',()=>fixture(f=>{
+ const first=reserveValidationRound(job('a'),{id:'root'},f);expect(first.executionRoot).toBe('root');
+ const refined=reserveValidationRound(job('b'),{id:'a',retryRoot:'a'},f);expect(refined).toMatchObject({index:2,sourceJobId:'a',executionRoot:'root'});
+ const state=JSON.parse(readFileSync(f,'utf8'));state.rounds.push({...state.rounds[0],batchId:'other',jobId:'foreign',executionRoot:'root'});state.maxRounds=5;writeFileSync(f,JSON.stringify(state));
+ expect(()=>reserveValidationRound(job('c'),{id:'foreign',retryRoot:'foreign'},f)).toThrow('VALIDATION_INPUT_NOT_AUTHORIZED');
+ expect(()=>reserveValidationRound(job('c'),{id:'stranger',retryRoot:'stranger'},f)).toThrow('VALIDATION_INPUT_NOT_AUTHORIZED');
+}));
 test('missing or damaged configured ledger fails closed without resetting history',()=>fixture(f=>{
  for(const value of [{...seed,rounds:null},{...seed,maxRounds:0},{...seed,enabled:false}]){writeFileSync(f,JSON.stringify(value));expect(()=>reserveValidationRound(job('a'),{id:'root'},f)).toThrow('VALIDATION_BOUNDARY_INVALID');expect(JSON.parse(readFileSync(f,'utf8'))).toEqual(value);}
  rmSync(f);expect(()=>reserveValidationRound(job('a'),{id:'root'},f)).toThrow();
