@@ -36,6 +36,25 @@ test('normal fresh strict observation request carries its schema flag and compon
   expect(calls).toBe(1);expect(result).toEqual(value);expect(read(join(dir,'reference-observations.json'))).toEqual(value);
  }finally{rmSync(runDir(id),{recursive:true,force:true});}
 });
+test('a complex scene is told the observation caps up front and one correction names both overflows',async()=>{
+ // Village 9f1a916d: 59 landmarks / 28 relations, then a correction that fixed only the landmarks it was told about (50 / 28).
+ const sized=(landmarks:number,relations:number)=>{const v=normalizeObservationIndices(fixture(),2),base=v.landmarks[0];v.landmarks=Array.from({length:landmarks},(_,i)=>({...base,id:'l'+i}));v.relations=Array.from({length:relations},(_,i)=>({...v.relations[0],id:'r'+i,landmarkIds:['l'+i%landmarks]}));return v;};
+ const both=()=>validateObservations(sized(59,28),2);
+ expect(both).toThrow('观察记录需要 1–50 个不重复地标');expect(both).toThrow('关系观察须为 1–24 项');expect(both).toThrow('合并细小同类物为组地标');
+ expect(()=>validateObservations(sized(50,28),2)).toThrow('关系观察须为 1–24 项（当前 28 项）');
+ expect(validateObservations(sized(50,24),2).relations).toHaveLength(24);
+ expect(()=>validateObservations({...sized(1,1),relations:[]},2)).toThrow('关系观察须为 1–24 项');
+ const schema=observationSchema(2,{strictVoxel:true,relationScale:true});
+ expect([schema.properties.landmarks.minItems,schema.properties.landmarks.maxItems,schema.properties.relations.minItems,schema.properties.relations.maxItems]).toEqual([1,50,1,24]);
+ const id=randomUUID(),dir=join(runDir(id),'generation'),plan={requirements:[]};
+ try{
+  const job={id,prompt:'参考图复刻',images:[{id:'a'},{id:'b'}],modelSettings:{model:'fixture'}};
+  await observeReferences({job,plan,dir,images:[{},{}]},(async(input:any,_dir:any,validate:any)=>{
+   expect(input.system).toContain('landmarks 至多 50 项、relations 至多 24 项');
+   return {value:validate(sized(50,24)),receipt:{fixture:true}};
+  }) as any);
+ }finally{rmSync(runDir(id),{recursive:true,force:true});}
+});
 test('sceneKind voxel alone does not upgrade legacy observation requests',async()=>{
  const id=randomUUID(),dir=join(runDir(id),'generation'),plan={requirements:[]},value=normalizeObservationIndices(fixture(),2);
  try{
