@@ -1,3 +1,4 @@
+import {compileGeometryProgram} from './program';
 /** Z 向上。用真实三角形检查相机近裁面的包围球扫过整段路径，不用物体包围盒代替净空。 */
 type V=number[];
 const sub=(a:V,b:V)=>a.map((v,i)=>v-b[i]),add=(a:V,b:V,s=1)=>a.map((v,i)=>v+b[i]*s);
@@ -47,4 +48,10 @@ export function planCameraTour(camera:{position:V;target:V;fov:number},clear:Ret
   if(clear(start,end,radius).safe)return {...base,status:'ready',displacement,reason:null,blocker:null};
  }
  return {...base,status:'blocked',displacement:[0,0,0],reason:'参考机位周围没有足够净空的连续平移路径',blocker:null};
+}
+
+/** Tour of every camera of a graybox, on its own compiled geometry: the same check the runtime capture uses for continuous motion. */
+export function grayboxCameraTours(scene:any){
+ const clear=cameraClearance(compileGeometryProgram({...scene.program,materials:scene.program.materials.map((m:any)=>({...m,textureId:null,surfaceDetail:null}))}).meshes);
+ return scene.cameras.map((c:any)=>{const t=planCameraTour(c,clear);return {camera:c.name,status:t.status,reason:t.reason,blocker:t.blocker};});
 }

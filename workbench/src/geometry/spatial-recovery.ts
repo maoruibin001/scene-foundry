@@ -1,3 +1,4 @@
+import {grayboxCameraTours} from './camera-tour';
 import {cpSync,existsSync,mkdirSync,readFileSync,constants} from 'node:fs';
 import {join} from 'node:path';
 import {digest,read,runDir,save,saveJob,event,ROOT} from '../store';
@@ -24,7 +25,7 @@ export function sameSpatialRecovery(target:any,source:any,scene:any,savedScene:a
  if(!same(target.voxelAcceptancePolicy??null,source.voxelAcceptancePolicy??null)||!same(target.voxelRelationScalePolicy??null,source.voxelRelationScalePolicy??null))return false;
  const judged=spatialGate(gate.review,source.blockout.space,gate.frames,target.optimizationPolicy);
  // An objectively accepted voxel round is re-derived from its own saved composition measurement, never trusted from the row.
- return objectiveGateRule(target,source.blockout.space)?!!evidence.composition&&same(withObjectiveAcceptance(judged,source.blockout.space,evidence.composition,evidence.observation).objective,gate.objective)&&gate.objective.passed===true:judged.passed;
+ return objectiveGateRule(target,source.blockout.space)?!!evidence.composition&&same(withObjectiveAcceptance(judged,source.blockout.space,evidence.composition,evidence.observation,gate.objective?.checks?.some((c:any)=>c.id==='camera-clear')?grayboxCameraTours(grayScene):undefined).objective,gate.objective)&&gate.objective.passed===true:judged.passed;
 }
 export function recoverSpatialAcceptance(job:any,scene:any,plan:any,generationDir:string){
  if(!job.reuseSceneFrom||!job.recoverySourceJobId)return false;

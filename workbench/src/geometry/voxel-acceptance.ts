@@ -93,7 +93,7 @@ export function objectiveRepairFeedback(gate:any,composition:any){
   .map(r=>({landmarkId:r.landmarkId,referenceIndex:r.referenceIndex,instanceIds:r.instanceIds??[],extent:r.extent,expected:r.expected??null,pixels:r.pixels??0})):[];
  return {version:VOXEL_ACCEPTANCE,failed:failed.map((c:any)=>({id:c.id,detail:c.detail})),hiddenLandmarks:hidden};
 }
-const GEOMETRY=['evidence','not-mirrored','landmark-alignment','complete-extent'];
+const GEOMETRY=['evidence','not-mirrored','landmark-alignment','complete-extent','camera-clear'];
 /**
  * What still stands between a round and objective acceptance, in the gate's own terms: failed whole-layout checks first, then critical
  * relations missing or below the floor plus hidden critical landmarks. The judge's 3.0 row list is not the acceptance target under the
@@ -121,7 +121,13 @@ export function objectiveProgressScore(gate:any,space:any){
  return Math.round((100-25*b.geometry.length-5*b.items+gate.review.score/5)*100)/100;
 }
 /** The recorded row keeps the judge verdict beside the objective one; `passed` is the objective verdict every later stage reads. */
-export function withObjectiveAcceptance(gate:any,space:any,composition:any,observation:any){
- const objective=objectiveAcceptance(gate,space,composition,observation);
+/**
+ * Tours, when given, add a camera-clear check: workshop 4a7429b0 (2026-10-20) passed its graybox with an inferred front wall inside the
+ * reference camera's near plane, so the capture camera could not move (cameraMotion), and every surface-only repair preview was refused.
+ * Rounds recorded without tours re-derive unchanged.
+ */
+export function withObjectiveAcceptance(gate:any,space:any,composition:any,observation:any,tours?:any[]){
+ const base=objectiveAcceptance(gate,space,composition,observation),blocked=(tours??[]).filter((t:any)=>t.status!=='ready');
+ const objective=tours?{...base,passed:base.passed&&!blocked.length,checks:[...base.checks,{id:'camera-clear',passed:!blocked.length,detail:blocked.length?'机位无法连续平移：'+blocked.map((t:any)=>t.camera+'（'+(t.reason??'路径受阻')+(t.blocker?'，阻挡 '+t.blocker:'')+'）').join('、'):tours.length+' 个机位均有净空平移路径'}]}:base;
  return {...gate,passed:objective.passed,vlmPassed:gate.passed,objective};
 }

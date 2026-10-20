@@ -165,3 +165,14 @@ test('ordinary jobs under the ordinary policy use the objective gate; voxel stil
  expect(objectiveGateRule({voxelAcceptancePolicy:VOXEL_ACCEPTANCE},voxel)).toBe(true);
  expect(objectiveGateRule({voxelAcceptancePolicy:VOXEL_ACCEPTANCE},ordinary)).toBe(false);
 });
+
+test('a camera that cannot tour blocks objective acceptance and is a geometry blocker; rounds without tours re-derive unchanged',()=>{
+ const gate={review:{score:3.1,confidence:.9,relations:[]},threshold:{confidence:.6},passed:false},plain={spatialRelations:[]};
+ const without=withObjectiveAcceptance(gate,plain,null,null);
+ expect(without.objective.checks.some((c:any)=>c.id==='camera-clear')).toBe(false);
+ // Workshop 4a7429b0 round 1: the inferred front wall sat inside the reference camera's near plane.
+ const blocked=withObjectiveAcceptance(gate,plain,null,null,[{camera:'参考',status:'blocked',reason:'参考机位的近裁面空间已与场景表面相交',blocker:'I01__T01_inferred_front_wall__blockout'},{camera:'检查',status:'ready'}]);
+ const check=blocked.objective.checks.find((c:any)=>c.id==='camera-clear');
+ expect(check.passed).toBe(false);expect(check.detail).toContain('inferred_front_wall');expect(blocked.passed).toBe(false);
+ expect(withObjectiveAcceptance(gate,plain,null,null,[{camera:'参考',status:'ready'}]).objective.checks.find((c:any)=>c.id==='camera-clear').passed).toBe(true);
+});
