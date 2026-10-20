@@ -52,6 +52,10 @@ test('normal prepare exports authored emitter, no scene geometry or source data 
  try{const output=prepareGeometryProject(root,scene.program,{}, {id:'fixture',summary:'面光契约',scene,provenance:{test:true}});expect(output.triangles).toBe(12);expect(JSON.stringify(scene)).toBe(before);
  const text=readFileSync(join(root,'game/assets/world.pack.ts'),'utf8');expect(text).toContain('RectAreaLight,Name,Transform]');expect(text).toContain('areaLight0');expect(text).not.toContain('ctx.renderer');
  const evidence=JSON.parse(readFileSync(join(root,'area-light-export.json'),'utf8'));expect(evidence.authored).toEqual([area()]);expect(evidence.entities.areaLight0.components.RectAreaLight.width).toBe(.3);
+ // prepare binds area lights before camera output; the appended RectAreaLight symbol must not hide the camera's import.
+ scene.lighting.cameraOutput={antialias:'msaa',tonemap:'neutral',exposure:1.2};prepareGeometryProject(root,scene.program,{}, {id:'fixture',summary:'面光与显示',scene,provenance:{test:true}});
+ const both=readFileSync(join(root,'game/assets/world.pack.ts'),'utf8');expect(both).toContain('RectAreaLight,Name,Transform]');expect(both).toContain('antialias:ANTIALIAS_MSAA,tonemap:TONEMAP_NEUTRAL,exposure:1.2');expect(both.match(/import \{[^;\n]+ \} from '@forgeax\/engine\/render';/g)!.length).toBe(1);
+ delete scene.lighting.cameraOutput;
  for(const value of [undefined,null,[]]){scene.lighting.areaLights=value;prepareGeometryProject(root,scene.program,{}, {id:'fixture',summary:'旧数据',scene,provenance:{test:true}});expect(readFileSync(join(root,'game/assets/world.pack.ts'),'utf8')).not.toContain('RectAreaLight');expect(()=>readFileSync(join(root,'area-light-export.json'))).toThrow();}
  }finally{rmSync(root,{recursive:true,force:true});}
 });
