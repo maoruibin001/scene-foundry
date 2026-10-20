@@ -54,6 +54,7 @@ export function validateVoxelLandmarkCoverage(space:any,observation:any,options:
   fail(Array.isArray(ids)&&ids.length&&new Set(ids).size===ids.length&&ids.every(id=>typeof id==='string'&&instanceMap.has(id)),'地标缺少唯一的真实实例绑定：'+landmark.id);
   return {landmarkId:landmark.id,geometryScope:landmark.geometryScope as GeometryScope,critical:landmark.critical,instanceIds:[...ids] as string[],exclusiveInstanceIds:[] as string[]};
  });
+ const pose=(i:any)=>JSON.stringify([i.position,i.rotation??[0,0,0],i.scale??[1,1,1]]);
  const substantive=rows.filter(row=>row.geometryScope==='object'||row.geometryScope==='component');
  for(const row of substantive)row.exclusiveInstanceIds=row.instanceIds.filter(id=>!substantive.some(other=>other!==row&&other.instanceIds.includes(id)));
  const violations:VoxelCoverageViolation[]=[];
@@ -68,9 +69,17 @@ export function validateVoxelLandmarkCoverage(space:any,observation:any,options:
   for(const id of row.exclusiveInstanceIds){
    const instance=instanceMap.get(id),brief=templateMap.get(instance.template),bounds=brief?.bounds;
    if(!(brief&&Array.isArray(bounds?.min)&&Array.isArray(bounds?.max)&&bounds.min.length===3&&bounds.max.length===3&&bounds.min.every(Number.isFinite)&&bounds.max.every((n,k)=>Number.isFinite(n)&&n>bounds.min[k])))reasons.push('独立实例须有自己的模板及有限正跨度bounds：'+row.landmarkId+'/'+id);
+
+   // Village 6a3f6864 (2026-10-21): terrain_01 and paths_01 were exclusive instances of base_01's site_layer at its exact pose, so they
+   // owned no visible geometry and every graybox round reported them hidden.
   }
+  // Twins inside one landmark still draw its own geometry; only a landmark whose every exclusive instance coincides with another
+  // landmark's instance owns nothing visible.
+  const twinsOf=(id:string)=>{const instance=instanceMap.get(id);return instances.filter((o:any)=>!row.instanceIds.includes(o.id)&&o.template===instance.template&&pose(o)===pose(instance)).map((o:any)=>o.id);};
+  if(row.exclusiveInstanceIds.length&&row.exclusiveInstanceIds.every(id=>twinsOf(id).length))
+   reasons.push('独立实例与 '+[...new Set(row.exclusiveInstanceIds.flatMap(twinsOf))].join('、')+' 同模板同位姿，几何完全重合，不是可见的独立几何：'+row.landmarkId);
   if(reasons.length)violations.push({landmarkId:row.landmarkId,geometryScope:row.geometryScope,instanceIds:[...row.instanceIds],otherOwners:otherOwners(row,substantive),reason:reasons.join('；'),
-   requiredAction:row.geometryScope==='component'?'create-independent-component: 创建真实独立组件实例及其模板bounds，移除借用主体/其他组件的绑定；同类模板可复用，不得改冻结scope或删除地标':'create-independent-object: 创建或保留至少一个由该对象独立拥有的真实实例及其模板bounds；同类模板可复用，不得改冻结scope或删除地标'});
+   requiredAction:row.geometryScope==='component'?'create-independent-component: 创建真实独立组件实例及其模板bounds，移除借用主体/其他组件的绑定；同类模板可复用但须放在原图对应的位置，不能与其他实例同位姿重合；不得改冻结scope或删除地标':'create-independent-object: 创建或保留至少一个由该对象独立拥有的真实实例及其模板bounds；同类模板可复用但须放在原图对应的位置，不能与其他实例同位姿重合；不得改冻结scope或删除地标'});
  }
  for(const row of rows.filter(row=>row.critical&&row.geometryScope==='group')){
   const aliases=rows.filter(other=>other!==row&&other.geometryScope!=='void'&&key(other.instanceIds)===key(row.instanceIds));

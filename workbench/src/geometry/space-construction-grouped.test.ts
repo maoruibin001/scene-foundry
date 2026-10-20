@@ -90,7 +90,8 @@ test('cumulative instance cap reserves one exclusive instance for every uncovere
   // One part per template keeps the expanded asset budget out of this instance-cap check.
   const small=structuredClone(f.skeleton);small.program.templates[0].maxParts=1;
   const tool=f.create();await f.putSkeleton(tool,small);
-  const filler=(id:string,i:number)=>({...instance(id,i),requirementIds:[]});
+  // Fillers stand off the other landmarks' poses: an exact twin of another landmark's instance owns no geometry.
+  const filler=(id:string,i:number)=>({...instance(id,i),position:[.5,i*.25,0],requirementIds:[]});
   const many=(n:number)=>{const ids=Array.from({length:n},(_,i)=>'n'+i);return {groupId:'near-group',landmarkIds:['near'],instances:ids.map((id,i)=>i<2?instance(id,i):filler(id,i%8)),entities:ids.map(entity),observedBindings:[{landmarkId:'near',instanceIds:ids}]};};
   // 4 critical object/component landmarks stay uncovered: 61 + 4 exceeds 64.
   const over=await f.putGroup(tool,many(61)).then(()=>null,(e:any)=>String(e.message));expect(over).toContain('实例预算不足');expect(over).toContain('至少还需 4');
@@ -98,7 +99,7 @@ test('cumulative instance cap reserves one exclusive instance for every uncovere
   await f.putGroup(tool,many(60));expect(tool.summary().instanceBudget).toEqual({used:60,maximum:64,reservedForRemaining:4});
   // A void group binding existing instances does not consume the reserve.
   await f.putGroup(tool,{groupId:'gap-group',landmarkIds:['gap'],instances:[],entities:[],observedBindings:[{landmarkId:'gap',instanceIds:['n0']}]});
-  for(const [i,id] of ['far','part0','part1','part2'].entries())await f.putGroup(tool,{groupId:id+'-group',landmarkIds:[id],instances:[filler('x'+i,i)],entities:[entity('x'+i)],observedBindings:[{landmarkId:id,instanceIds:['x'+i]}]});
+  for(const [i,id] of ['far','part0','part1','part2'].entries())await f.putGroup(tool,{groupId:id+'-group',landmarkIds:[id],instances:[{...filler('x'+i,i),position:[1,i*.25,0]}],entities:[entity('x'+i)],observedBindings:[{landmarkId:id,instanceIds:['x'+i]}]});
   expect(tool.summary().instanceBudget.used).toBe(64);expect(tool.summary().saved.core).toBe(true);
  }finally{f.clean();}
 });

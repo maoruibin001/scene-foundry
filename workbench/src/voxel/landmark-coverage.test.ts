@@ -3,7 +3,9 @@ import {GEOMETRY_SCOPES,STRICT_VOXEL_CONSTRUCTION,validateVoxelLandmarkCoverage,
 
 const landmark=(id:string,geometryScope:any,critical=true)=>({id,label:id,geometryScope,critical,views:[{referenceIndex:1,box:[.1,.1,.4,.5],extent:'occluded',evidence:'原图可见轮廓'}]});
 const template=(id:string)=>({id,bounds:{min:[0,0,0],max:[1,1,2]}});
-const instance=(id:string,template:string)=>({id,template,position:[0,0,0],rotation:[0,0,0],scale:[1,1,1]});
+let placed=0;
+// Every instance stands at its own pose, as in a real plan; coincident twins are rejected.
+const instance=(id:string,template:string)=>({id,template,position:[2*placed++,0,0],rotation:[0,0,0],scale:[1,1,1]});
 function fixture(){
  return {observation:{landmarks:[landmark('wall','object'),landmark('clusters','component'),landmark('opening','void'),landmark('ruin','group')]},
   space:{voxelLattice:{version:STRICT_VOXEL_CONSTRUCTION,cellSize:.1},program:{templates:[template('t_wall'),template('t_cluster')],instances:[instance('i_wall','t_wall'),instance('i_cluster_a','t_cluster'),instance('i_cluster_b','t_cluster')]},observedBindings:[
@@ -122,4 +124,17 @@ test('independent requirements retain target identities and list the full minimu
 test('requirement extraction rejects missing scopes, duplicate targets, unclear criticality and missing labels',()=>{
  const mutations=[(o:any)=>delete o.landmarks[0].geometryScope,(o:any)=>o.landmarks.push({...o.landmarks[0]}),(o:any)=>delete o.landmarks[0].critical,(o:any)=>o.landmarks[0].label=''];
  for(const mutate of mutations){const {observation}=failedAliasCore();mutate(observation);expect(()=>voxelComponentRequirements(observation)).toThrow('VOXEL_LANDMARK_COVERAGE');}
+});
+
+test('an exclusive instance that is an exact twin of another instance of its template owns no geometry',()=>{
+ // Village 6a3f6864: terrain_01 and paths_01 sat on base_01's site_layer at the same pose and were hidden in every graybox round.
+ const observation={landmarks:[landmark('base','object'),landmark('terrain','object'),landmark('paths','component')]};
+ const at=(id:string,position:number[])=>({...instance(id,'site_layer'),position});
+ const space:any={voxelLattice:{version:STRICT_VOXEL_CONSTRUCTION},program:{templates:[template('site_layer')],instances:[at('base_01',[0,0,0]),at('terrain_01',[0,0,0]),at('paths_01',[0,0,0])]},observedBindings:['base','terrain','paths'].map(id=>({landmarkId:id,instanceIds:[id+'_01']}))};
+ let error:any;try{validateVoxelLandmarkCoverage(space,observation);}catch(e){error=e;}
+ expect(error).toBeInstanceOf(VoxelLandmarkCoverageError);
+ expect(error.violations.map((v:any)=>v.landmarkId).sort()).toEqual(['base','paths','terrain']);
+ expect(error.violations[0].reason).toContain('同模板同位姿');
+ space.program.instances[1].position=[3,0,0];space.program.instances[2].position=[0,4,0];
+ expect(validateVoxelLandmarkCoverage(space,observation).applicable).toBe(true);
 });
