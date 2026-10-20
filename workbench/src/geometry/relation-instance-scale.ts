@@ -26,7 +26,8 @@ export function relationInstanceScale(scene:any,observation:any,review:any){
      frameCut:!rect||ahead.length<uv.length||rect[0]<0||rect[1]<0||rect[2]>1||rect[3]>1};});
    const flags:any[]=[];
    for(const landmarkId of relation.landmarkIds)for(const templateId of new Set(instances.filter((i:any)=>i.landmarkId===landmarkId).map((i:any)=>i.templateId))){
-    const row=instances.filter((i:any)=>i.landmarkId===landmarkId&&i.templateId===templateId).sort((a:any,b:any)=>a.depth-b.depth);if(row.length<2)continue;
+    // Water sheets, platforms and other thin surfaces are level and continuous by design; only volumes step in scale.
+    const row=instances.filter((i:any)=>i.landmarkId===landmarkId&&i.templateId===templateId&&i.worldSize[2]>=.25*Math.max(i.worldSize[0],i.worldSize[1])).sort((a:any,b:any)=>a.depth-b.depth);if(row.length<2)continue;
     const heights=row.map((i:any)=>i.worldSize[2]),ids=row.map((i:any)=>i.instanceId);
     if(Math.min(...heights)>=.95*Math.max(...heights))flags.push({kind:'uniformHeight',landmarkId,templateId,instanceIds:ids,worldHeights:heights});
     const touching=row.slice(1).map((b:any,k:number)=>[row[k],b])

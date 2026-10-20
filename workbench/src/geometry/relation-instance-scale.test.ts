@@ -38,3 +38,9 @@ test('a farther uncut instance drawn at least as tall as a nearer one is flagged
  const flags=relationInstanceScale(s,observation,review)!.relations[0].views[0].flags;
  expect(flags.find((f:any)=>f.kind==='fartherNotSmaller')?.pairs.length).toBeGreaterThan(0);
 });
+
+test('thin level surfaces such as water tiles are listed but never flagged',()=>{
+ const s=canal();s.program.templates[0].parts[0].shape.size=[6,14,.03];
+ const view=relationInstanceScale(s,observation,review)!.relations[0].views[0];
+ expect(view.instances.length).toBe(3);expect(view.flags).toEqual([]);
+});
