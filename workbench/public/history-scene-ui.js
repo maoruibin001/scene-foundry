@@ -35,6 +35,7 @@ export async function hydrateHistoryScenes({items,api,root,isActive,onError,host
     target=hostWindow.open('about:blank','_blank');
     const result=await requestScenePreview({api,job:{...job,delivery}});
     if(!isActive()){target?.close();return;}
+    if(result.fpsWarning)onError(new Error(result.fpsWarning));
     if(target)target.location.href=result.url;else hostWindow.location.href=result.url;
    }catch(error){target?.close();if(isActive())onError(error);}
    finally{opening.delete(output.key);for(const listener of settledListeners.get(output.key)??[])listener();settledListeners.delete(output.key);if(isActive())restore();}

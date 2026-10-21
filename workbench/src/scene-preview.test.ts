@@ -1,5 +1,5 @@
 import {test,expect} from 'bun:test';
-import {sceneOutput,sceneHeroHTML,requestScenePreview,previewCaptureBusy} from '../public/scene-preview.js';
+import {sceneOutput,sceneHeroHTML,requestScenePreview,previewCaptureBusy,sceneReferenceImages,bindSceneComparison} from '../public/scene-preview.js';
 import {requestJSON} from '../public/request.js';
 
 const id='11111111-1111-4111-8111-111111111111';
@@ -145,4 +145,61 @@ test('displayed metadata and failures are escaped; invalid preview URLs never be
  const source=candidate({}, {selection:{status:'fallback',reason:'<img src=x onerror=alert(1)>'},limitations:'<script>alert(1)</script>'}),html=sceneHeroHTML(source,{url:'javascript:alert(1)',error:'<b>failure</b>'});
  expect(html).not.toContain('<script>');expect(html).not.toContain('<img src=x');expect(html).not.toContain('data-preview-src=');expect(html).toContain('&lt;img');expect(html).toContain('预览回执不是本地 Engine 地址');
  expect(sceneHeroHTML(source,{error:'<b>failure</b>'})).toContain('&lt;b&gt;failure&lt;/b&gt;');
+});
+
+
+test('original uploaded references appear beside retained evidence with independent screenshot choices',()=>{
+ const source=candidate({images:['iterations/1/runtime/front.png','iterations/1/runtime/back.png']});
+ source.images=[{file:'first original.png',name:'原始正面'},{file:'second.jpg',name:'侧面'}];
+ const before=JSON.stringify(source),html=sceneHeroHTML(source);
+ expect(sceneReferenceImages(source)).toEqual([{url:'/files/uploads/first%20original.png',name:'原始正面',label:'参考图 1'},{url:'/files/uploads/second.jpg',name:'侧面',label:'参考图 2'}]);
+ expect(html).toContain('class="scene-comparison has-references"');expect(html).toContain('class="scene-compare-panel scene-compare-input"');expect(html).toContain('class="scene-compare-panel scene-compare-output"');
+ expect(html).toContain('data-comparison-display="reference" src="/files/uploads/first%20original.png"');
+ expect((html.match(/data-comparison-pick="reference"/g)??[])).toHaveLength(2);expect((html.match(/data-comparison-pick="output"/g)??[])).toHaveLength(2);
+ expect(html).toContain('原图与生成画面分别切换；机位不自动配对');expect(html).not.toContain('wrong-root');expect(JSON.stringify(source)).toBe(before);
+});
+
+test('missing output still shows original references; text-only scenes do not reserve an empty reference column',()=>{
+ const pending=job({status:'running',images:[{file:'one.png'},{file:'two.png'}],delivery:{available:false,state:'pending'}}),html=sceneHeroHTML(pending);
+ expect(html).toContain('data-comparison-display="reference"');expect(html).toContain('/files/uploads/two.png');expect(html).toContain('正在准备首个场景输出');expect(html).not.toContain('id="preview-scene"');
+ const text=sceneHeroHTML(job({images:[],image:null}));expect(text).not.toContain('scene-comparison has-references');expect(text).not.toContain('class="scene-compare-panel scene-compare-input"');expect(text).toContain('文字输入场景');
+});
+
+test('legacy input, namespace, duplicate files and markup do not substitute runtime reference frames',()=>inScene('voxel',()=>{
+ expect(sceneReferenceImages(job({images:[],image:{file:'legacy.jpg'}})).map(image=>image.url)).toEqual(['/voxel/files/uploads/legacy.jpg']);
+ const source=job({images:[{file:'same.jpg'},{file:'same.jpg'},null,{file:''},{name:'invalid'}, {file:'evil" onerror="run.png'}]});
+ expect(sceneReferenceImages(source)).toHaveLength(2);const html=sceneHeroHTML(source);expect(html).toContain('/voxel/files/uploads/same.jpg');expect(html).not.toContain(' onerror=');expect(html).toContain('evil%22%20onerror%3D%22run.png');
+ expect(html).not.toContain('data-comparison-display="reference" src="/voxel/files/runs/');
+}));
+
+test('interactive comparison retains the Engine iframe and explicitly disables screenshot replacement',()=>{
+ const source=job({images:[{file:'ref-a.jpg'},{file:'ref-b.jpg'}]}),html=sceneHeroHTML(source,{url:'http://localhost:19999/'});
+ expect(html).toContain('data-comparison-display="reference"');expect(html).toContain('<iframe data-preview-src="http://localhost:19999/"');expect(html).not.toContain('data-comparison-display="output"');
+ expect(html).toMatch(/data-comparison-pick="output"[^>]* disabled/);expect(html).toContain('交互预览中保留当前场景，不通过切图重载');
+});
+
+function comparisonFixture(key:string,interactive=false){
+ const button=(kind:string,index:number)=>{const attrs=new Map<string,string>();return {dataset:{index:String(index),imageUrl:kind+'-'+index+'.jpg',imageLabel:kind+' '+index},disabled:kind==='output'&&interactive,onclick:null as any,setAttribute:(name:string,value:string)=>attrs.set(name,value),getAttribute:(name:string)=>attrs.get(name)};};
+ const image=()=>{const attrs=new Map<string,string>();let srcWrites=0;return {setAttribute:(name:string,value:string)=>{if(name==='src')srcWrites++;attrs.set(name,value);},getAttribute:(name:string)=>attrs.get(name),get srcWrites(){return srcWrites;}};};
+ const buttons={reference:[button('reference',0),button('reference',1)],output:[button('output',0),button('output',1)]},images={reference:image(),output:interactive?null:image()},links={reference:[image()],output:interactive?[]:[image()]};
+ let iframeChanges=0;const iframe={setAttribute:()=>iframeChanges++,remove:()=>iframeChanges++};
+ const panel={dataset:{sceneComparison:key},querySelectorAll:(selector:string)=>{const match=selector.match(/data-comparison-(pick|link)="(reference|output)"/);if(!match)throw Error('unexpected query '+selector);return (match[1]==='pick'?buttons:links)[match[2] as 'reference'|'output'];},querySelector:(selector:string)=>{const match=selector.match(/data-comparison-display="(reference|output)"/);if(!match)throw Error('unexpected query '+selector);return images[match[1] as 'reference'|'output'];},replaceChildren:()=>{throw Error('must not replace iframe parent');},iframe};
+ const root={querySelectorAll:(selector:string)=>{expect(selector).toBe('[data-scene-comparison]');return [panel];}};
+ return {root,buttons,images,links,get iframeChanges(){return iframeChanges;}};
+}
+
+test('comparison switching is independent, preserves selection across polling and resets for another candidate',()=>{
+ const key='comparison-switch-'+crypto.randomUUID(),s=comparisonFixture(key);bindSceneComparison(s.root);
+ expect(s.images.reference.getAttribute('src')).toBe('reference-0.jpg');expect(s.images.output?.getAttribute('src')).toBe('output-0.jpg');
+ s.buttons.reference[1].onclick();expect(s.images.reference.getAttribute('src')).toBe('reference-1.jpg');expect(s.links.reference[0].getAttribute('href')).toBe('reference-1.jpg');expect(s.images.output?.getAttribute('src')).toBe('output-0.jpg');
+ s.buttons.output[1].onclick();expect(s.images.output?.getAttribute('src')).toBe('output-1.jpg');expect(s.images.reference.getAttribute('src')).toBe('reference-1.jpg');
+ expect(s.buttons.reference[0].getAttribute('aria-pressed')).toBe('false');expect(s.buttons.reference[1].getAttribute('aria-pressed')).toBe('true');
+ const polled=comparisonFixture(key);bindSceneComparison(polled.root);expect(polled.images.reference.getAttribute('src')).toBe('reference-1.jpg');expect(polled.images.output?.getAttribute('src')).toBe('output-1.jpg');
+ const srcWrites=polled.images.reference.srcWrites;bindSceneComparison(polled.root);expect(polled.images.reference.getAttribute('src')).toBe('reference-1.jpg');expect(polled.images.reference.srcWrites).toBe(srcWrites);
+ const changed=comparisonFixture(key+'-new-candidate');bindSceneComparison(changed.root);expect(changed.images.reference.getAttribute('src')).toBe('reference-0.jpg');expect(changed.images.output?.getAttribute('src')).toBe('output-0.jpg');expect(s.iframeChanges+polled.iframeChanges+changed.iframeChanges).toBe(0);
+});
+
+test('reference switching beside an open Engine never touches its iframe or enables screenshot switching',()=>{
+ const s=comparisonFixture('comparison-live-'+crypto.randomUUID(),true);bindSceneComparison(s.root);s.buttons.reference[1].onclick();s.buttons.output[1].onclick();
+ expect(s.images.reference.getAttribute('src')).toBe('reference-1.jpg');expect(s.buttons.output[1].disabled).toBe(true);expect(s.iframeChanges).toBe(0);expect(s.images.output).toBeNull();
 });
