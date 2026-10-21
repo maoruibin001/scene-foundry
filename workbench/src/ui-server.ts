@@ -1,10 +1,11 @@
 // Serve an independent UI release without changing an active worker's frozen inputs.
 // This process owns no jobs, scheduler, model calls, or persisted task state.
 import {resolve, sep} from 'node:path';
-import {existsSync, realpathSync, statSync} from 'node:fs';
+import {existsSync, realpathSync, statSync, readFileSync} from 'node:fs';
+import {createPreviewFpsProxyRegistry} from './preview-fps-proxy';
 import {createProcessRoutes} from './process-observer/routes';
 
-export function uiHandler(publicDir:string, upstream:string, productionTiming?:(id:string)=>any, voxelUpstream?:string, voxelObserverDataRoot?:string) {
+export function uiHandler(publicDir:string, upstream:string, productionTiming?:(id:string)=>any, voxelUpstream?:string, voxelObserverDataRoot?:string, previewProxies?:{wrapURL:(url:string)=>Promise<string>}) {
   const root=realpathSync(publicDir), target=new URL(upstream);
   if(target.protocol!=='http:' || target.hostname!=='127.0.0.1' || target.username || target.password) throw Error('界面后端必须是本机 HTTP 服务');
   const voxel=voxelUpstream?new URL(voxelUpstream):target;
@@ -26,6 +27,16 @@ export function uiHandler(publicDir:string, upstream:string, productionTiming?:(
       const proxy=new URL(url.pathname+url.search,selected);
       const requestHeaders=new Headers(req.headers);requestHeaders.delete('host');if(requestHeaders.has('origin'))requestHeaders.set('origin',selected.origin);
       const response=await fetch(proxy,{method:req.method,headers:requestHeaders,body:['GET','HEAD'].includes(req.method)?undefined:req.body,redirect:'manual',signal:req.signal});
+      // Decorate only user-requested output previews; generated dist and worker receipts stay untouched.
+      if(req.method==='POST'&&/^\/api\/(?:voxel\/)?jobs\/[a-f0-9-]{36}\/preview-output$/.test(url.pathname)&&response.ok){
+        const body=await response.json(),sourceUrl=body.url;
+        try{
+          previewProxies??=createPreviewFpsProxyRegistry({scriptSource:readFileSync(resolve(root,'preview-fps.js'),'utf8')});
+          body.url=await previewProxies.wrapURL(sourceUrl);body.sourceUrl=sourceUrl;body.liveFps=true;
+        }catch{body.liveFps=false;body.fpsWarning='实时帧率暂不可用，已保留原场景预览地址。';}
+        const previewHeaders=new Headers(response.headers);previewHeaders.delete('Content-Length');previewHeaders.delete('Content-Encoding');previewHeaders.set('Cache-Control','no-store');
+        return Response.json(body,{status:response.status,headers:previewHeaders});
+      }
       const timing=req.method==='GET'&&url.pathname.match(/^\/api\/jobs\/([a-f0-9-]{36})\/timing$/);
       if(timing&&productionTiming&&response.ok){
         const body=await response.json();
