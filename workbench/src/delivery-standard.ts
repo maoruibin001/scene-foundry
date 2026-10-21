@@ -21,7 +21,8 @@ export function commonDelivery(job:any,review:any,runtime:any,quality:any,spec:a
  const partialVisibility=countContradictions.filter((c:any)=>{
   const actual=job.structure?.semanticCounts?.[c.kind];
   return !exactFor(c.kind)&&Number.isInteger(actual)&&Number.isInteger(c.visibleMin)&&Number.isInteger(c.visibleMax)
-   &&c.visibleMin>0&&c.visibleMax>=c.visibleMin&&actual>c.visibleMax;
+   // Owner decision 2026-10-21 (ticket 8ce27520): with no count to meet, a judge seeing more than the record is a counting-scope warning too.
+   &&c.visibleMin>0&&c.visibleMax>=c.visibleMin&&(actual>c.visibleMax||actual<c.visibleMin);
  });
  const reasons=[
   ...hardFailures.map((k:string)=>'运行硬检查失败：'+k),
@@ -34,7 +35,7 @@ export function commonDelivery(job:any,review:any,runtime:any,quality:any,spec:a
   ...(countContradictions.length>partialVisibility.length?['场景数量与评分证据矛盾']:[]),...objections];
  return {version:'common-delivery-v1',status:reasons.length?'failed':pending.length?'needs_review':'passed',failures:reasons,pending,hardFailures,criticalMissing:missing,confirmedDefects,
   reasons:[...reasons,...pending],warnings:[...(spec.rules??[]).filter((r:any)=>['mandatory','conditional'].includes(r.kind)&&r.status==='needs_review').map((r:any)=>({id:r.id,reason:r.reason})),
-   ...partialVisibility.map((c:any)=>({id:'count-visibility:'+c.kind,reason:`${c.kind}：场景记录${job.structure.semanticCounts[c.kind]}个组合实例，实际画面仅能辨认${c.visibleMin}–${c.visibleMax}个；其余可见性未证实，不等于已确认缺失或全部可见。${c.reason??''}`}))],
+   ...partialVisibility.map((c:any)=>({id:'count-visibility:'+c.kind,reason:job.structure.semanticCounts[c.kind]>c.visibleMax?`${c.kind}：场景记录${job.structure.semanticCounts[c.kind]}个组合实例，实际画面仅能辨认${c.visibleMin}–${c.visibleMax}个；其余可见性未证实，不等于已确认缺失或全部可见。${c.reason??''}`:`${c.kind}：场景记录${job.structure.semanticCounts[c.kind]}个组合实例，评审在画面中辨认出${c.visibleMin}–${c.visibleMax}个；该类别没有数量要求，按计数口径差异警告。${c.reason??''}`}))],
   scope:'完整性、关键主体、结构、真实Engine、必需规范与可信评分；不包含加权分数门槛'};
 }
 export function basicDelivery(job:any,review:any,runtime:any,quality:any,spec:any,strictStatus:string,countContradictions:any[]=[],objections:any[]=[]){

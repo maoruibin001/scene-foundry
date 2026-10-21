@@ -40,9 +40,11 @@ test('类别映射未覆盖全部明确数量或缺少该类别时保守保留�
  f.job.structure.categoryRequirements={chair:['chairs']};expect(run(f).status).toBe('needs_review');
  f.job.structure.categoryRequirements={foliage:['chairs','foliage'],chair:['chairs']};expect(run(f).status).toBe('needs_review');
 });
-test('画面至少数量超过实际总数仍为真正矛盾',()=>{
- const f=fixture();f.counts[0].visibleMin=4;f.counts[0].visibleMax=5;
- expect(run(f).status).toBe('needs_review');expect(run(f).warnings).toHaveLength(0);
+test('无数量要求时画面多于记录只作计数口径警告；有数量要求仍为真正矛盾',()=>{
+ // Owner decision 2026-10-21: workshop de1e3a38 (80.05) recorded 1 bench plane, the judge saw 4–5 incl. shelf decor; R3 has no count.
+ const f:any=fixture();f.counts[0].visibleMin=4;f.counts[0].visibleMax=5;
+ expect(run(f).status).toBe('passed');expect(run(f).warnings[0].reason).toContain('计数口径差异');
+ f.job.plan.requirements[0].count=3;expect(run(f).status).toBe('needs_review');expect(run(f).warnings).toHaveLength(0);
 });
 test('类别完全不可见或没有确认可见实例仍需复核',()=>{
  const f=fixture();f.counts[0].visibleMin=0;f.counts[0].visibleMax=0;
@@ -57,6 +59,7 @@ test('未知类别及无效计数不能被转换成可接受警告',()=>{
 });
 test('部分遮挡警告不能盖过其他类别的真正矛盾',()=>{
  const f:any=fixture();f.job.structure.semanticCounts.chair=1;
+ f.job.plan.requirements.push({id:'chairs',critical:true,count:1});f.job.structure.categoryRequirements={foliage:['foliage'],chair:['chairs']};
  f.counts.push({kind:'chair',visibleMin:2,visibleMax:2});expect(run(f).status).toBe('needs_review');
  expect(run(f).warnings).toHaveLength(1);
 });
