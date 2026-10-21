@@ -20,7 +20,7 @@ function room(walls=['west','north']){
 test('a camera that looks out of the open side of a roofed room gets that side walled with the existing wall template',()=>{
  const {scene,space}=room(),before=JSON.stringify(space);
  const report=enclosureVoids(scene);
- expect(report.interior).toBe(true);expect(report.cameras[1].voidShare).toBeGreaterThan(.12);
+ expect(report.interior).toBe(true);expect(report.cameras[1].edgeShare).toBeGreaterThan(.02);
  const closed=withInteriorEnclosure(space,scene);
  expect(closed.report.added.map((w:any)=>w.id)).toEqual(['enclosure_posx','enclosure_negy']);
  const wall=closed.space.program.instances.find((i:any)=>i.id==='enclosure_negy');
@@ -38,7 +38,8 @@ test('a window in an existing wall is an opening, not a missing side',()=>{
  const program={...scene.program,templates:[...scene.program.templates,pier],instances:[...scene.program.instances.filter((i:any)=>i.id!=='north'),{...pose,id:'pierL',label:'pierL',template:'pier',position:[0,8,0],requirementIds:[]},{...pose,id:'pierR',label:'pierR',template:'pier',position:[5,8,0],requirementIds:[]}]};
  const cameras=[scene.cameras[0],{...scene.cameras[1],position:[4,1,1.6],target:[4,9,1.4]}];
  const r=withInteriorEnclosure({...space,program,entities:[...space.entities.filter((e:any)=>e.instanceId!=='north'),{instanceId:'pierL',role:'context',category:'砖墙'},{instanceId:'pierR',role:'context',category:'砖墙'}]},{program,cameras});
- expect(r.report.cameras[1].faces['+y']).toBeGreaterThan(0);expect(r.report.covered['+y']).toBeGreaterThanOrEqual(.5);expect(r.report.added).toEqual([]);
+ // The gap is a hole the wall surrounds: it is void, but no void region reaches the frame edge.
+ expect(r.report.cameras[1].voidShare).toBeGreaterThan(0);expect(r.report.cameras[1].edgeShare).toBe(0);expect(r.report.added).toEqual([]);
 });
 test('a closed room and an unroofed scene are left unchanged; the policy is opt-in per job',()=>{
  const closedRoom=room(['west','north','east','south']);

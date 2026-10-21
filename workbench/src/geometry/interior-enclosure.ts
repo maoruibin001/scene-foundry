@@ -8,11 +8,12 @@ export function interiorEnclosureRule(job:any){return job?.grayboxEnclosurePolic
 /**
  * Workshop 64ed7618 (2026-10-21): the plan modelled only the two walls the reference shows; the inspection camera looking back saw 22.4%
  * void against 5–7% (window openings) for every closed room, and three re-judges on identical frames all failed S13 on the open side.
- * Graybox repair cannot add instances, so the side stayed open. A side face takes a wall when one camera sees more than VOID_LIMIT and
- * at least faceShare of that camera's pixels leave the room through the face. A face an existing wall already spans is skipped: its voids
- * are window or door openings, which a new wall would close.
+ * Graybox repair cannot add instances, so the side stayed open. Only void regions that reach the left, right or bottom frame edge count:
+ * a window or door is a hole the wall surrounds. Workshops c37f345e and c7ebfc44 failed S13 on "右缘围护缺口"/"右侧白空区" with 2.3% and
+ * 7.3% of a frame in such regions, while closed rooms showed 0–1.4%. A side face takes a wall when a camera's edge void reaches edgeLimit
+ * and at least faceShare of its pixels leave through that face; a face an existing wall already spans is skipped.
  */
-export const ENCLOSURE_LIMITS={voidLimit:.12,faceShare:.03,wallReach:.6,wallCover:.5,roofDistance:30,roofShare:.5,spanCap:60,width:96,height:54};
+export const ENCLOSURE_LIMITS={edgeLimit:.02,faceShare:.01,wallReach:.6,wallCover:.5,roofDistance:30,roofShare:.5,spanCap:60,width:96,height:54};
 type V=number[];
 const meshesOf=(scene:any)=>compileGeometryProgram({...scene.program,materials:scene.program.materials.map((m:any)=>({...m,textureId:null,surfaceDetail:null}))}).meshes;
 const rotate=(r:V,p:V)=>{let [x,y,z]=p;const [a,b,c]=r;[y,z]=[y*Math.cos(a)-z*Math.sin(a),y*Math.sin(a)+z*Math.cos(a)];[x,z]=[x*Math.cos(b)+z*Math.sin(b),-x*Math.sin(b)+z*Math.cos(b)];[x,y]=[x*Math.cos(c)-y*Math.sin(c),x*Math.sin(c)+y*Math.cos(c)];return [x,y,z];};
@@ -47,12 +48,18 @@ export function enclosureVoids(scene:any){
  const {width:w,height:h}=ENCLOSURE_LIMITS;
  const cameras=scene.cameras.map((c:any)=>{
   const r=rasterVisibility(meshes,c,w,h,.1,2000),b=basis(c),t=Math.tan(c.fov/2),aspect=w/h,faces:Record<string,number>={'+x':0,'-x':0,'+y':0,'-y':0};let voids=0;
-  for(let p=0;p<w*h;p++){if(r.front[p]>=0)continue;voids++;
+  const edge=new Uint8Array(w*h),seen=new Uint8Array(w*h);
+  for(let p=0;p<w*h;p++){if(r.front[p]>=0||seen[p])continue;const stack=[p],comp:number[]=[];seen[p]=1;let touches=false;
+   while(stack.length){const q=stack.pop()!;comp.push(q);const x=q%w,y=Math.floor(q/w);if(x===0||x===w-1||y===h-1)touches=true;
+    for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){const nx=x+dx,ny=y+dy;if(nx<0||ny<0||nx>=w||ny>=h)continue;const n=ny*w+nx;if(!seen[n]&&r.front[n]<0){seen[n]=1;stack.push(n);}}}
+   if(touches)for(const q of comp)edge[q]=1;}
+  let edgeVoids=0;
+  for(let p=0;p<w*h;p++){if(r.front[p]>=0)continue;voids++;if(!edge[p])continue;edgeVoids++;
    const x=(p%w+.5)/w,y=(Math.floor(p/w)+.5)/h,d=[0,1,2].map(k=>b.forward[k]+b.right[k]*(x-.5)*2*t*aspect+b.up[k]*(.5-y)*2*t);
    let exit:string|null=null,best=Infinity;
    for(const k of [0,1]){if(Math.abs(d[k])<1e-9)continue;const bound=d[k]>0?box.max[k]:box.min[k],s=(bound-c.position[k])/d[k];if(s>0&&s<best){best=s;exit=(d[k]>0?'+':'-')+(k?'y':'x');}}
    const zAt=c.position[2]+d[2]*best;if(exit&&zAt>=box.min[2]-.01&&zAt<=box.max[2]+.01)faces[exit]++;}
-  return {camera:c.name,voidShare:+(voids/(w*h)).toFixed(4),faces};});
+  return {camera:c.name,voidShare:+(voids/(w*h)).toFixed(4),edgeShare:+(edgeVoids/(w*h)).toFixed(4),faces};});
  const covered=Object.fromEntries(['+x','-x','+y','-y'].map(f=>[f,+faceCover(f,boxes,box).toFixed(3)]));
  return {version:INTERIOR_ENCLOSURE,interior,box,covered,cameras};
 }
@@ -82,8 +89,8 @@ export function withInteriorEnclosure(space:any,scene:any){
  const report:any=enclosureVoids(scene);
  if(!report.interior)return {space,report:{...report,added:[],reason:'机位上方多数方向无顶面，按室外场景处理'}};
  const open=new Set<string>();
- for(const c of report.cameras){if(c.voidShare<=ENCLOSURE_LIMITS.voidLimit)continue;const total=Object.values(c.faces as Record<string,number>).reduce((n,v)=>n+v,0);
-  for(const [face,n] of Object.entries(c.faces as Record<string,number>))if(total&&n/(ENCLOSURE_LIMITS.width*ENCLOSURE_LIMITS.height)>=ENCLOSURE_LIMITS.faceShare&&report.covered[face]<ENCLOSURE_LIMITS.wallCover)open.add(face);}
+ for(const c of report.cameras){if(c.edgeShare<ENCLOSURE_LIMITS.edgeLimit)continue;
+  for(const [face,n] of Object.entries(c.faces as Record<string,number>))if(n/(ENCLOSURE_LIMITS.width*ENCLOSURE_LIMITS.height)>=ENCLOSURE_LIMITS.faceShare&&report.covered[face]<ENCLOSURE_LIMITS.wallCover)open.add(face);}
  const fresh=[...open].filter(f=>!space.program.instances.some((i:any)=>i.id==='enclosure_'+(f[0]==='+'?'pos':'neg')+f[1])).sort();
  if(!fresh.length)return {space,report:{...report,added:[]}};
  const source=wallSource(space,report.box);
