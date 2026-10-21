@@ -11,9 +11,11 @@ export function interiorEnclosureRule(job:any){return job?.grayboxEnclosurePolic
  * Graybox repair cannot add instances, so the side stayed open. Only void regions that reach the left, right or bottom frame edge count:
  * a window or door is a hole the wall surrounds. Workshops c37f345e and c7ebfc44 failed S13 on "右缘围护缺口"/"右侧白空区" with 2.3% and
  * 7.3% of a frame in such regions, while closed rooms showed 0–1.4%. A side face takes a wall when a camera's edge void reaches edgeLimit
- * and at least faceShare of its pixels leave through that face; a face an existing wall already spans is skipped.
+ * and at least faceShare of its pixels leave through that face. Edge void leaving through a face means the face is open there, whatever
+ * spans its plane: workshop 33fc7a82 skipped -y as 'covered' (1.0) while 4.6% of a frame left through it, and failed S13 on that gap.
+ * covered is reported for diagnosis only.
  */
-export const ENCLOSURE_LIMITS={edgeLimit:.02,faceShare:.01,wallReach:.6,wallCover:.5,roofDistance:30,roofShare:.5,spanCap:60,width:96,height:54};
+export const ENCLOSURE_LIMITS={edgeLimit:.02,faceShare:.01,wallReach:.6,wallCover:.5,roofDistance:30,roofShare:.5,solidShare:.97,spanCap:60,width:96,height:54};
 type V=number[];
 const meshesOf=(scene:any)=>compileGeometryProgram({...scene.program,materials:scene.program.materials.map((m:any)=>({...m,textureId:null,surfaceDetail:null}))}).meshes;
 const rotate=(r:V,p:V)=>{let [x,y,z]=p;const [a,b,c]=r;[y,z]=[y*Math.cos(a)-z*Math.sin(a),y*Math.sin(a)+z*Math.cos(a)];[x,z]=[x*Math.cos(b)+z*Math.sin(b),-x*Math.sin(b)+z*Math.cos(b)];[x,y]=[x*Math.cos(c)-y*Math.sin(c),x*Math.sin(c)+y*Math.cos(c)];return [x,y,z];};
@@ -63,14 +65,29 @@ export function enclosureVoids(scene:any){
  const covered=Object.fromEntries(['+x','-x','+y','-y'].map(f=>[f,+faceCover(f,boxes,box).toFixed(3)]));
  return {version:INTERIOR_ENCLOSURE,interior,box,covered,cameras};
 }
-/** The largest opening-free wall to reuse: thin on one horizontal axis, at least half the room's height. */
-function wallSource(space:any,box:{min:V;max:V}){
+/**
+ * A copy must not reproduce window holes: workshop 33fc7a82 reused T02, a wall cut around a separate window instance (its openings name
+ * the window, not the wall), and 5.4% of a frame still showed through. Rays across the template's face on its thin axis must all but hit.
+ */
+function solidWall(scene:any,brief:any){
+ // Space templates are briefs (bounds only); the graybox scene carries the parts.
+ const t=scene.program.templates.find((x:any)=>x.id===brief.id);if(!t?.parts?.length)return false;
+ const b=brief.bounds,thin=b.max[0]-b.min[0]<=b.max[1]-b.min[1]?0:1,along=1-thin,grid=12;
+ const program={...scene.program,templates:[{...t,bounds:b}],instances:[{id:'probe',label:'probe',template:t.id,position:[0,0,0],rotation:[0,0,0],scale:[1,1,1],requirementIds:[]}]};
+ let meshes;try{meshes=meshesOf({program});}catch{return false;}
+ const cast=rayScene(meshes,{near:0,far:1e4,doubleSided:true});let hits=0;
+ for(let i=0;i<grid;i++)for(let j=0;j<grid;j++){const o=[0,0,0];o[along]=b.min[along]+(b.max[along]-b.min[along])*(i+.5)/grid;o[2]=b.min[2]+(b.max[2]-b.min[2])*(j+.5)/grid;o[thin]=b.min[thin]-1;
+  const d=[0,0,0];d[thin]=1;if(cast(o,d))hits++;}
+ return hits/(grid*grid)>=ENCLOSURE_LIMITS.solidShare;
+}
+/** The largest solid wall to reuse: thin on one horizontal axis, at least half the room's height. */
+function wallSource(space:any,scene:any,box:{min:V;max:V}){
  const opened=new Set((space.spatialOpenings??[]).map((o:any)=>space.program.instances.find((i:any)=>i.id===o.instanceId)?.template).filter(Boolean));
  const height=box.max[2]-box.min[2];
  return space.program.instances.map((i:any)=>({i,t:space.program.templates.find((t:any)=>t.id===i.template),e:space.entities.find((e:any)=>e.instanceId===i.id)}))
   .filter(({t,e}:any)=>t?.bounds&&e&&!opened.has(t.id)).map((x:any)=>{const s=[0,1,2].map(k=>(x.t.bounds.max[k]-x.t.bounds.min[k])*(x.i.scale?.[k]??1));return {...x,s};})
   .filter((x:any)=>Math.min(x.s[0],x.s[1])<=.6&&x.s[2]>=.5*height&&Math.max(x.s[0],x.s[1])>=1.5)
-  .sort((a:any,b:any)=>Math.max(b.s[0],b.s[1])*b.s[2]-Math.max(a.s[0],a.s[1])*a.s[2])[0]??null;
+  .sort((a:any,b:any)=>Math.max(b.s[0],b.s[1])*b.s[2]-Math.max(a.s[0],a.s[1])*a.s[2]).find((x:any)=>solidWall(scene,x.t))??null;
 }
 /** One instance of the source wall template stretched over a missing side face, its inner surface on the room box. */
 function wallFor(face:string,source:any,box:{min:V;max:V}){
@@ -90,11 +107,11 @@ export function withInteriorEnclosure(space:any,scene:any){
  if(!report.interior)return {space,report:{...report,added:[],reason:'机位上方多数方向无顶面，按室外场景处理'}};
  const open=new Set<string>();
  for(const c of report.cameras){if(c.edgeShare<ENCLOSURE_LIMITS.edgeLimit)continue;
-  for(const [face,n] of Object.entries(c.faces as Record<string,number>))if(n/(ENCLOSURE_LIMITS.width*ENCLOSURE_LIMITS.height)>=ENCLOSURE_LIMITS.faceShare&&report.covered[face]<ENCLOSURE_LIMITS.wallCover)open.add(face);}
+  for(const [face,n] of Object.entries(c.faces as Record<string,number>))if(n/(ENCLOSURE_LIMITS.width*ENCLOSURE_LIMITS.height)>=ENCLOSURE_LIMITS.faceShare)open.add(face);}
  const fresh=[...open].filter(f=>!space.program.instances.some((i:any)=>i.id==='enclosure_'+(f[0]==='+'?'pos':'neg')+f[1])).sort();
  if(!fresh.length)return {space,report:{...report,added:[]}};
- const source=wallSource(space,report.box);
- if(!source)return {space,report:{...report,added:[],reason:'没有可复用的无开口墙体模板'}};
+ const source=wallSource(space,scene,report.box);
+ if(!source)return {space,report:{...report,added:[],reason:'没有可复用的实心墙体模板'}};
  const walls=fresh.map(f=>wallFor(f,source,report.box)),next=structuredClone(space);
  next.program.instances.push(...walls);
  next.entities.push(...walls.map((w:any)=>({instanceId:w.id,role:'ground',category:source.e.category})));
