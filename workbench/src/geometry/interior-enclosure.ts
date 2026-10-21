@@ -18,9 +18,12 @@ const meshesOf=(scene:any)=>compileGeometryProgram({...scene.program,materials:s
 const rotate=(r:V,p:V)=>{let [x,y,z]=p;const [a,b,c]=r;[y,z]=[y*Math.cos(a)-z*Math.sin(a),y*Math.sin(a)+z*Math.cos(a)];[x,z]=[x*Math.cos(b)+z*Math.sin(b),-x*Math.sin(b)+z*Math.cos(b)];[x,y]=[x*Math.cos(c)-y*Math.sin(c),x*Math.sin(c)+y*Math.cos(c)];return [x,y,z];};
 
 /** Room box from geometry no larger than spanCap per axis, so a sky dome or terrain sheet cannot become the room. */
+// One box per instance: a wall with windows is short sills, lintels and piers part by part, but one face-wide instance (workshop 02d102b2).
 function meshBoxes(meshes:any[]){
- return meshes.map(m=>{const p=m.geometry.positions,lo=[Infinity,Infinity,Infinity],hi=[-Infinity,-Infinity,-Infinity];
-  for(let i=0;i<p.length;i++){lo[i%3]=Math.min(lo[i%3],p[i]);hi[i%3]=Math.max(hi[i%3],p[i]);}return {lo,hi};}).filter(b=>b.hi.every((v,k)=>v-b.lo[k]<=ENCLOSURE_LIMITS.spanCap));
+ const byInstance=new Map<string,{lo:V;hi:V}>();
+ for(const m of meshes){const id=String(m.name).split('__')[0],p=m.geometry.positions,b=byInstance.get(id)??{lo:[Infinity,Infinity,Infinity],hi:[-Infinity,-Infinity,-Infinity]};
+  for(let i=0;i<p.length;i++){b.lo[i%3]=Math.min(b.lo[i%3],p[i]);b.hi[i%3]=Math.max(b.hi[i%3],p[i]);}byInstance.set(id,b);}
+ return [...byInstance.values()].filter(b=>b.hi.every((v,k)=>v-b.lo[k]<=ENCLOSURE_LIMITS.spanCap));
 }
 function roomBox(boxes:{lo:V;hi:V}[]){
  const min=[Infinity,Infinity,Infinity],max=[-Infinity,-Infinity,-Infinity];

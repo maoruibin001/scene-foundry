@@ -142,3 +142,11 @@ test('a reused scene finds the observation up its own recovery chain, never acro
   expect(chainedObservation({id:randomUUID(),images,reuseSceneFrom:randomUUID()},['ref-a'])).toBeNull();
  }finally{for(const id of [origin,mid,other])rmSync(runDir(id),{recursive:true,force:true});}
 });
+
+test('a pipeline-inferred enclosure wall needs no landmark; any other unbound instance is still refused',()=>{
+ // Workshop 02d102b2: every graybox repair preview was refused on enclosure_posx, so the repair ended in GRAYBOX_PREVIEW_REQUIRED.
+ const observation=normalizeObservationIndices(fixture(),2),space:any={program:{instances:[{id:'i_wall',template:'t_wall'},{id:'enclosure_posx',template:'t_wall'}],templates:[{id:'t_wall',bounds:{min:[0,0,0],max:[1,1,2]}}]},observedBindings:[{landmarkId:'wall',instanceIds:['i_wall']}],spatialRelations:[{id:'rel',description:'墙在门后',critical:true,instanceIds:['i_wall']}]};
+ expect(bindObservedSpace(space,observation)).toBe(space);
+ space.program.instances.push({id:'extra_wall',template:'t_wall'});
+ expect(()=>bindObservedSpace(space,observation)).toThrow('禁止凭空添加：extra_wall');
+});
