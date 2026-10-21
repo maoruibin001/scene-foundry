@@ -1,13 +1,13 @@
 /** Own exactly one embedded Engine context; opening an external view releases it. */
 export function createPreviewLifecycle({document:doc=globalThis.document,IntersectionObserver:Observer=globalThis.IntersectionObserver,onState=()=>{}}={}){
- let frame=null,visible=false,external=false,observer=null;
+ let frame=null,visible=false,external=false,suspended=false,suspensionReason='正在录制与验收，页面内预览已暂停',observer=null;
  function apply(){
-  const active=!!frame?.isConnected&&visible&&!doc.hidden&&!external;
+  const active=!!frame?.isConnected&&visible&&!doc.hidden&&!external&&!suspended;
   if(frame){
    if(active&&!frame.getAttribute('src'))frame.setAttribute('src',frame.dataset.previewSrc);
    if(!active&&frame.getAttribute('src'))frame.removeAttribute('src');
   }
-  onState({active,external,reason:external?'独立预览已打开，页面内预览已暂停':doc.hidden?'页面隐藏，预览已暂停':!visible?'预览离开可视区域，已暂停':'正在页面内预览'});
+  onState({active,external,suspended,reason:suspended?suspensionReason:external?'独立预览已打开，页面内预览已暂停':doc.hidden?'页面隐藏，预览已暂停':!visible?'预览离开可视区域，已暂停':'正在页面内预览'});
  }
  function attach(next){
   if(next!==frame){
@@ -18,5 +18,5 @@ export function createPreviewLifecycle({document:doc=globalThis.document,Interse
   apply();
  }
  const visibility=()=>apply();doc.addEventListener('visibilitychange',visibility);
- return {attach,pauseForExternal(){external=true;apply();},resume(){external=false;apply();},dispose(){attach(null);doc.removeEventListener('visibilitychange',visibility);}};
+ return {attach,pauseForExternal(){external=true;apply();},resume(){external=false;apply();},setSuspended(value,reason){suspended=Boolean(value);if(suspended)suspensionReason=reason||'正在录制与验收，页面内预览已暂停';apply();},dispose(){attach(null);doc.removeEventListener('visibilitychange',visibility);}};
 }

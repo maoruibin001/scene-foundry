@@ -1,3 +1,4 @@
+import {historySceneHTML} from '../public/history-scene-ui.js';
 import {test,expect} from 'bun:test';
 import {deliveryHTML} from '../public/delivery-ui.js';
 import {imageReconstructionHTML} from '../public/image-reconstruction-ui.js';
@@ -64,7 +65,7 @@ for(const kind of ['ordinary','voxel'] as const){
    const job={id,name:'same scene',prompt:'same prompt',mode:'image_prompt',complexity:'complex',image:{name:'reference.jpg',file:'reference.jpg'},thumbnail:'/files/runs/'+id+'/runtime/front.png',recording:'/files/runs/'+id+'/runtime/cruise.webm',downloadable:true,status:'running',createdAt:'2026-10-19T00:00:00Z',durationMs:1000,score:null,attempt:1,version:{id:'version',label:'fixed'},model:'fixed-model'};
    const data={items:[job],total:1,allTotal:1,page:1,pages:1,pageSize:20,from:1,to:1,summary:{scored:0,passed:0,notPassed:0,active:1},facets:{versions:[],batches:[],models:[]}},options={content,isActive:()=>true,onError:(error:any)=>{throw error;},api:async(path:string)=>path.startsWith('/api/jobs?')?data:{items:[]}};
    await renderHistory(options);
-   checkLinks(content.innerHTML,kind,['/files/uploads/reference.jpg','/files/runs/'+id+'/runtime/front.png','/api/jobs/'+id+'/download']);
+   const scene=historySceneHTML(job,{available:true,best:{kind:'scene',images:['delivery/outputs/scene-kept/runtime/front.png'],folder:'delivery/outputs/scene-kept',distManifestDigest:'a'.repeat(64)}});checkLinks(content.innerHTML+scene,kind,['/files/uploads/reference.jpg','/files/runs/'+id+'/delivery/outputs/scene-kept/runtime/front.png','/api/jobs/'+id+'/download-output']);
    const prefix=kind==='voxel'?'/voxel':'';expect(content.innerHTML).toContain('href="'+prefix+'/files/runs/'+id+'/runtime/cruise.webm?download=1"');expect(content.innerHTML).toContain('data-stop-job="'+id+'"');
    (globalThis as any).location.hash='#records?'+new URLSearchParams({process:'run:'+id,from:'job/'+id,tab:'assets'});
    await renderHistory(options);expect(content.innerHTML).toContain('src="'+prefix+'/process/#job=run%3A'+id);expect(content.innerHTML).toContain('tab=assets');expect(content.innerHTML).toContain('href="#job/'+id+'"');
