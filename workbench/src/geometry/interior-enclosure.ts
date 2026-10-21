@@ -12,7 +12,7 @@ export function interiorEnclosureRule(job:any){return job?.grayboxEnclosurePolic
  * at least faceShare of that camera's pixels leave the room through the face. A face an existing wall already spans is skipped: its voids
  * are window or door openings, which a new wall would close.
  */
-export const ENCLOSURE_LIMITS={voidLimit:.12,faceShare:.03,wallReach:.6,wallCover:.5,roofDistance:30,spanCap:60,width:96,height:54};
+export const ENCLOSURE_LIMITS={voidLimit:.12,faceShare:.03,wallReach:.6,wallCover:.5,roofDistance:30,roofShare:.5,spanCap:60,width:96,height:54};
 type V=number[];
 const meshesOf=(scene:any)=>compileGeometryProgram({...scene.program,materials:scene.program.materials.map((m:any)=>({...m,textureId:null,surfaceDetail:null}))}).meshes;
 const rotate=(r:V,p:V)=>{let [x,y,z]=p;const [a,b,c]=r;[y,z]=[y*Math.cos(a)-z*Math.sin(a),y*Math.sin(a)+z*Math.cos(a)];[x,z]=[x*Math.cos(b)+z*Math.sin(b),-x*Math.sin(b)+z*Math.cos(b)];[x,y]=[x*Math.cos(c)-y*Math.sin(c),x*Math.sin(c)+y*Math.cos(c)];return [x,y,z];};
@@ -37,8 +37,10 @@ function faceCover(face:string,boxes:{lo:V;hi:V}[],box:{min:V;max:V}){
 /** Void share of every camera and the side face each void ray leaves the room box through. */
 export function enclosureVoids(scene:any){
  const meshes=meshesOf(scene),boxes=meshBoxes(meshes),box=roomBox(boxes),cast=rayScene(meshes,{near:.1,far:2000,doubleSided:true});
- const reference=scene.cameras.find((c:any)=>c.referenceIndex!=null)??scene.cameras[0],up=cast(reference.position,[0,0,1]);
- const interior=!!up&&up.distance<ENCLOSURE_LIMITS.roofDistance;
+ // A roof of beams or slats lets a single zenith ray through (workshop c37f345e); a cone from every camera reads the cover instead.
+ const cone=[[0,0,1],...Array.from({length:12},(_,n)=>{const a=n*Math.PI/6,tilt=20*Math.PI/180;return [Math.sin(tilt)*Math.cos(a),Math.sin(tilt)*Math.sin(a),Math.cos(tilt)];})];
+ const shots=scene.cameras.flatMap((c:any)=>cone.map(d=>cast(c.position,d))),roofHits=shots.filter((h:any)=>h&&h.distance<ENCLOSURE_LIMITS.roofDistance).length;
+ const interior=roofHits/shots.length>=ENCLOSURE_LIMITS.roofShare;
  const {width:w,height:h}=ENCLOSURE_LIMITS;
  const cameras=scene.cameras.map((c:any)=>{
   const r=rasterVisibility(meshes,c,w,h,.1,2000),b=basis(c),t=Math.tan(c.fov/2),aspect=w/h,faces:Record<string,number>={'+x':0,'-x':0,'+y':0,'-y':0};let voids=0;
@@ -75,7 +77,7 @@ function wallFor(face:string,source:any,box:{min:V;max:V}){
 /** Add inferred side walls to an interior space when a camera looks out of the room; returns the space unchanged otherwise. */
 export function withInteriorEnclosure(space:any,scene:any){
  const report:any=enclosureVoids(scene);
- if(!report.interior)return {space,report:{...report,added:[],reason:'参考机位上方无顶面，按室外场景处理'}};
+ if(!report.interior)return {space,report:{...report,added:[],reason:'机位上方多数方向无顶面，按室外场景处理'}};
  const open=new Set<string>();
  for(const c of report.cameras){if(c.voidShare<=ENCLOSURE_LIMITS.voidLimit)continue;const total=Object.values(c.faces as Record<string,number>).reduce((n,v)=>n+v,0);
   for(const [face,n] of Object.entries(c.faces as Record<string,number>))if(total&&n/(ENCLOSURE_LIMITS.width*ENCLOSURE_LIMITS.height)>=ENCLOSURE_LIMITS.faceShare&&report.covered[face]<ENCLOSURE_LIMITS.wallCover)open.add(face);}
