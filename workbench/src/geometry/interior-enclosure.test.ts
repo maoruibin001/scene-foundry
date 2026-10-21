@@ -48,3 +48,16 @@ test('a closed room and an unroofed scene are left unchanged; the policy is opt-
  const r=withInteriorEnclosure(open.space,open.scene);expect(r.report.interior).toBe(false);expect(r.space).toBe(open.space);
  expect(interiorEnclosureRule({grayboxEnclosurePolicy:INTERIOR_ENCLOSURE})).toBe(true);expect(interiorEnclosureRule({})).toBe(false);
 });
+
+test('a new wall standing past the floor edge gets a floor strip up to it',()=>{
+ // Workshop 16d7d971: floor to x 5.1, +x wall at 5.6, the strip between them failed S13 as a white seam at the wall foot.
+ const {scene,space}=room();
+ const shelf={...scene.program.templates[2],id:'shelf',parts:[{...scene.program.templates[2].parts[0],position:[.25,1,1],shape:{type:'box',size:[.5,2,2],radius:0}}],bounds:{min:[0,0,0],max:[.5,2,2]}};
+ const floorT=scene.program.templates[0],narrow={...floorT,parts:[{...floorT.parts[0],position:[3,4,.1],shape:{type:'box',size:[6,8,.2],radius:0}}],bounds:{min:[0,0,0],max:[6,8,.2]}};
+ const program={...scene.program,templates:[narrow,...scene.program.templates.slice(1),shelf],instances:[...scene.program.instances,{...pose,id:'shelf',label:'shelf',template:'shelf',position:[7.6,3,0],requirementIds:[]}]};
+ const sp={...space,program,entities:[...space.entities,{instanceId:'shelf',role:'context',category:'搁架'}]};
+ const closed=withInteriorEnclosure(sp,{program,cameras:scene.cameras});
+ expect(closed.report.added.map((w:any)=>w.id)).toContain('enclosure_posx');
+ const strip=closed.space.program.instances.find((i:any)=>i.id==='enclosure_floor_posx');
+ expect(strip?.template).toBe('floor');expect(closed.space.entities.find((e:any)=>e.instanceId==='enclosure_floor_posx')?.role).toBe('ground');
+});

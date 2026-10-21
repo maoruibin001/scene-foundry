@@ -15,7 +15,7 @@ export function interiorEnclosureRule(job:any){return job?.grayboxEnclosurePolic
  * spans its plane: workshop 33fc7a82 skipped -y as 'covered' (1.0) while 4.6% of a frame left through it, and failed S13 on that gap.
  * covered is reported for diagnosis only.
  */
-export const ENCLOSURE_LIMITS={edgeLimit:.02,faceShare:.01,wallReach:.6,wallCover:.5,roofDistance:30,roofShare:.5,solidShare:.97,spanCap:60,width:96,height:54};
+export const ENCLOSURE_LIMITS={edgeLimit:.02,faceShare:.01,wallReach:.6,wallCover:.5,roofDistance:30,roofShare:.5,solidShare:.97,skirt:1,cell:.25,spanCap:60,width:96,height:54};
 type V=number[];
 const meshesOf=(scene:any)=>compileGeometryProgram({...scene.program,materials:scene.program.materials.map((m:any)=>({...m,textureId:null,surfaceDetail:null}))}).meshes;
 const rotate=(r:V,p:V)=>{let [x,y,z]=p;const [a,b,c]=r;[y,z]=[y*Math.cos(a)-z*Math.sin(a),y*Math.sin(a)+z*Math.cos(a)];[x,z]=[x*Math.cos(b)+z*Math.sin(b),-x*Math.sin(b)+z*Math.cos(b)];[x,y]=[x*Math.cos(c)-y*Math.sin(c),x*Math.sin(c)+y*Math.cos(c)];return [x,y,z];};
@@ -101,6 +101,31 @@ function wallFor(face:string,source:any,box:{min:V;max:V}){
  const position=[0,1,2].map(k=>+(target[k]-lo[k]).toFixed(4));
  return {...structuredClone(source.i),id:'enclosure_'+(face[0]==='+'?'pos':'neg')+face[1],label:'推断围合墙（'+face+'）',position,rotation,scale:scale.map(v=>+v.toFixed(4))};
 }
+/**
+ * The new wall stands on the room box, which other geometry may push past the floor's edge: workshop 16d7d971's floor stopped at x 5.1,
+ * its +x wall at 5.6, and the 0.5 m strip between them failed S13 as "右墙脚异常连续白缝". Along each new wall, down-rays within skirt
+ * metres of it find where no floor lies; one copy of the largest flat ground template is stretched from the floor's edge to the wall.
+ */
+function floorSkirts(space:any,scene:any,walls:any[],box:{min:V;max:V}){
+ const floors=space.program.instances.map((i:any)=>({i,t:space.program.templates.find((t:any)=>t.id===i.template),e:space.entities.find((e:any)=>e.instanceId===i.id)}))
+  .filter(({t,e}:any)=>t?.bounds&&e?.role==='ground'&&!String(e.instanceId).startsWith('enclosure_')).map((x:any)=>{const s=[0,1,2].map(k=>(x.t.bounds.max[k]-x.t.bounds.min[k])*(x.i.scale?.[k]??1));return {...x,s};})
+  .filter((x:any)=>x.s[2]<=.5&&x.s[0]>=1&&x.s[1]>=1).map((x:any)=>({...x,top:x.i.position[2]+x.t.bounds.max[2]*(x.i.scale?.[2]??1)}));
+ // A ceiling is flat ground too; the floor is the lowest slab (something may still sit below it, e.g. a pit).
+ const lowest=Math.min(...floors.map((x:any)=>x.top)),source=floors.filter((x:any)=>x.top<=lowest+.3).sort((a:any,b:any)=>b.s[0]*b.s[1]-a.s[0]*a.s[1])[0];if(!source)return [];
+ const cast=rayScene(meshesOf({program:{...scene.program,instances:scene.program.instances}}),{near:0,far:50,doubleSided:true}),top=box.min[2]+1,low=box.min[2]-.05,step=ENCLOSURE_LIMITS.cell;
+ const skirts:any[]=[];
+ for(const wall of walls){const face=wall.face,axis=face[1]==='x'?0:1,tangent=1-axis,sign=face[0]==='+'?1:-1,plane=sign>0?box.max[axis]:box.min[axis];
+  let edge:number|null=null;// innermost depth with no floor under it, measured from the wall
+  for(let d=step/2;d<ENCLOSURE_LIMITS.skirt;d+=step){let missing=0,n=0;
+   for(let u=box.min[tangent]+step/2;u<box.max[tangent];u+=step){const o=[0,0,top];o[axis]=plane-sign*d;o[tangent]=u;n++;const h=cast(o,[0,0,-1]);if(!h||h.point[2]<low)missing++;}
+   if(missing/n>.25)edge=d;}
+  if(edge===null)continue;
+  const b=source.t.bounds,depth=edge+step/2,scale=[1,1,1];scale[axis]=depth/(b.max[axis]-b.min[axis]);scale[tangent]=(box.max[tangent]-box.min[tangent])/(b.max[tangent]-b.min[tangent]);
+  const position=[0,0,0];position[tangent]=box.min[tangent]-b.min[tangent]*scale[tangent];position[axis]=(sign>0?plane-depth:plane)-b.min[axis]*scale[axis];position[2]=source.i.position[2];
+  skirts.push({...structuredClone(source.i),id:'enclosure_floor_'+(sign>0?'pos':'neg')+face[1],label:'推断围合地面（'+face+'）',position:position.map(v=>+v.toFixed(4)),rotation:[0,0,0],scale:[scale[0],scale[1],source.i.scale?.[2]??1].map(v=>+v.toFixed(4)),_category:source.e.category});
+ }
+ return skirts;
+}
 /** Add inferred side walls to an interior space when a camera looks out of the room; returns the space unchanged otherwise. */
 export function withInteriorEnclosure(space:any,scene:any){
  const report:any=enclosureVoids(scene);
@@ -115,6 +140,8 @@ export function withInteriorEnclosure(space:any,scene:any){
  const walls=fresh.map(f=>wallFor(f,source,report.box)),next=structuredClone(space);
  next.program.instances.push(...walls);
  next.entities.push(...walls.map((w:any)=>({instanceId:w.id,role:'ground',category:source.e.category})));
+ const skirts=floorSkirts(space,scene,fresh.map((face,n)=>({face,wall:walls[n]})),report.box).map(({_category,...i}:any)=>({i,category:_category}));
+ next.program.instances.push(...skirts.map((x:any)=>x.i));next.entities.push(...skirts.map((x:any)=>({instanceId:x.i.id,role:'ground',category:x.category})));
  next.assumptions=[...(next.assumptions??[]),'参考图未拍到的'+fresh.join('、')+'侧由管线按已有墙体模板推断围合（'+INTERIOR_ENCLOSURE+'）'];
- return {space:next,report:{...report,added:walls.map((w:any)=>({id:w.id,template:w.template,position:w.position,rotation:w.rotation,scale:w.scale})),source:source.i.id}};
+ return {space:next,report:{...report,floors:skirts.map((x:any)=>({id:x.i.id,position:x.i.position,scale:x.i.scale})),added:walls.map((w:any)=>({id:w.id,template:w.template,position:w.position,rotation:w.rotation,scale:w.scale})),source:source.i.id}};
 }
