@@ -3,7 +3,8 @@
   "private": true,
   "scripts": {
     "start": "bun src/server.ts",
-    "test": "bun test ./src"
+    "test": "bun test ./src",
+    "bench": "bun src/bench/replay.ts bench/scenes.json"
   },
   "type": "module"
 }

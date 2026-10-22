@@ -62,6 +62,17 @@ After the private Engine and Scene Generator dependencies are prepared, run the 
 (cd prototype && bun test bin/pipeline.test.ts)
 ```
 
+### Replay bench (no model calls)
+
+To check a rendering, export, lighting or Engine change without generating scenes again, re-render the delivered rounds of recorded runs with the current code. Point `PIPELINE_RECORDED_RUNS_DIR` at a folder holding links to the run directories listed in `workbench/bench/scenes.json` (each next to its data directory's `uploads/`), then from `workbench/`:
+
+```sh
+bun run bench ~/bench/run-a                          # first run: compared with the frames judged at delivery
+bun run bench ~/bench/run-b --baseline ~/bench/run-a # later runs: regressions against the previous run
+```
+
+Each scene takes a few minutes. `report.html` shows reference, comparison and current frames per reference camera; per-landmark CIELAB offsets from the reference photo (inside observation boxes, which also hold background); the system Chrome FPS at DPR 2; and regressions against the baseline. It cannot show how a prompt or generation change alters what the model produces: replay that stage or run a fresh job for those.
+
 The web page and API starting successfully do not establish that a model route, Engine build, runtime capture, or visual quality gate has passed. The current pipeline is a local prototype; production certification still requires independent calibration and fixed evaluation sets.
 
 ## Data and publication boundary

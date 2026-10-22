@@ -1,0 +1,11 @@
+{
+ "version": "bench-scenes-v1",
+ "description": "Tier-0 replay set: delivered rounds re-rendered with the current code, no model calls. Run ids are resolved under PIPELINE_RECORDED_RUNS_DIR.",
+ "scenes": [
+  {"id": "study", "run": "add64324", "note": "普通室内，暖色夕照书房，basic70 通过 75.15"},
+  {"id": "workshop", "run": "00511553", "note": "普通室内封闭工坊，通过 82.66"},
+  {"id": "canal", "run": "38c83a76", "note": "普通室外运河，天空与远岸，75.36"},
+  {"id": "voxel-camp", "run": "08f393d2", "note": "体素森林营地，AO 后 79.5"},
+  {"id": "voxel-village", "run": "95942de1", "note": "体素村庄，78.6"}
+ ]
+}
