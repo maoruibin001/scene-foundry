@@ -2,7 +2,7 @@ import {bindAreaLights,areaLightEntities} from './area-lights';
 import {bindPointShadows} from './point-shadows';
 import {voxelProjection} from '../voxel/projection';
 import {bindVoxelAmbientOcclusion,VOXEL_AMBIENT_OCCLUSION} from '../voxel/ambient-occlusion';
-import {bindReflectionProbes,reflectionProbeEntities,REFLECTION_COMPONENT_BOOTSTRAP} from './reflection-probes';
+import {bindReflectionProbes,reflectionProbeEntities,exportedReflectionProbes,REFLECTION_PROBE_EXPORT,REFLECTION_COMPONENT_BOOTSTRAP} from './reflection-probes';
 import {bindCameraOutput} from './camera-output';
 import {spotEntities,bindDirectionalShadow,directionalShadowFields} from './lighting';
 import {lstatSync,mkdirSync,readFileSync,writeFileSync,copyFileSync,existsSync,symlinkSync,rmSync} from 'node:fs';
@@ -35,7 +35,8 @@ export function prepareGeometryProject(root:string,program:GeometryProgram,textu
  for(const f of ['mesh.ts','program.ts','voxel-volume.ts','branch-crown.ts','curved-surfaces.ts','bezier-patch.ts','constraints.ts','distribution.ts','surface-mapping.ts','texture-bundle.ts','surface-detail.ts','material-emission.ts'])copyFileSync(join(W,'src/geometry',f),join(source,'geometry',f));
  copyFileSync(join(W,'src/geometry/export.ts'),join(source,'export-adapter.txt'));
  const cfg=read(join(P,'game/forge.json'));cfg.id=brief.id;cfg.name=program.name;
- if(options?.scene.lighting.reflectionProbes?.length){
+ const probes=exportedReflectionProbes(options?.scene.lighting.reflectionProbes);
+ if(probes?.length){
   // Empty manifest injection admits this vocabulary plugin before defaultScene instantiation.
   cfg.plugins.unshift({id:'reflection-components',name:'./assets/reflection-components.plugin.ts',realm:'engine',inject:[]});
   writeFileSync(join(assets,'reflection-components.plugin.ts'),REFLECTION_COMPONENT_BOOTSTRAP);
@@ -66,7 +67,7 @@ export function prepareGeometryProject(root:string,program:GeometryProgram,textu
  if(options){world=bindPointShadows(world,options.scene.lighting.points);save(join(root,'point-shadow-export.json'),{version:'point-shadow-v1',authored:options.scene.lighting.points.map(p=>p.shadow??null),scope:'Fixed Engine geometric point-light occlusion; no quality assertion'});}
  if(options){world=bindAreaLights(world,options.scene.lighting.areaLights);if(options.scene.lighting.areaLights?.length)save(join(root,'area-light-export.json'),{version:'rect-area-light-v1',authored:options.scene.lighting.areaLights,entities:areaLightEntities(options.scene.lighting.areaLights),scope:'Fixed Engine single-sided LTC direct light; no area shadow, diffuse GI or transmission; not a quality assertion'});else rmSync(join(root,'area-light-export.json'),{force:true});}
  if(options){world=bindCameraOutput(world,options.scene.lighting.cameraOutput);save(join(root,'camera-output-export.json'),{version:'camera-output-v1',authored:options.scene.lighting.cameraOutput??null,legacyDefault:options.scene.lighting.cameraOutput==null,scope:'真实相机显示参数；不表示质量通过'});}
- if(options){world=bindReflectionProbes(world,options.scene.lighting.reflectionProbes);save(join(root,'reflection-probe-export.json'),{version:'local-reflection-probe-v1',authored:options.scene.lighting.reflectionProbes??null,entities:reflectionProbeEntities(options.scene.lighting.reflectionProbes),scope:'Fixed Engine static specular capture; no diffuse GI or new illumination; actual runtime publication required'});}
+ if(options){world=bindReflectionProbes(world,probes);save(join(root,'reflection-probe-export.json'),{version:'local-reflection-probe-v1',authored:options.scene.lighting.reflectionProbes??null,exported:REFLECTION_PROBE_EXPORT,...(REFLECTION_PROBE_EXPORT?{}:{reason:'固定 Engine 0.4.18-rc.1 的局部反射探针镜面贡献过强，会把非金属表面渲染成金色金属；暂不导出'}),entities:reflectionProbeEntities(probes),scope:'Fixed Engine static specular capture; no diffuse GI or new illumination; actual runtime publication required'});}
  writeFileSync(join(assets,'world.pack.ts'),world);
  copyFileSync(join(W,'src/camera-v3.txt'),join(assets,'camera.plugin.ts'));copyFileSync(join(W,'src/ui-v3.txt'),join(assets,'ui.plugin.ts'));
  if(views){
@@ -83,6 +84,6 @@ export function prepareGeometryProject(root:string,program:GeometryProgram,textu
   ui=ui.replace('return()=>{channel.close();',"const focus=(e:PointerEvent)=>{if(e.target instanceof HTMLCanvasElement){e.target.tabIndex=0;e.target.focus();}};document.addEventListener('pointerdown',focus);return()=>{document.removeEventListener('pointerdown',focus);channel.close();");writeFileSync(join(assets,'ui.plugin.ts'),ui);
  }
  const provenance=options?{kind:'general-scene-generation',validationKind:'generation',...options.provenance}:{kind:'generic-geometry-compiler',validationKind:'compiler-smoke',referenceImages:[]};
- save(join(assets,'scene-audit.json'),{name:program.name,channelId:brief.packageId,specSha256:createHash('sha256').update(readFileSync(join(W,'spec/production.md'))).digest('hex'),camera,...(options?.scene.lighting.reflectionProbes?.length?{reflectionProbeCount:options.scene.lighting.reflectionProbes.length}:{}),...(views?{views}:{}),parts:objects.map(o=>({id:o.id,entityId:o.entityId})),entities:program.instances,landmarks:objects.map(o=>({...o,position:[o.position[0],o.position[2]+o.size[2]/2,-o.position[1]]})),geometry:{nonFlat:max.every((v,i)=>v-min[i]>.1)},provenance:{...provenance,engineSha:pin.engineSha,generatorSha:pin.generatorSha,qualityAssessment:'not-run'}});
+ save(join(assets,'scene-audit.json'),{name:program.name,channelId:brief.packageId,specSha256:createHash('sha256').update(readFileSync(join(W,'spec/production.md'))).digest('hex'),camera,...(probes?.length?{reflectionProbeCount:probes.length}:{}),...(views?{views}:{}),parts:objects.map(o=>({id:o.id,entityId:o.entityId})),entities:program.instances,landmarks:objects.map(o=>({...o,position:[o.position[0],o.position[2]+o.size[2]/2,-o.position[1]]})),geometry:{nonFlat:max.every((v,i)=>v-min[i]>.1)},provenance:{...provenance,engineSha:pin.engineSha,generatorSha:pin.generatorSha,qualityAssessment:'not-run'}});
  return {brief,objects,meshes:result.meshes.length,triangles:result.triangles,materials:result.materialCount,bounds:{min,max}};
 }

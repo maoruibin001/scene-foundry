@@ -22,8 +22,17 @@ export function bindReflectionProbes(world:string,probes?:SceneReflectionProbe[]
  const entities=entries.map(([id,value])=>id+':'+JSON.stringify(value).replace('"updateIntent":0','"updateIntent":REFLECTION_PROBE_UPDATE_ONCE')+',').join('');
  return replaceOne(world,'ambient:{components:',entities+'ambient:{components:');
 }
+/**
+ * Engine 0.4.18-rc.1 over-weights the local probe's capture: study add64324 (2026-10-22) rendered its leather chair,
+ * desk panels and curtains as burnished gold (material 1.6/5, "金黄粗粒金属感") although every one of them is metallic 0.
+ * The same build with the one probe removed shows dark leather and wood at the authored roughness 0.37; metallic 0,
+ * sRGB decoding, texture order and samplers changed nothing. Authored probes stay in the scene but are not exported
+ * until a probe intensity is calibrated against this Engine.
+ */
+export const REFLECTION_PROBE_EXPORT=false;
+export const exportedReflectionProbes=(probes?:SceneReflectionProbe[]|null)=>REFLECTION_PROBE_EXPORT?probes:null;
 /** ReflectionProbe is public but absent from this Engine pin's builtin component plugin. */
 export const REFLECTION_COMPONENT_BOOTSTRAP=`import {ReflectionProbe} from '@forgeax/engine/render';
 import type {Plugin} from '@forgeax/engine/plugin';
 export default {name:'scene/reflection-components',inject:['world'],apply(ctx){ctx.effect(()=>{const lease=ctx.world.components.register(ReflectionProbe).unwrap();return()=>{lease.dispose().unwrap();};},'scene/reflection-components');}} satisfies Plugin;`;
-export const REFLECTION_PROBE_RULES=`可选lighting.reflectionProbes为null或最多2个静态局部环境反射探针。每项position与halfExtents为Z向上米制坐标/正半尺寸，intensity为0..2，resolution为64或128。探针从实际场景捕获六面环境并按粗糙度过滤，提供有包围盒校正的局部镜面环境反射；只选实际净空位置与覆盖所需表面的房间边界，不放进墙、桌面或柱体，不跨越无关房间。这不会新增光源、漫反射间接光/GI、bloom或透射，不能靠增加intensity代替正确地面颜色和真实受光。未设置保持旧图；根据原图中的反射和真实Engine预览决定是否使用。捕获需GPU时间，使用一次更新，独立采集会等待真实GPU帧完成并保留等待回执；这不是逐探针内部状态证明；数量和分辨率不是质量越高越好。`;
+export const REFLECTION_PROBE_RULES=`当前固定Engine暂不导出局部反射探针（其镜面贡献过强，会把非金属表面渲染成金色金属），reflectionProbes应为null；木材、皮革、织物的光泽须依靠真实粗糙度与灯光表达。可选lighting.reflectionProbes为null或最多2个静态局部环境反射探针。每项position与halfExtents为Z向上米制坐标/正半尺寸，intensity为0..2，resolution为64或128。探针从实际场景捕获六面环境并按粗糙度过滤，提供有包围盒校正的局部镜面环境反射；只选实际净空位置与覆盖所需表面的房间边界，不放进墙、桌面或柱体，不跨越无关房间。这不会新增光源、漫反射间接光/GI、bloom或透射，不能靠增加intensity代替正确地面颜色和真实受光。未设置保持旧图；根据原图中的反射和真实Engine预览决定是否使用。捕获需GPU时间，使用一次更新，独立采集会等待真实GPU帧完成并保留等待回执；这不是逐探针内部状态证明；数量和分辨率不是质量越高越好。`;

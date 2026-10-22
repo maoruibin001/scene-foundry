@@ -37,6 +37,6 @@ test('实际prepare贯通带点光阴影、相机和反射的完整正常导出�
   prepareGeometryProject(root,scene.program,{},options());const legacy=readFileSync(join(root,'game/assets/world.pack.ts'),'utf8');
   scene.lighting.points=[{...point,shadow:null}];prepareGeometryProject(root,scene.program,{},options());expect(readFileSync(join(root,'game/assets/world.pack.ts'),'utf8')).toBe(legacy);
   scene.lighting.points=[{...point,shadow}];const input=JSON.stringify(scene);prepareGeometryProject(root,scene.program,{},options());expect(JSON.stringify(scene)).toBe(input);
-  const built=readFileSync(join(root,'game/assets/world.pack.ts'),'utf8');expect(built).toContain('PointLightShadow');expect(built).toContain('localReflection0');expect(built).toContain('ANTIALIAS_MSAA');expect(JSON.parse(readFileSync(join(root,'point-shadow-export.json'),'utf8')).authored).toEqual([shadow]);
+  const built=readFileSync(join(root,'game/assets/world.pack.ts'),'utf8');expect(built).toContain('PointLightShadow');expect(built).not.toContain('localReflection0');expect(built).toContain('ANTIALIAS_MSAA');expect(JSON.parse(readFileSync(join(root,'point-shadow-export.json'),'utf8')).authored).toEqual([shadow]);
  }finally{rmSync(root,{recursive:true,force:true});}
 });

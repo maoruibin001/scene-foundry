@@ -2,7 +2,7 @@ import {test,expect} from 'bun:test';
 import {readFileSync,mkdtempSync,rmSync} from 'node:fs';
 import {join,resolve} from 'node:path';
 import {tmpdir} from 'node:os';
-import {validateReflectionProbes,reflectionProbeEntities,bindReflectionProbes,reflectionProbeSchema} from './reflection-probes';
+import {validateReflectionProbes,reflectionProbeEntities,bindReflectionProbes,reflectionProbeSchema,REFLECTION_PROBE_EXPORT} from './reflection-probes';
 import {reflectionFramesSettled,waitForReflections} from './reflection-ready.mjs';
 import {bindCameraOutput} from './camera-output';
 import {validateLighting,lightingSchema,LIGHTING_RULES} from './lighting';
@@ -30,17 +30,17 @@ test('等待引擎完成帧而非固定延时；旧场景不增加等待；缺�
  await waitForReflections({evaluate:()=>{throw Error('旧场景不得增加检查')}},{});
  const frames=[NaN,NaN,5,65];const delayed=await waitForReflections({evaluate:()=>frames.shift(),waitForTimeout:async()=>{}},{reflectionProbeCount:1});expect(delayed.startFrame).toBe(5);expect(delayed.endFrame).toBe(65);
 });
-test('真实prepare导出审计，不引入跨线程renderer依赖，不改输入数据或旧场景相机',()=>{
+test('真实prepare保留探针声明但暂不导出到固定 Engine，不改输入数据或旧场景相机',()=>{
  const transform={position:[0,0,0],rotation:[0,0,0],scale:[1,1,1]},lighting={direction:[0,0,-1],color:[1,1,1],intensity:1,ambientColor:[1,1,1],ambientIntensity:.2,points:[],reflectionProbes:[p]};
  const scene:any={version:'scene-v1',program:{version:'geometry-v1',name:'静态反射契约',materials:[{id:'m',color:[.5,.5,.5,1],roughness:.4,metallic:0,textureId:null}],templates:[{id:'t',parts:[{...transform,id:'p',material:'m',shape:{type:'box',size:[1,1,1],radius:0}}]}],instances:[{...transform,id:'i',label:'立体',template:'t',requirementIds:[]}]},cameras:[{name:'主',referenceIndex:1,position:[3,-5,2],target:[0,0,0],fov:1}],entities:[{instanceId:'i',role:'subject',category:'立体'}],lighting,textures:[],assumptions:[]};
  const before=JSON.stringify(scene),root=mkdtempSync(join(tmpdir(),'local-reflection-'));try{
   validateLighting(lighting);prepareGeometryProject(root,scene.program,{}, {id:'fixture',summary:'导出测试',scene,provenance:{test:true}});expect(JSON.stringify(scene)).toBe(before);
-  expect(readFileSync(join(root,'game/assets/world.pack.ts'),'utf8')).toContain('localReflection0');
+  // Study add64324: Engine 0.4.18-rc.1 turned metallic-0 surfaces gold under the probe, so it is recorded, not exported.
+  expect(REFLECTION_PROBE_EXPORT).toBe(false);expect(readFileSync(join(root,'game/assets/world.pack.ts'),'utf8')).not.toContain('ReflectionProbe');
   const controller=readFileSync(join(root,'game/assets/camera.plugin.ts'),'utf8');expect(controller).toContain("inject:['world','gameHost']");expect(controller).not.toContain('ctx.renderer');
-  expect(JSON.parse(readFileSync(join(root,'game/assets/scene-audit.json'),'utf8')).reflectionProbeCount).toBe(1);
-  expect(JSON.parse(readFileSync(join(root,'reflection-probe-export.json'),'utf8')).authored).toEqual([p]);
-  const config=JSON.parse(readFileSync(join(root,'game/forge.json'),'utf8'));expect(config.plugins[0]).toEqual({id:'reflection-components',name:'./assets/reflection-components.plugin.ts',realm:'engine',inject:[]});
-  expect(readFileSync(join(root,'game/assets/reflection-components.plugin.ts'),'utf8')).toContain('ctx.world.components.register(ReflectionProbe)');
+  expect(JSON.parse(readFileSync(join(root,'game/assets/scene-audit.json'),'utf8')).reflectionProbeCount).toBeUndefined();
+  expect(JSON.parse(readFileSync(join(root,'reflection-probe-export.json'),'utf8'))).toMatchObject({authored:[p],exported:false,entities:{}});
+  const config=JSON.parse(readFileSync(join(root,'game/forge.json'),'utf8'));expect(config.plugins.some((x:any)=>x.id==='reflection-components')).toBe(false);
   delete scene.lighting.reflectionProbes;prepareGeometryProject(root,scene.program,{}, {id:'fixture',summary:'旧导出',scene,provenance:{test:true}});
   expect(readFileSync(join(root,'game/assets/world.pack.ts'),'utf8')).not.toContain('ReflectionProbe');expect(readFileSync(join(root,'game/assets/camera.plugin.ts'),'utf8')).not.toContain('ctx.renderer');
  }finally{rmSync(root,{recursive:true,force:true});}
