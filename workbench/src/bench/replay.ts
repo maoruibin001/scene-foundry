@@ -67,7 +67,7 @@ export async function replayScene(entry:{id:string;run:string},out:string,baseli
  const src=benchSource(runDir),folder=join(out,entry.id),started=Date.now();mkdirSync(folder,{recursive:true});
  const result:any={id:entry.id,run:basename(runDir),jobId:src.jobId,kind:src.kind,deliveredScore:src.score,sourceFolder:src.folder};
  try{
-  const scene=read(src.scenePath);await renderRepairPreview(scene,src.images,src.refs,join(folder,'render'),new AbortController().signal);
+  const scene=read(src.scenePath);await renderRepairPreview(scene,src.images,src.refs,join(folder,'render'),new AbortController().signal,{preJudge:true});
   const receipt=read(join(folder,'render/capture/preview-capture.json')),baseline=baselineDir&&existsSync(join(baselineDir,entry.id,'result.json'))?read(join(baselineDir,entry.id,'result.json')):null;
   const frames=receipt.frames.map((f:any,i:number)=>({referenceIndex:scene.cameras[i]?.referenceIndex??null,file:join(folder,'render/capture',f.file)})).filter((f:any)=>Number.isInteger(f.referenceIndex));
   result.frames=frames.map((f:any)=>{const original=src.images[f.referenceIndex-1].path,copy=join(folder,`reference-${f.referenceIndex}${original.slice(original.lastIndexOf('.'))}`);copyFileSync(original,copy);

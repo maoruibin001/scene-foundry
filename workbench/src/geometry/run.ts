@@ -1,3 +1,4 @@
+import {preJudgeRule,preJudgeScene} from './pre-judge';
 import {mergeVoxelDetails} from '../voxel/detail-merge';
 import {createVoxelDetailBasis,validateVoxelDetailBasis,assertVoxelDetailScene} from '../voxel/detail-scene';
 import {allocateVoxelEntityDetails,VOXEL_DETAIL_POLICY} from '../voxel/entity-detail';
@@ -60,7 +61,7 @@ export function sceneComplexity(scene:any,level:keyof typeof COMPLEXITIES,parts:
 
 function prepareScene(job:any,plan:any,dir:string,value:any,textures:any,provenance:any){
  assertStorageAvailable(undefined,2*1024**3);
- value=bindReferenceFrames(value,(job.images??[]).map((i:any)=>({path:join(UPLOADS,i.file)})));const result={value};save(join(dir,'generated-scene.json'),result.value);job.sceneProgram={version:result.value.version,file:'generated-scene.json'};
+ value=bindReferenceFrames(value,(job.images??[]).map((i:any)=>({path:join(UPLOADS,i.file)})));if(preJudgeRule(job)){const fixed=preJudgeScene(value,textures);value=fixed.scene;textures=fixed.textures;save(join(dir,'pre-judge.json'),fixed.report);}const result={value};save(join(dir,'generated-scene.json'),result.value);job.sceneProgram={version:result.value.version,file:'generated-scene.json'};
   const prepared=prepareGeometryProject(join(dir,'project'),result.value.program,textures,{id:'scene-'+job.id,summary:plan.summary,scene:result.value,provenance:{pipelineVersion:job.pipelineVersion,references:(job.images??[]).map((i:any)=>i.id),textures:provenance,modelSettings:job.modelSettings}});
   job.bounds=prepared.bounds;job.objectCount=prepared.meshes;job.entityCount=result.value.program.instances.length;job.complexityReport=sceneComplexity(result.value,job.complexity,prepared.meshes,job.sceneKind);
   job.structure={passed:true,semanticCounts:semanticCounts(result.value.entities),categoryRequirements:categoryRequirements(result.value),checks:[{id:'geometry-contract',passed:true},{id:'requirement-bindings',passed:true},{id:'texture-provenance',passed:true}],geometry:{triangles:prepared.triangles,suspects:[],scope:'仅证明网格契约、来源和需求绑定；空间接触、遮挡和穿插由实际画面验收，未冒充碰撞检测'},assumptions:result.value.assumptions};

@@ -1,3 +1,4 @@
+import {preJudgeRule} from './pre-judge';
 import {voxelGeometryGuidance} from '../voxel/construction-guidance';
 import {sourceSceneFile} from './source-scene';
 import {referenceComposition,COMPOSITION_PROMPT} from './reference-composition';
@@ -43,7 +44,7 @@ export async function refineWithEvidence(job:any,plan:any,images:any[],dir:strin
  const baseline=await refinementBaseline(job,sourceJob,sourceDir,folder,signal,3);
  const baselineFolder=join(folder,'framing-baseline');
  event(job,'refinement-baseline','先按原始参考图画幅采集现有场景；不消耗模型调用，历史评分和画面保持原样');
- await renderRepairPreview(source,images,refs,baselineFolder,signal);
+ await renderRepairPreview(source,images,refs,baselineFolder,signal,{preJudge:preJudgeRule(job)});
  const baselineReceipt=read(join(baselineFolder,'engine-preview-receipt.json'));
  const currentFrames=baselineReceipt.frames.map((f:any)=>({referenceIndex:f.referenceIndex,path:join(baselineFolder,'capture',f.file),mime:'image/png',sha256:f.sha256}));
  const [used,reusable]=await Promise.all([repairTextureEvidence(source,textures,folder,signal,images),repairReusableTextureEvidence(refs,folder,signal)]);

@@ -4,10 +4,11 @@ import {join,resolve} from 'node:path';
 import {ROOT,DATA,save,read,digest} from '../store';
 import {renderPool} from '../concurrency';
 import {prepareGeometryProject} from './prepare';
+import {preJudgeScene} from './pre-judge';
 import {resolveTextureReuse} from './texture-library';
 import {assertVisibilityCamera} from './visibility-evidence';
 import {reservePreviewPort,previewMatches} from '../preview-endpoint';
-export async function renderRepairPreview(scene:any,images:{path:string;mime:string}[],refs:string[],folder:string,signal:AbortSignal){
+export async function renderRepairPreview(scene:any,images:{path:string;mime:string}[],refs:string[],folder:string,signal:AbortSignal,options:{preJudge?:boolean}={}){
  scene=bindReferenceFrames(scene,images);return renderPool.use(folder,signal,async()=>{
   const authored=scene;
   const limit=AbortSignal.any([signal,AbortSignal.timeout(220000)]),base=resolve(ROOT,'..'),project=join(folder,'project'),materials=join(folder,'materials'),capture=join(folder,'capture');
@@ -19,7 +20,9 @@ export async function renderRepairPreview(scene:any,images:{path:string;mime:str
    save(join(folder,'voxelization-input.json'),{source:scene,plan:{requirements:scene.voxelizationTarget.requirements},referenceCount:images.length,textures:read(join(materials,'texture-registry.json')),options:{resolution:scene.voxelizationTarget.resolution}});
    await command(['bun',join(ROOT,'src/voxel/convert.ts'),folder],folder);scene=read(join(folder,'voxelized-scene.json'));
   }
-  prepareGeometryProject(project,scene.program,read(join(materials,'texture-registry.json')),{id:'repair-preview-'+crypto.randomUUID(),summary:'模型修正过程中的真实预览，尚未验收',scene,provenance:{validationKind:'repair-preview',sourceSceneSha256:digest(JSON.stringify(scene))}});
+  let registry=read(join(materials,'texture-registry.json'));
+  if(options.preJudge){const fixed=preJudgeScene(scene,registry);scene=fixed.scene;registry=fixed.textures;save(join(folder,'pre-judge.json'),fixed.report);}
+  prepareGeometryProject(project,scene.program,registry,{id:'repair-preview-'+crypto.randomUUID(),summary:'模型修正过程中的真实预览，尚未验收',scene,provenance:{validationKind:'repair-preview',sourceSceneSha256:digest(JSON.stringify(scene))}});
   await command(['bun',join(base,'prototype/bin/pipeline.ts'),'generate']);
   await command(['bun',join(ROOT,'src/geometry/export.ts'),project]);
   await command(['bun',join(ROOT,'src/sync-bindings.ts'),project]);
