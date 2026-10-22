@@ -61,3 +61,16 @@ test('a new wall standing past the floor edge gets a floor strip up to it',()=>{
  const strip=closed.space.program.instances.find((i:any)=>i.id==='enclosure_floor_posx');
  expect(strip?.template).toBe('floor');expect(closed.space.entities.find((e:any)=>e.instanceId==='enclosure_floor_posx')?.role).toBe('ground');
 });
+
+test('an earlier inferred wall that no longer spans the room is refitted instead of skipped',()=>{
+ // Workshop 33fc7a82: the round-0 -y wall stayed while the room grew, and the inspection camera saw 5.4% of its frame through it.
+ // Here the earlier -y wall spans 5% of the face: it exists by id, keeps the room box, but no longer closes the side.
+ const {scene,space}=room(),fresh=withInteriorEnclosure(space,scene).space.program.instances.find((i:any)=>i.id==='enclosure_negy');
+ const stale=structuredClone(space);stale.program.instances.push({...fresh,scale:[.05,fresh.scale[1],fresh.scale[2]]});stale.entities.push({instanceId:'enclosure_negy',role:'ground',category:'砖墙'});
+ const voidOf=(program:any)=>enclosureVoids({...scene,program}).cameras[1].edgeShare;
+ expect(voidOf(stale.program)).toBeGreaterThan(.02);
+ const again=withInteriorEnclosure(stale,{...scene,program:stale.program});
+ expect(again.report.added.map((w:any)=>w.id)).toEqual(['enclosure_posx']);expect(again.report.refitted.map((w:any)=>w.id)).toEqual(['enclosure_negy']);
+ expect(again.space.program.instances.filter((i:any)=>i.id==='enclosure_negy').length).toBe(1);
+ expect(voidOf(again.space.program)).toBeLessThan(.02);
+});

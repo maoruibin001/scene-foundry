@@ -133,15 +133,20 @@ export function withInteriorEnclosure(space:any,scene:any){
  const open=new Set<string>();
  for(const c of report.cameras){if(c.edgeShare<ENCLOSURE_LIMITS.edgeLimit)continue;
   for(const [face,n] of Object.entries(c.faces as Record<string,number>))if(n/(ENCLOSURE_LIMITS.width*ENCLOSURE_LIMITS.height)>=ENCLOSURE_LIMITS.faceShare)open.add(face);}
- const fresh=[...open].filter(f=>!space.program.instances.some((i:any)=>i.id==='enclosure_'+(f[0]==='+'?'pos':'neg')+f[1])).sort();
- if(!fresh.length)return {space,report:{...report,added:[]}};
+ const wallId=(f:string)=>'enclosure_'+(f[0]==='+'?'pos':'neg')+f[1],exists=(f:string)=>space.program.instances.some((i:any)=>i.id===wallId(f));
+ // A wall added in an earlier round no longer spans a room the repair grew: workshop 33fc7a82 kept its round-0 -y wall and its
+ // inspection camera still saw 5.4% of the frame through that side. Open faces that already have one are fitted to the current box.
+ const fresh=[...open].filter(f=>!exists(f)).sort(),refit=[...open].filter(exists).sort();
+ if(!fresh.length&&!refit.length)return {space,report:{...report,added:[]}};
  const source=wallSource(space,scene,report.box);
  if(!source)return {space,report:{...report,added:[],reason:'没有可复用的实心墙体模板'}};
- const walls=fresh.map(f=>wallFor(f,source,report.box)),next=structuredClone(space);
+ const walls=fresh.map(f=>wallFor(f,source,report.box)),refitted=refit.map(f=>wallFor(f,source,report.box)),next=structuredClone(space);
+ next.program.instances=next.program.instances.map((i:any)=>refitted.find((w:any)=>w.id===i.id)??i);
  next.program.instances.push(...walls);
  next.entities.push(...walls.map((w:any)=>({instanceId:w.id,role:'ground',category:source.e.category})));
  const skirts=floorSkirts(space,scene,fresh.map((face,n)=>({face,wall:walls[n]})),report.box).map(({_category,...i}:any)=>({i,category:_category}));
  next.program.instances.push(...skirts.map((x:any)=>x.i));next.entities.push(...skirts.map((x:any)=>({instanceId:x.i.id,role:'ground',category:x.category})));
- next.assumptions=[...(next.assumptions??[]),'参考图未拍到的'+fresh.join('、')+'侧由管线按已有墙体模板推断围合（'+INTERIOR_ENCLOSURE+'）'];
- return {space:next,report:{...report,floors:skirts.map((x:any)=>({id:x.i.id,position:x.i.position,scale:x.i.scale})),added:walls.map((w:any)=>({id:w.id,template:w.template,position:w.position,rotation:w.rotation,scale:w.scale})),source:source.i.id}};
+ if(fresh.length)next.assumptions=[...(next.assumptions??[]),'参考图未拍到的'+fresh.join('、')+'侧由管线按已有墙体模板推断围合（'+INTERIOR_ENCLOSURE+'）'];
+ const placed=(w:any)=>({id:w.id,template:w.template,position:w.position,rotation:w.rotation,scale:w.scale});
+ return {space:next,report:{...report,floors:skirts.map((x:any)=>({id:x.i.id,position:x.i.position,scale:x.i.scale})),added:walls.map(placed),refitted:refitted.map(placed),source:source.i.id}};
 }
