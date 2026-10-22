@@ -26,7 +26,7 @@ with zipfile.ZipFile(output,'w',zipfile.ZIP_DEFLATED,compresslevel=6) as archive
     for relative in ['voxel-detail-basis.json','voxel-detail-validation.json','voxel-program.json','voxel-metrics.json','scene.vox','project/game/forge.json','project/game/package.json','project/brief.json','job.json','generation-brief.json','complexity.json','plan.json','generated-scene.json','scene-generation-prompt.json','scene-generation-receipt.json','scene-generation-response.txt','recipe.json','review.json','quality.json','delivery-assessment.json','assessment-evidence.json','reconstruction-goal.json','image-reconstruction.json','manual-audit.json','scene-ir.json','structure.json','spec-report.json','spec-snapshot.json','repair.json','structural-repair.json','structure-before-repair.json','scene-ir-before-repair.json','post-review.json','ui-acceptance.json','native-provenance.json','reference-layout.json','layout-fit.json','reference-observations.json','reference-observations-prompt.json','reference-observations-receipt.json','reference-observations-response.txt','project/reference-layout.json','judge-receipt.json','judge-prompt.json','spec.json','pipeline-plan.json','common-delivery-assessment.json','goal-assessment.json','default-benchmark-assessment.json']:
         file=root/relative
         if file.is_file(): archive.write(file,relative)
-    archive.writestr('READ-ME.txt','ForgeaX runnable project and validation evidence.\nQuality status: '+job['status']+'\nA runnable build is not a passed quality result. See job.json and quality.json.\nUse the pinned Engine CLI: project engine use-local <engine-checkout> --root project/game; project preview --root project/game.\n')
+    archive.writestr('READ-ME.txt','ForgeaX runnable project and validation evidence.\nQuality status: '+job['status']+'\nA runnable build is not a passed quality result. See job.json and quality.json.\nInstall the Engine release named in project/brief.json into project/game, then run its CLI: project preview --root project/game.\n')
 # A self-contained integrity checker verifies extracted contents without the workbench.
 with zipfile.ZipFile(output,'a',zipfile.ZIP_DEFLATED) as archive:
     files={i.filename:hashlib.sha256(archive.read(i.filename)).hexdigest() for i in archive.infolist()}
@@ -37,12 +37,12 @@ with zipfile.ZipFile(output,'a',zipfile.ZIP_DEFLATED) as archive:
 Quality status: **{job['status']}**. This package is a candidate unless job.json says passed.
 
 1. Extract this ZIP into a new directory and run `python3 verify-package.py`.
-2. Use the Engine checkout pinned to `{job['profile']['engineSha']}`. The Engine must already have its CLI/runtime dependencies built.
+2. Install the Engine release named by `engineRelease` in project/brief.json (Engine commit `{job['profile']['engineSha']}`); it ships prebuilt and needs no native build.
 3. From this extracted directory, run:
 
 ```sh
-node /absolute/path/to/engine/packages/engine/dist/bin/forgeax.mjs project engine use-local /absolute/path/to/engine --root project/game --json
-node /absolute/path/to/engine/packages/engine/dist/bin/forgeax.mjs project preview --root project/game --port 19779 --json
+(cd project/game && npm install --no-save --no-audit --no-fund @forgeax/engine@<engineRelease.version>)
+node project/game/node_modules/@forgeax/engine/dist/bin/forgeax.mjs project preview --root project/game --port 19779 --json
 ```
 
 Open the Preview URL returned by the CLI. Space starts or pauses the camera; H hides or restores the HUD. The scene and recording are included. No workbench server or model request is needed for playback.

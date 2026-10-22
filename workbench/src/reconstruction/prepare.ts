@@ -19,7 +19,7 @@ export function prepareReferenceProject(root:string,reconstruction:string){
  copyFileSync(join(W,'src/reconstruction/reference.scene.txt'),join(source,'reference.scene.ts'));
  // 导出适配器参与生成摘要，生成后才替换材质构造方式；不改 Engine 或 Generator。
  copyFileSync(join(W,'src/reconstruction/prepare.ts'),join(source,'export-adapter.txt'));
- const cfg=read(join(P,'game/forge.json'));cfg.id=brief.id;cfg.name=brief.name;save(join(game,'forge.json'),cfg);save(join(game,'package.json'),{name:'reference-reconstruction',private:true,type:'module',packageManager:'pnpm@11.7.0'});
+ const cfg=read(join(P,'game/forge.json'));cfg.id=brief.id;cfg.name=brief.name;save(join(game,'forge.json'),cfg);save(join(game,'package.json'),{name:'reference-reconstruction',private:true,type:'module',packageManager:'pnpm@12.10.1'});
  if(!lstatSync(join(game,'node_modules/@forgeax/engine'),{throwIfNoEntry:false}))symlinkSync(join(ENGINE,'packages/engine'),join(game,'node_modules/@forgeax/engine'),'dir');
  const v=views[0];
  let world=readFileSync(join(P,'game/assets/world.pack.ts'),'utf8')

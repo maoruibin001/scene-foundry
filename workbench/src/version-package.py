@@ -28,7 +28,7 @@ print('Verified '+str(len(m['files']))+' snapshot files')
 Immutable pipeline ID: `{manifest['id']}`. Check pipeline-release.json for stable publication; a candidate is not a stable release.
 
 1. Extract to a new directory, leaving the current workbench intact. Run `python3 verify-snapshot.py`.
-2. Place the prepared Engine checkout at `engine/`, SHA `{manifest['configuration']['engineSha']}`, and scene-generator checkout at `scene-generator/`, SHA `{manifest['configuration']['generatorSha']}`. Install/build their dependencies as required by each repository. Dependencies and provider availability remain external prerequisites.
+2. Run `python3 prototype/bin/bootstrap.py`: it installs the Engine release pinned in prototype/brief.json at `engine/` (Engine commit `{manifest['configuration']['engineSha']}`, tarball integrity checked) and the scene-generator checkout at `scene-generator/`, SHA `{manifest['configuration']['generatorSha']}`. Dependencies and provider availability remain external prerequisites.
 3. In `workbench/`, run `bun install`. Restore the non-secret defaults from pipeline-manifest.json configuration with environment variables PIPELINE_PROVIDER, PIPELINE_MODEL, PIPELINE_JUDGE_MODEL, PIPELINE_CODEX_EFFORT, and choose PIPELINE_MAX_CALLS explicitly. Configure credentials separately through the existing provider login; no credentials are in this archive.
 4. Choose an unused PORT, then run `bun src/server.ts`. Generated results persist in workbench/data/runs and version snapshots in workbench/data/versions. Those growing result directories are retained by the original workbench and are not copied into this source-only archive. Download individual scene packages separately.
 

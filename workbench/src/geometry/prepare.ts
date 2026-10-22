@@ -39,7 +39,7 @@ export function prepareGeometryProject(root:string,program:GeometryProgram,textu
   cfg.plugins.unshift({id:'reflection-components',name:'./assets/reflection-components.plugin.ts',realm:'engine',inject:[]});
   writeFileSync(join(assets,'reflection-components.plugin.ts'),REFLECTION_COMPONENT_BOOTSTRAP);
  }
- save(join(game,'forge.json'),cfg);save(join(game,'package.json'),{name:'geometry-program-scene',private:true,type:'module',packageManager:'pnpm@11.7.0'});
+ save(join(game,'forge.json'),cfg);save(join(game,'package.json'),{name:'geometry-program-scene',private:true,type:'module',packageManager:'pnpm@12.10.1'});
  if(!lstatSync(join(game,'node_modules/@forgeax/engine'),{throwIfNoEntry:false}))symlinkSync(join(ENGINE,'packages/engine'),join(game,'node_modules/@forgeax/engine'),'dir');
  let world=readFileSync(join(P,'game/assets/world.pack.ts'),'utf8').replace('const pos=[20,10,20] as const;',`const pos=${JSON.stringify([c[0]+r/Math.sqrt(2),c[1]+h,c[2]+r/Math.sqrt(2)])} as const;`).replace('[0,5,0]',JSON.stringify(c)).replace('Micro garden recording scene','通用几何场景').replace('Micro garden authored content','组合几何');
  const toEngine=(v:number[])=>[v[0],v[2],-v[1]],clear=options?cameraClearance(result.meshes):null;

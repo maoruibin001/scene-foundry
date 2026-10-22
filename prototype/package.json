@@ -7,7 +7,7 @@
     "build": "bun bin/pipeline.ts build",
     "verify": "bun bin/pipeline.ts verify",
     "preview": "bun bin/pipeline.ts preview",
-    "test": "bun test bin/pipeline.test.ts",
+    "test": "bun test bin/pipeline.test.ts bin/compose-host.test.ts",
     "accept": "bun bin/pipeline.ts accept"
   }
 }

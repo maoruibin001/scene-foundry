@@ -3,6 +3,8 @@ import { resolve, join, dirname } from 'node:path';
 import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { exportSceneModulePack } from '../../scene-generator/apps/composition/backend/src/pack-export/moduleExport.ts';
+import { composeHost } from './compose-host.ts';
+import { engineRevision } from './engine-identity.ts';
 
 export function validateBrief(b: any) {
   if (!b.id || !b.semanticBrief || !Array.isArray(b.targets) || !b.targets.length) throw new Error('brief: identity, semantics and targets required');
@@ -28,6 +30,8 @@ const reportPath=join(evidence,'run-report.json');
 const hash=(s:string)=>createHash('sha256').update(s).digest('hex');
 const treeDigest=(dir:string):string=>hash(readdirSync(dir,{withFileTypes:true}).sort((a,b)=>a.name.localeCompare(b.name)).map(e=>e.name+':'+(e.isDirectory()?treeDigest(join(dir,e.name)):hash(readFileSync(join(dir,e.name),'utf8')))).join('\n'));
 const read=(f:string)=>JSON.parse(readFileSync(f,'utf8'));
+// A source checkout ships prebuilt shader inputs here; an npm release bundles its own and needs no override.
+const sharedInputs=join(engine,'shared-build-inputs/manifest.json'),sharedInputsEnv=()=>({...process.env,...(existsSync(sharedInputs)?{FORGEAX_SHARED_APP_INPUTS_MANIFEST:sharedInputs}:{})});
 const save=(f:string,v:unknown)=>writeFileSync(f,JSON.stringify(v,null,2)+'\n');
 
 async function main(){
@@ -51,7 +55,7 @@ async function main(){
     catch(error){report.stages[name]={status:'failed',durationMs:Date.now()-started,error:String(error)};save(reportPath,report);throw error;}
   };
   const engineCommand=(name:string,args:string[])=>{
-    const r=spawnSync(process.execPath.includes('bun')?'node':process.execPath,[cli,...args,'--root',game,'--json'],{cwd:game,encoding:'utf8',env:{...process.env,FORGEAX_SHARED_APP_INPUTS_MANIFEST:join(engine,'shared-build-inputs/manifest.json')},timeout:240000,killSignal:'SIGKILL',maxBuffer:32*1024*1024});
+    const r=spawnSync(process.execPath.includes('bun')?'node':process.execPath,[cli,...args,'--root',game,'--json'],{cwd:game,encoding:'utf8',env:sharedInputsEnv(),timeout:240000,killSignal:'SIGKILL',maxBuffer:32*1024*1024});
     writeFileSync(join(evidence,name+'.stdout'),r.stdout??'');writeFileSync(join(evidence,name+'.stderr'),r.stderr??'');
     if(r.error||r.status!==0)throw new Error(`${name} exit=${r.status}: ${(r.stderr??'').slice(-1800)} ${(r.stdout??'').slice(-1200)}`);
     let result;try{result=JSON.parse(r.stdout)}catch{throw new Error(`${name}: response is not structured JSON`)}
@@ -63,8 +67,8 @@ async function main(){
     save(reportPath,report);
     await stage('candidate',()=>{
       for(const [dir,sha] of [[engine,brief.engineSha],[join(dependencies,'scene-generator'),brief.generatorSha]]){
-        const r=spawnSync('git',['rev-parse','HEAD'],{cwd:dir,encoding:'utf8'});if(r.status||r.stdout.trim()!==sha)throw new Error('candidate SHA mismatch: '+dir);
-        const dirty=spawnSync('git',['diff','--quiet','HEAD'],{cwd:dir});if(dirty.status)throw new Error('candidate has tracked changes: '+dir);
+        const r=engineRevision(dir);if(r.sha!==sha)throw new Error('candidate SHA mismatch: '+dir);
+        if(!r.clean)throw new Error('candidate has tracked changes: '+dir);
       }
     });
     const staging=join(root,'.staging-generated');
@@ -89,12 +93,14 @@ async function main(){
     report.browser={status:'not-run'};report.spec={status:'pending-visual-review'};
     for(const key of ['engine-binding','project-check','engine-build','catalog','asset-verify','asset-ready','engine-status'])delete report.stages[key];
     delete report.catalog;save(reportPath,report);
-    await stage('engine-binding',()=>engineCommand('engine-binding',['project','engine','use-local',engine]));
+    // The pinned release resolves through game/node_modules/@forgeax/engine (SDK mode); no workspace binding is written.
+    await stage('engine-binding',async()=>{const roots=await composeHost(game,engine);if(realpathSync(join(game,'node_modules/@forgeax/engine'))!==realpathSync(join(engine,'packages/engine')))throw new Error('game does not resolve the pinned Engine package');return roots;});
     await stage('project-check',()=>engineCommand('project-check',['project','check']));
     await stage('engine-build',()=>engineCommand('project-build',['project','build']));
     await stage('catalog',()=>{
       const catalog=read(join(game,'dist/pack-index.json'));const receipt=read(join(evidence,'generation-receipt.json'));
-      const rows=Array.isArray(catalog)?catalog:catalog.entries;
+      // Engine 0.4.18 nests the rows in a pack-index-tables/1 table.
+      const rows=Array.isArray(catalog)?catalog:Array.isArray(catalog.entries)?catalog.entries:catalog.entries?.entries;
       if(!Array.isArray(rows))throw new Error('catalog rows missing');
       if(!rows.some((r:any)=>r.guid===receipt.sceneGuid&&r.kind==='scene'))throw new Error('generated scene GUID absent from catalog');
       report.catalog={rows:rows.length,kinds:[...new Set(rows.map((r:any)=>r.kind))],sha256:hash(JSON.stringify(catalog))};
@@ -106,7 +112,7 @@ async function main(){
     await stage('asset-verify',()=>{const r=engineCommand('asset-verify',['asset','verify']);const s=r.value.summary;if(s.unproducedAssetCount||s.unknownAssetCount||s.unmaterializedScriptablePackCount)throw new Error('Asset verification contains unavailable outputs');return r;});
     const receipt=read(join(evidence,'generation-receipt.json'));
     await stage('asset-ready',()=>engineCommand('asset-ready',['asset','resolve',receipt.sceneGuid,'--require','ready']));
-    await stage('engine-status',()=>{const r=engineCommand('engine-status',['project','engine','status']);if(!r.value.healthy||realpathSync(r.value.resolved.root)!==realpathSync(engine))throw new Error('Engine binding is not healthy or resolved to another source');return r;});
+    await stage('engine-status',()=>{const r=engineCommand('engine-status',['project','engine','status']);if(!r.value.healthy||realpathSync(r.value.resolved.root)!==realpathSync(join(engine,'packages/engine')))throw new Error('Engine binding is not healthy or resolved to another source');return r;});
   } else if(operation==='accept'){
     await stage('browser-acceptance',()=>{
       const b=read(join(evidence,'browser/observations.json'));

@@ -2,6 +2,6 @@
   "name": "micro-garden-scene",
   "private": true,
   "type": "module",
-  "packageManager": "pnpm@11.7.0",
-  "description": "Source-bound Engine validation project. Engine resolution is owned by .forgeax/engine-binding.json."
+  "packageManager": "pnpm@12.10.1",
+  "description": "Source-bound Engine validation project. Engine resolves through node_modules/@forgeax/engine, linked to the pinned release by bootstrap."
 }
