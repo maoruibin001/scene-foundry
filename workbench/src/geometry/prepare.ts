@@ -11,7 +11,7 @@ import {randomUUID,createHash} from 'node:crypto';
 import {compileGeometryProgram,type GeometryProgram,type Texture} from './program';
 import {bounds} from '../recipe';
 import type {SceneInput} from './scene-contract';
-import {cameraClearance,planCameraTour} from './camera-tour';
+import {cameraClearance,planCameraTour,tourOcclusion} from './camera-tour';
 const W=resolve(import.meta.dirname,'../..'),BASE=resolve(W,'..'),P=join(BASE,'prototype'),ENGINE=join(BASE,'engine');
 const read=(p:string)=>JSON.parse(readFileSync(p,'utf8')),save=(p:string,v:any)=>writeFileSync(p,JSON.stringify(v,null,2)+'\n');
 
@@ -44,8 +44,8 @@ export function prepareGeometryProject(root:string,program:GeometryProgram,textu
  save(join(game,'forge.json'),cfg);save(join(game,'package.json'),{name:'geometry-program-scene',private:true,type:'module',packageManager:'pnpm@12.10.1'});
  if(!lstatSync(join(game,'node_modules/@forgeax/engine'),{throwIfNoEntry:false}))symlinkSync(join(ENGINE,'packages/engine'),join(game,'node_modules/@forgeax/engine'),'dir');
  let world=readFileSync(join(P,'game/assets/world.pack.ts'),'utf8').replace('const pos=[20,10,20] as const;',`const pos=${JSON.stringify([c[0]+r/Math.sqrt(2),c[1]+h,c[2]+r/Math.sqrt(2)])} as const;`).replace('[0,5,0]',JSON.stringify(c)).replace('Micro garden recording scene','通用几何场景').replace('Micro garden authored content','组合几何');
- const toEngine=(v:number[])=>[v[0],v[2],-v[1]],clear=options?cameraClearance(result.meshes):null;
- const views=options?.scene.cameras.map(v=>{const tour=planCameraTour(v,clear!);return {...v,position:toEngine(v.position),target:toEngine(v.target),cruise:{...tour,origin:toEngine(tour.origin),displacement:toEngine(tour.displacement)}};});
+ const toEngine=(v:number[])=>[v[0],v[2],-v[1]],clear=options?cameraClearance(result.meshes):null,occlusion=options?tourOcclusion(result.meshes):undefined;
+ const views=options?.scene.cameras.map(v=>{const tour=planCameraTour(v,clear!,16/9,.1,occlusion);return {...v,position:toEngine(v.position),target:toEngine(v.target),cruise:{...tour,origin:toEngine(tour.origin),displacement:toEngine(tour.displacement)}};});
  if(views)save(join(root,'camera-tours.json'),{version:'camera-tour-v1',views});
  if(options&&views){
   const v=views[0],light=options.scene.lighting;

@@ -1,4 +1,5 @@
 import {compileGeometryProgram} from './program';
+import {basis,rayScene} from './camera-fit';
 /** Z 向上。用真实三角形检查相机近裁面的包围球扫过整段路径，不用物体包围盒代替净空。 */
 type V=number[];
 const sub=(a:V,b:V)=>a.map((v,i)=>v-b[i]),add=(a:V,b:V,s=1)=>a.map((v,i)=>v+b[i]*s);
@@ -37,16 +38,38 @@ export function cameraClearance(meshes:any[]){
   return {safe:distance>radius+1e-6,distance:Number.isFinite(distance)?distance:null,meshId};
  };
 }
-export function planCameraTour(camera:{position:V;target:V;fov:number},clear:ReturnType<typeof cameraClearance>,aspect=16/9,near=.1){
+/**
+ * Study c1ba845b (2026-10-22) failed S06 because its first reference camera toured 0.47 m right, where the entry frame grew from 8% to
+ * 25% of the frame and hid the bookcase. Coverage is the share of a 32×18 ray grid whose first hit is an instance; a tour end may not
+ * raise any one instance's share by more than TOUR_LIMITS.coverageRise when a candidate exists that does not.
+ */
+export const TOUR_LIMITS={coverageRise:.05,columns:32,rows:18};
+export function tourOcclusion(meshes:any[]){
+ const cast=rayScene(meshes,{near:.05,far:1000,doubleSided:true});
+ const cover=(camera:{position:V;target:V;fov:number},position:V,aspect:number)=>{const b=basis({...camera,position} as any),t=Math.tan(camera.fov/2),share:Record<string,number>={},{columns,rows}=TOUR_LIMITS;
+  for(let i=0;i<columns;i++)for(let j=0;j<rows;j++){const x=(i+.5)/columns,y=(j+.5)/rows,d=[0,1,2].map(k=>b.forward[k]+b.right[k]*(x-.5)*2*t*aspect+b.up[k]*(.5-y)*2*t),l=length(d),hit=cast(position,d.map(v=>v/l));
+   if(hit){const id=hit.meshId.split('__')[0];share[id]=(share[id]??0)+1/(columns*rows);}}
+  return share;};
+ return (camera:{position:V;target:V;fov:number},end:V,aspect=16/9)=>{const a=cover(camera,camera.position,aspect),b=cover(camera,end,aspect);let rise=0,instance:string|null=null;
+  for(const [id,v] of Object.entries(b))if(v-(a[id]??0)>rise){rise=v-(a[id]??0);instance=id;}
+  return {rise:+rise.toFixed(4),instance};};
+}
+export function planCameraTour(camera:{position:V;target:V;fov:number;projection?:string},clear:ReturnType<typeof cameraClearance>,aspect=16/9,near=.1,occlusion?:ReturnType<typeof tourOcclusion>){
  const radius=near*Math.sqrt(1+Math.tan(camera.fov/2)**2*(1+aspect**2))+.02;
  const start=[...camera.position],initial=clear(start,start,radius),base={version:'camera-tour-v1',origin:start,radius,near,aspect,method:'真实三角形与近裁面包围球的线段扫掠，包含玻璃表面'};
  if(!initial.safe)return {...base,status:'blocked',displacement:[0,0,0],reason:'参考机位的近裁面空间已与场景表面相交',blocker:initial.meshId};
  const f=sub(camera.target,start);f[2]=0;const norm=length(f);const forward=norm>1e-8?f.map(v=>v/norm):[0,1,0],right=[forward[1],-forward[0],0];
  // 优先侧向视差；找不到完整幅度时才缩短，不能通过隐藏障碍或原地转向获得通过。
+ let fallback:any=null;
  for(const amplitude of [.5,.35,.2,.12])for(const angle of [0,Math.PI,Math.PI/4,-Math.PI/4,Math.PI*3/4,-Math.PI*3/4,Math.PI/2,-Math.PI/2]){
   const displacement=right.map((v,i)=>amplitude*(v*Math.cos(angle)+forward[i]*Math.sin(angle))),end=add(start,displacement);
-  if(clear(start,end,radius).safe)return {...base,status:'ready',displacement,reason:null,blocker:null};
+  if(!clear(start,end,radius).safe)continue;
+  // An orthographic view only slides across the scene; nothing new comes between it and the subject.
+  const covered=occlusion&&camera.projection!=='orthographic'?occlusion(camera,end,aspect):null,ready={...base,status:'ready',displacement,reason:null,blocker:null,...(covered?{coverageRise:covered}:{})};
+  if(!covered||covered.rise<=TOUR_LIMITS.coverageRise)return ready;
+  if(!fallback||covered.rise<fallback.coverageRise.rise)fallback=ready;
  }
+ if(fallback)return fallback;
  return {...base,status:'blocked',displacement:[0,0,0],reason:'参考机位周围没有足够净空的连续平移路径',blocker:null};
 }
 

@@ -1,5 +1,5 @@
 import {test,expect} from 'bun:test';
-import {cameraClearance,planCameraTour,segmentTriangleDistance} from './camera-tour';
+import {cameraClearance,planCameraTour,segmentTriangleDistance,tourOcclusion,TOUR_LIMITS} from './camera-tour';
 import {createCameraMotion,stepCamera,toggleCruise} from '../native/camera-motion';
 const wall=(x:number,y0=-2,y1=2,z0=0,z1=3)=>({name:'thin_surface',geometry:{positions:[x,y0,z0,x,y1,z0,x,y1,z1,x,y0,z1],indices:[0,1,2,0,2,3]}});
 const idle={forward:0,side:0,up:0,yaw:0,pitch:0,fast:false};
@@ -35,4 +35,18 @@ test('巡航长期处于已验证线段，暂停恢复无跳变，自由移动�
  toggleCruise(s);const paused=[...s.position];toggleCruise(s);stepCamera(s,idle,0);expect(s.position).toEqual(paused);
  stepCamera(s,{...idle,forward:1},.1);const moved=[...s.position];toggleCruise(s);stepCamera(s,idle,.1);expect(s.position).toEqual(moved);expect(s.running).toBe(false);expect(s.blockReason).toContain('选择机位');
  expect(pose.position).toEqual([0,1.6,0]);
+});
+
+test('a tour end that lets a near pillar fill the frame gives way to a direction that keeps the view',()=>{
+ // Study c1ba845b: the first reference camera toured right until the entry frame covered 25% of the frame instead of 8%.
+ const quad=(name:string,x0:number,x1:number,y:number,z0:number,z1:number)=>({name,geometry:{positions:[x0,y,z0,x1,y,z0,x1,y,z1,x0,y,z1],indices:[0,1,2,0,2,3]}});
+ const side=(name:string,x:number,y0:number,y1:number,z0:number,z1:number)=>({name,geometry:{positions:[x,y0,z0,x,y1,z0,x,y1,z1,x,y0,z1],indices:[0,1,2,0,2,3]}});
+ const meshes=[quad('back__wall',-20,20,10,-5,10),side('pillar__post',.85,.4,4,0,3)],camera={position:[0,0,1.6],target:[0,10,1.6],fov:1};
+ const clear=cameraClearance(meshes),occlusion=tourOcclusion(meshes);
+ expect(planCameraTour(camera,clear).displacement[0]).toBeCloseTo(.5,6);
+ expect(occlusion(camera,[.5,0,1.6]).rise).toBeGreaterThan(TOUR_LIMITS.coverageRise);
+ const plan=planCameraTour(camera,clear,16/9,.1,occlusion);
+ expect(plan.status).toBe('ready');expect(plan.coverageRise.rise).toBeLessThanOrEqual(TOUR_LIMITS.coverageRise);expect(plan.displacement[0]).toBeLessThan(.5);
+ // Orthographic voxel views keep the first clear direction.
+ expect(planCameraTour({...camera,projection:'orthographic'},clear,16/9,.1,occlusion).displacement[0]).toBeCloseTo(.5,6);
 });
