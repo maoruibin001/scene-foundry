@@ -42,7 +42,7 @@ test('shared local-light budget requires replacing sources instead of increasing
 test('export composes with reflection and camera settings and fails on template drift',()=>{
  const reflection={position:[0,4,3],halfExtents:[3,5,3],intensity:.5,resolution:64 as const};
  const a=bindAreaLights(bindReflectionProbes(bindCameraOutput(world,{antialias:'msaa',tonemap:'neutral',exposure:1}),[reflection]),[area()]);
- expect(a).toContain('RectAreaLight');expect(a).toContain('ANTIALIAS_MSAA');expect(a).toContain('REFLECTION_PROBE_UPDATE_ONCE');
+ expect(a).toContain('RectAreaLight');expect(a).toContain('ANTIALIAS_SMAA');expect(a).toContain('REFLECTION_PROBE_UPDATE_ONCE');
  for(const broken of [world.replace('perspective }','perspective as p }'),world.replace('Name,Transform]','Name]'),world.replace('ambient:{components:','ambientLight:{components:')])expect(()=>bindAreaLights(broken,[area()])).toThrow('契约变化');
 });
 test('normal prepare exports authored emitter, no scene geometry or source data changes',()=>{
@@ -54,7 +54,7 @@ test('normal prepare exports authored emitter, no scene geometry or source data 
  const evidence=JSON.parse(readFileSync(join(root,'area-light-export.json'),'utf8'));expect(evidence.authored).toEqual([area()]);expect(evidence.entities.areaLight0.components.RectAreaLight.width).toBe(.3);
  // prepare binds area lights before camera output; the appended RectAreaLight symbol must not hide the camera's import.
  scene.lighting.cameraOutput={antialias:'msaa',tonemap:'neutral',exposure:1.2};prepareGeometryProject(root,scene.program,{}, {id:'fixture',summary:'面光与显示',scene,provenance:{test:true}});
- const both=readFileSync(join(root,'game/assets/world.pack.ts'),'utf8');expect(both).toContain('RectAreaLight,Name,Transform]');expect(both).toContain('antialias:ANTIALIAS_MSAA,tonemap:TONEMAP_NEUTRAL,exposure:1.2');expect(both.match(/import \{[^;\n]+ \} from '@forgeax\/engine\/render';/g)!.length).toBe(1);
+ const both=readFileSync(join(root,'game/assets/world.pack.ts'),'utf8');expect(both).toContain('RectAreaLight,Name,Transform]');expect(both).toContain('antialias:ANTIALIAS_SMAA,tonemap:TONEMAP_NEUTRAL,exposure:1.2');expect(both.match(/import \{[^;\n]+ \} from '@forgeax\/engine\/render';/g)!.length).toBe(1);
  delete scene.lighting.cameraOutput;
  for(const value of [undefined,null,[]]){scene.lighting.areaLights=value;prepareGeometryProject(root,scene.program,{}, {id:'fixture',summary:'旧数据',scene,provenance:{test:true}});expect(readFileSync(join(root,'game/assets/world.pack.ts'),'utf8')).not.toContain('RectAreaLight');expect(()=>readFileSync(join(root,'area-light-export.json'))).toThrow();}
  }finally{rmSync(root,{recursive:true,force:true});}

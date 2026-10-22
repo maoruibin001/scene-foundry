@@ -28,7 +28,7 @@ test('导出锚点漂移或重复不可静默丢弃请求',()=>{
 });
 test('相机输出、局部反射、点光阴影可在同一个正常世界组合',()=>{
  let out=bindPointShadows(world,[{...point,shadow}]);out=bindCameraOutput(out,{antialias:'msaa',tonemap:'neutral',exposure:1});out=bindReflectionProbes(out,[{position:[0,0,2],halfExtents:[5,5,3],intensity:.4,resolution:64}]);
- expect(out).toContain('PointLightShadow');expect(out).toContain('ReflectionProbe');expect(out).toContain('ANTIALIAS_MSAA');expect(out).toContain('REFLECTION_PROBE_UPDATE_ONCE');
+ expect(out).toContain('PointLightShadow');expect(out).toContain('ReflectionProbe');expect(out).toContain('ANTIALIAS_SMAA');expect(out).toContain('REFLECTION_PROBE_UPDATE_ONCE');
 });
 test('实际prepare贯通带点光阴影、相机和反射的完整正常导出；输入及旧世界不变',()=>{
  const pose={position:[0,0,0],rotation:[0,0,0],scale:[1,1,1]},scene:any={version:'scene-v1',program:{version:'geometry-v1',name:'点光遮挡',materials:[{id:'m',color:[.5,.5,.5,1],roughness:.6,metallic:0,textureId:null}],templates:[{id:'t',parts:[{...pose,id:'p',material:'m',shape:{type:'box',size:[1,1,1],radius:0}}]}],instances:[{...pose,id:'i',label:'立体',template:'t',requirementIds:[]}]},cameras:[{name:'主',referenceIndex:1,position:[3,-5,2],target:[0,0,0],fov:1}],entities:[{instanceId:'i',role:'subject',category:'立体'}],lighting:{direction:[0,0,-1],color:[1,1,1],intensity:1,ambientColor:[1,1,1],ambientIntensity:.2,points:[point],spots:[],cameraOutput:{antialias:'msaa',tonemap:'neutral',exposure:1},reflectionProbes:[{position:[0,0,2],halfExtents:[5,5,3],intensity:.4,resolution:64}]},textures:[],assumptions:[]};
@@ -37,6 +37,6 @@ test('实际prepare贯通带点光阴影、相机和反射的完整正常导出�
   prepareGeometryProject(root,scene.program,{},options());const legacy=readFileSync(join(root,'game/assets/world.pack.ts'),'utf8');
   scene.lighting.points=[{...point,shadow:null}];prepareGeometryProject(root,scene.program,{},options());expect(readFileSync(join(root,'game/assets/world.pack.ts'),'utf8')).toBe(legacy);
   scene.lighting.points=[{...point,shadow}];const input=JSON.stringify(scene);prepareGeometryProject(root,scene.program,{},options());expect(JSON.stringify(scene)).toBe(input);
-  const built=readFileSync(join(root,'game/assets/world.pack.ts'),'utf8');expect(built).toContain('PointLightShadow');expect(built).not.toContain('localReflection0');expect(built).toContain('ANTIALIAS_MSAA');expect(JSON.parse(readFileSync(join(root,'point-shadow-export.json'),'utf8')).authored).toEqual([shadow]);
+  const built=readFileSync(join(root,'game/assets/world.pack.ts'),'utf8');expect(built).toContain('PointLightShadow');expect(built).not.toContain('localReflection0');expect(built).toContain('ANTIALIAS_SMAA');expect(JSON.parse(readFileSync(join(root,'point-shadow-export.json'),'utf8')).authored).toEqual([shadow]);
  }finally{rmSync(root,{recursive:true,force:true});}
 });

@@ -16,7 +16,7 @@ test('未声明时旧导出逐字不变；显式静态探针绑定固定公开�
 });
 test('相机输出、局部灯和探针可组合；模板漂移不可静默遗漏',()=>{
  const withCamera=bindCameraOutput(world.replace('far:160','far:1000'),{antialias:'msaa',tonemap:'neutral',exposure:1});
- expect(bindReflectionProbes(withCamera,[p])).toContain('ANTIALIAS_MSAA');expect(bindReflectionProbes(withCamera,[p])).toContain('REFLECTION_PROBE_UPDATE_ONCE');
+ expect(bindReflectionProbes(withCamera,[p])).toContain('ANTIALIAS_SMAA');expect(bindReflectionProbes(withCamera,[p])).toContain('REFLECTION_PROBE_UPDATE_ONCE');
  for(const broken of [world.replace('perspective }','perspective as p }'),world.replace('Name,Transform]','Name]'),world.replace('ambient:{components:','ambientLight:{components:')])expect(()=>bindReflectionProbes(broken,[p])).toThrow('契约变化');
 });
 test('拒绝无效、无限、负尺寸、不支持分辨率和无界数量；schema与实际校验一致',()=>{

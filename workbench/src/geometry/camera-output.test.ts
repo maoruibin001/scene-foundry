@@ -10,8 +10,8 @@ const profile={antialias:'msaa' as const,tonemap:'neutral' as const,exposure:1};
 test('历史场景显示保持逐字相同，新增档使用固定Engine公开常量而非猜测数值',()=>{
  expect(bindCameraOutput(world)).toBe(world);expect(bindCameraOutput(world,null)).toBe(world);
  const result=bindCameraOutput(world,profile);
- expect(result).toContain('perspective, ANTIALIAS_MSAA, TONEMAP_NEUTRAL }');
- expect(result).toContain('antialias:ANTIALIAS_MSAA,tonemap:TONEMAP_NEUTRAL,exposure:1,clearColor:');
+ expect(result).toContain('perspective, ANTIALIAS_SMAA, TONEMAP_NEUTRAL }');
+ expect(result).toContain('antialias:ANTIALIAS_SMAA,tonemap:TONEMAP_NEUTRAL,exposure:1,clearColor:');
  expect(result).toContain('fov:1,near:.1,far:1000');
  expect(bindCameraOutput(world,{antialias:'none',tonemap:'none',exposure:1})).toContain('ANTIALIAS_NONE,tonemap:TONEMAP_NONE');
 });
@@ -34,9 +34,9 @@ test('实际场景导出接通参数与审计，场景几何光源机位数据�
  const before=JSON.stringify(scene),root=mkdtempSync(join(tmpdir(),'camera-output-'));
  try{expect(validateLighting(lighting)).toBe(lighting);prepareGeometryProject(root,scene.program,{}, {id:'fixture',summary:'导出测试',scene,provenance:{test:true}});
  expect(JSON.stringify(scene)).toBe(before);
- const built=readFileSync(join(root,'game/assets/world.pack.ts'),'utf8');expect(built).toContain('antialias:ANTIALIAS_MSAA');expect(built).toContain('tonemap:TONEMAP_NEUTRAL');
+ const built=readFileSync(join(root,'game/assets/world.pack.ts'),'utf8');expect(built).toContain('antialias:ANTIALIAS_SMAA');expect(built).toContain('tonemap:TONEMAP_NEUTRAL');
  const receipt=JSON.parse(readFileSync(join(root,'camera-output-export.json'),'utf8'));expect(receipt.authored).toEqual(profile);expect(receipt.legacyDefault).toBe(false);
  const audit=JSON.parse(readFileSync(join(root,'game/assets/scene-audit.json'),'utf8'));expect(audit.views[0].position).toEqual([3,2,5]);
- delete scene.lighting.cameraOutput;prepareGeometryProject(root,scene.program,{}, {id:'fixture',summary:'历史测试',scene,provenance:{test:true}});expect(readFileSync(join(root,'game/assets/world.pack.ts'),'utf8')).not.toContain('ANTIALIAS_MSAA');expect(JSON.parse(readFileSync(join(root,'camera-output-export.json'),'utf8')).legacyDefault).toBe(true);
+ delete scene.lighting.cameraOutput;prepareGeometryProject(root,scene.program,{}, {id:'fixture',summary:'历史测试',scene,provenance:{test:true}});expect(readFileSync(join(root,'game/assets/world.pack.ts'),'utf8')).not.toContain('ANTIALIAS_SMAA');expect(JSON.parse(readFileSync(join(root,'camera-output-export.json'),'utf8')).legacyDefault).toBe(true);
  }finally{rmSync(root,{recursive:true,force:true});}
 });
