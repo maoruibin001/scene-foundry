@@ -14,3 +14,13 @@ test('工具异常和工具返回失败均有独立完成记录，图片正文�
   const content=readFileSync(audit,'utf8'),rows=content.trim().split('\n').map(x=>JSON.parse(x));expect(rows.filter(r=>r.event==='started')).toHaveLength(3);expect(rows.filter(r=>r.event==='finished').map(r=>r.error)).toEqual(['Error: 明确的预算校验错误','结构无效',null]);expect(content).not.toContain('image-secret-base64');
  }finally{server.close();rmSync(folder,{recursive:true,force:true});}
 });
+
+test('on the retry after a gateway rejection, a tool\'s PNG frames are rewritten before they reach the model',async()=>{
+ // Study c947c2b8: the gateway rejected a preview_saved_asset frame as input[22].output[4] and the asset failed.
+ const kit:CodexToolKit={version:'fixture',instructions:'中文',definitions:[{name:'inspect_scene_parts',inputSchema:{type:'object'}}],async call(){return {content:[{type:'text',text:'真实结果'},{type:'image',mimeType:'image/png',data:'cG5n'},{type:'image',mimeType:'image/jpeg',data:'anBn'}]};}};
+ const server=serveCodexTools(kit,undefined,undefined,(b:string)=>'re:'+b);try{
+  const arg=server.args.find(x=>x.startsWith('mcp_servers.scene_feedback.args='))!,[,url]=JSON.parse(arg.slice(arg.indexOf('=')+1));
+  const body=await(await fetch(url,{method:'POST',body:JSON.stringify({method:'tools/call',params:{name:'inspect_scene_parts',arguments:{}}})})).json();
+  expect(body.content.map((c:any)=>c.data??c.text)).toEqual(['真实结果','re:cG5n','anBn']);
+ }finally{server.close();}
+});

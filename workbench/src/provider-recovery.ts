@@ -5,7 +5,8 @@ import {rateLimitDelay} from './provider-pressure';
 import {externalProviderBlock} from './provider-external-block';
 
 export const RECOVERY_POLICY={version:'provider-recovery-v1',maxAttempts:3,maxTimeouts:2,maxElapsedMs:60*60*1000,delaysMs:[5000,15000]};
-const IMAGE_ENCODING_REJECTED=/Invalid 'input\[\d+\]\.content\[\d+\]\.image_url'[^\n]*invalid base64-encoded value/;
+// Prompt images arrive as input[n].content[m]; a feedback tool's preview frame as input[n].output[m] (study c947c2b8, 2026-10-22).
+const IMAGE_ENCODING_REJECTED=/Invalid 'input\[\d+\]\.(?:content|output)\[\d+\]\.image_url'[^\n]*invalid base64-encoded value/;
 export const ACTIVE_RECOVERY_POLICY=process.env.PIPELINE_PROVIDER_RECOVERY==='single-attempt'?{...RECOVERY_POLICY,maxAttempts:1,maxTimeouts:1,maxElapsedMs:Number(process.env.PIPELINE_EXECUTION_MAX??3)>3?30*60*1000:15*60*1000}:RECOVERY_POLICY;
 export function providerFault(error:unknown){
  const s=String(error);

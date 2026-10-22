@@ -50,6 +50,8 @@ test('网关拒收已校验图片的编码时，只以像素一致的无损重�
  const rejected="Error: PROVIDER_CODEX_FAILED：ERROR: {\"error\":{\"message\":\"litellm.BadRequestError: Hosted_vllmException - {\\\"error\\\":{\\\"message\\\":\\\"Invalid 'input[6].content[22].image_url'. Expected a base64-encoded data URL with an image MIME type (e.g. 'data:image/png;base64,aW1nIGJ5dGVzIGhlcmU='), but got an invalid base64-encoded value.\\\",\\\"type\\\":\\\"UpstreamParamError\\\",\\\"code\\\":\\\"3002\\\"}\",\"code\":\"400\"}}";
  expect(providerFault(rejected)).toMatchObject({kind:'image-encoding',recoverable:true});
  expect(providerFault('PROVIDER_CODEX_FAILED：invalid base64-encoded value').kind).toBe('unknown');
+ // A feedback tool's preview frame inside the conversation is rejected the same way (study c947c2b8).
+ expect(providerFault(rejected.replace('input[6].content[22]','input[22].output[4]'))).toMatchObject({kind:'image-encoding',recoverable:true});
  for(const again of [false,true]){
   const dir=mkdtempSync(join(tmpdir(),'image-encoding-')),seen:any[]=[];
   try{

@@ -29,7 +29,8 @@ export function withToolContinuation<T extends {text:string;images?:{path:string
  return {...input,text:input.text+'\n已保存的本轮工具状态（真实产物，不是新评分）：\n'+context.text,images:[...(input.images??[]),...context.images]};
 }
 /** 每次模型调用独立监听，仅接受随机令牌、本次白名单工具和有限大小的参数。 */
-export function serveCodexTools(kit:CodexToolKit,signal?:AbortSignal,auditFile?:string){
+/** reencodeImage, set on the retry after a gateway rejected an image, rewrites each returned PNG frame (pixel-identical, new bytes). */
+export function serveCodexTools(kit:CodexToolKit,signal?:AbortSignal,auditFile?:string,reencodeImage?:(base64:string)=>string){
  const names=toolNames(kit),token=crypto.randomUUID();
  let calls=0;
  if(auditFile)writeFileSync(auditFile,JSON.stringify({event:'contract',version:kit.version,names,at:new Date().toISOString()})+'\n');
@@ -46,6 +47,7 @@ export function serveCodexTools(kit:CodexToolKit,signal?:AbortSignal,auditFile?:
    try{result=await kit.call(name,args);}catch(error){result={content:[{type:'text',text:String(error)}],isError:true};}
    // Keep pre-render rejections as well as successful calls; never duplicate image/base64 payloads.
    record({event:'finished',index,name,endedAt:Date.now(),durationMs:Date.now()-startedAt,isError:result.isError===true,error:result.isError?result.content.filter(c=>c.type==='text').map(c=>c.text).join('\n'):null,contentTypes:result.content.map(c=>c.type)});
+   if(reencodeImage)result={...result,content:result.content.map((c:ToolContent)=>c.type==='image'&&c.mimeType==='image/png'?{...c,data:reencodeImage(c.data)}:c)};
    return Response.json(result);
   }catch(e){return Response.json({content:[{type:'text',text:String(e)}],isError:true});}
  }});
