@@ -31,7 +31,8 @@ const hash=(s:string)=>createHash('sha256').update(s).digest('hex');
 const treeDigest=(dir:string):string=>hash(readdirSync(dir,{withFileTypes:true}).sort((a,b)=>a.name.localeCompare(b.name)).map(e=>e.name+':'+(e.isDirectory()?treeDigest(join(dir,e.name)):hash(readFileSync(join(dir,e.name),'utf8')))).join('\n'));
 const read=(f:string)=>JSON.parse(readFileSync(f,'utf8'));
 // A source checkout ships prebuilt shader inputs here; an npm release bundles its own and needs no override.
-const sharedInputs=join(engine,'shared-build-inputs/manifest.json'),sharedInputsEnv=()=>({...process.env,...(existsSync(sharedInputs)?{FORGEAX_SHARED_APP_INPUTS_MANIFEST:sharedInputs}:{})});
+// An override inherited from a caller that still names the checkout path is dropped the same way.
+const sharedInputs=join(engine,'shared-build-inputs/manifest.json'),sharedInputsEnv=()=>{const{FORGEAX_SHARED_APP_INPUTS_MANIFEST:_,...env}=process.env;return {...env,...(existsSync(sharedInputs)?{FORGEAX_SHARED_APP_INPUTS_MANIFEST:sharedInputs}:{})};};
 const save=(f:string,v:unknown)=>writeFileSync(f,JSON.stringify(v,null,2)+'\n');
 
 async function main(){

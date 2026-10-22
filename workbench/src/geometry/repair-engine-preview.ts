@@ -1,5 +1,5 @@
 import {bindReferenceFrames} from './reference-framing';
-import {mkdirSync,writeFileSync,readFileSync} from 'node:fs';
+import {mkdirSync,writeFileSync,readFileSync,existsSync} from 'node:fs';
 import {join,resolve} from 'node:path';
 import {ROOT,DATA,save,read,digest} from '../store';
 import {renderPool} from '../concurrency';
@@ -12,7 +12,7 @@ export async function renderRepairPreview(scene:any,images:{path:string;mime:str
   const authored=scene;
   const limit=AbortSignal.any([signal,AbortSignal.timeout(220000)]),base=resolve(ROOT,'..'),project=join(folder,'project'),materials=join(folder,'materials'),capture=join(folder,'capture');
   for(const p of [project,materials,capture])mkdirSync(p,{recursive:true});
-  let step=0;const command=async(args:string[],cwd=project)=>{limit.throwIfAborted();const p=Bun.spawn(args,{cwd,env:{...process.env,ASSET_PIPELINE_ROOT:project,FORGEAX_SHARED_APP_INPUTS_MANIFEST:join(base,'engine/shared-build-inputs/manifest.json')},stdout:'pipe',stderr:'pipe',signal:limit});const [out,err,code]=await Promise.all([new Response(p.stdout).text(),new Response(p.stderr).text(),p.exited]);writeFileSync(join(folder,`command-${++step}.log`),out+err);if(code)throw Error('候选预览步骤失败 '+args[1]+'：'+err.slice(-1200));};
+  let step=0;const command=async(args:string[],cwd=project)=>{limit.throwIfAborted();const p=Bun.spawn(args,{cwd,env:{...process.env,ASSET_PIPELINE_ROOT:project,...(existsSync(join(base,'engine/shared-build-inputs/manifest.json'))?{FORGEAX_SHARED_APP_INPUTS_MANIFEST:join(base,'engine/shared-build-inputs/manifest.json')}:{})},stdout:'pipe',stderr:'pipe',signal:limit});const [out,err,code]=await Promise.all([new Response(p.stdout).text(),new Response(p.stderr).text(),p.exited]);writeFileSync(join(folder,`command-${++step}.log`),out+err);if(code)throw Error('候选预览步骤失败 '+args[1]+'：'+err.slice(-1200));};
   save(join(materials,'texture-request.json'),{references:images,textures:scene.textures,reused:resolveTextureReuse(scene,refs)});
   await command([join(DATA,'reconstruction-env/bin/python'),join(ROOT,'src/geometry/textures.py'),materials],folder);
   if(scene.voxelizationTarget){
