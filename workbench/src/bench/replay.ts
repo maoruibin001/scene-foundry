@@ -37,7 +37,8 @@ export function benchRegressions(current:any,baseline:any){
  const flags:any[]=[],off=(l:any)=>Math.hypot(l.dL,l.dChroma);
  for(const ref of current.colour?.references??[]){const prior=baseline?.colour?.references?.find((r:any)=>r.referenceIndex===ref.referenceIndex);
   if(Number.isFinite(ref.baselineDiffL)&&ref.baselineDiffL>BENCH_LIMITS.baselineDiffL)flags.push({kind:'frame-changed',referenceIndex:ref.referenceIndex,baselineDiffL:ref.baselineDiffL});
-  for(const l of ref.landmarks){const p=prior?.landmarks?.find((x:any)=>x.id===l.id);if(p&&off(l)>off(p)+BENCH_LIMITS.landmarkL/2)flags.push({kind:'landmark-further',referenceIndex:ref.referenceIndex,id:l.id,label:l.label,before:+off(p).toFixed(1),after:+off(l).toFixed(1)});}}
+  // A landmark may hold several observation boxes in one view; rows pair by position, not by id alone.
+  ref.landmarks.forEach((l:any,n:number)=>{const p=prior?.landmarks?.[n];if(p&&p.id===l.id&&off(l)>off(p)+BENCH_LIMITS.landmarkL/2)flags.push({kind:'landmark-further',referenceIndex:ref.referenceIndex,id:l.id,label:l.label,before:+off(p).toFixed(1),after:+off(l).toFixed(1)});});}
  const fps=current.fps?.system?.median,prior=baseline?.fps?.system?.median;
  if(Number.isFinite(fps)&&Number.isFinite(prior)&&fps<prior*(1-BENCH_LIMITS.fpsDrop))flags.push({kind:'fps-drop',before:prior,after:fps});
  if(current.error&&!baseline?.error)flags.push({kind:'render-failed',error:current.error});
@@ -75,6 +76,11 @@ export async function replayScene(entry:{id:string;run:string},out:string,baseli
    const prior=baseline?.frames?.find((b:any)=>b.referenceIndex===f.referenceIndex)?.frame,delivered=join(runDir,src.folder,'runtime',`reference-${f.referenceIndex}.png`),deliveredCopy=join(folder,`delivered-${f.referenceIndex}.png`);
    if(!baseline&&existsSync(delivered))copyFileSync(delivered,deliveredCopy);
    return {referenceIndex:f.referenceIndex,frame:relative(out,f.file),reference:relative(out,copy),baseline:baseline?(prior?join(relative(out,baselineDir!),prior):null):existsSync(deliveredCopy)?relative(out,deliveredCopy):null};});
+  // Inspection cameras have no reference photo, but S13 cites them most (inspection-3 in every recorded edge-void failure).
+  result.inspection=receipt.frames.map((f:any,i:number)=>({camera:scene.cameras[i]?.name??null,index:i+1,referenceIndex:scene.cameras[i]?.referenceIndex??null,file:f.file})).filter((f:any)=>!Number.isInteger(f.referenceIndex))
+   .map((f:any)=>{const prior=baseline?.inspection?.find((b:any)=>b.camera===f.camera)?.frame,delivered=join(runDir,src.folder,'runtime',`inspection-${f.index}.png`),copy=join(folder,`delivered-inspection-${f.index}.png`);
+    if(!baseline&&existsSync(delivered))copyFileSync(delivered,copy);
+    return {camera:f.camera,frame:relative(out,join(folder,'render/capture',f.file)),baseline:baseline?(prior?join(relative(out,baselineDir!),prior):null):existsSync(copy)?relative(out,copy):null};});
   const pairs=result.frames.map((f:any)=>({referenceIndex:f.referenceIndex,original:join(out,f.reference),frame:join(out,f.frame),...(f.baseline?{baseline:resolve(out,f.baseline)}:{}),boxes:landmarkBoxes(src.observation,f.referenceIndex)}));
   result.objective=python('../geometry/objective-metrics.py',{version:'objective-reference-metrics-v1',pairs}).references;
   result.colour=python('landmark-color.py',{pairs});result.offLandmarks=landmarkOffsets(result.colour);

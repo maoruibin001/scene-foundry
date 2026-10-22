@@ -27,6 +27,9 @@ test('landmarks beyond the limits are listed worst first, and regressions agains
  expect(benchRegressions({colour:colour(-3,1),fps:{system:{median:68}}},baseline)).toEqual([]);
  expect(benchRegressions({colour:colour(-20,BENCH_LIMITS.baselineDiffL+1),fps:{system:{median:40}}},baseline).map((f:any)=>f.kind)).toEqual(['frame-changed','landmark-further','fps-drop']);
  expect(benchRegressions({error:'构建失败'},{colour:colour(-3)}).map((f:any)=>f.kind)).toEqual(['render-failed']);
+ // Workshop 00511553 holds two boxes of one landmark in one view; identical renders must not pair the near box with the far one.
+ const twice=(near:number,far:number)=>({references:[{referenceIndex:1,landmarks:[{id:'L28',label:'窗外',dL:near,dChroma:0,dHue:0},{id:'L28',label:'窗外',dL:far,dChroma:0,dHue:0}]}]});
+ expect(benchRegressions({colour:twice(-14,-51)},{colour:twice(-14,-51)})).toEqual([]);
 });
 
 test('the report shows skipped and failed scenes and escapes labels',()=>{
