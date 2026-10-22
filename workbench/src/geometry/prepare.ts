@@ -1,6 +1,7 @@
 import {bindAreaLights,areaLightEntities} from './area-lights';
 import {bindPointShadows} from './point-shadows';
 import {voxelProjection} from '../voxel/projection';
+import {bindVoxelAmbientOcclusion,VOXEL_AMBIENT_OCCLUSION} from '../voxel/ambient-occlusion';
 import {bindReflectionProbes,reflectionProbeEntities,REFLECTION_COMPONENT_BOOTSTRAP} from './reflection-probes';
 import {bindCameraOutput} from './camera-output';
 import {spotEntities,bindDirectionalShadow,directionalShadowFields} from './lighting';
@@ -71,7 +72,9 @@ export function prepareGeometryProject(root:string,program:GeometryProgram,textu
  if(views){
   // 自由相机的运动算法无场景初值；所有机位来自本次生成数据。
   const controller=readFileSync(join(W,'src/native/camera.txt'),'utf8').replace("[0,1].includes(e.data.index)","Number.isInteger(e.data.index)&&e.data.index>=0&&e.data.index<audit.views.length").replace("if(input.keyboard.justPressedCode('Digit1'))view(0);if(input.keyboard.justPressedCode('Digit2'))view(1);","for(let n=0;n<audit.views.length;n++)if(input.keyboard.justPressedCode('Digit'+(n+1)))view(n);").replace("cameraControls:'free-inspection-v2'","fov:audit.views[selected].fov,cameraProjection:(()=>{const p=ctx.world.get(camera,Camera).unwrap();return {projection:p.projection,fov:p.fov,aspect:p.aspect,left:p.left,right:p.right,bottom:p.bottom,top:p.top,near:p.near,far:p.far};})(),motionBlockReason:motion.blockReason??null,cameraControls:'free-inspection-v2'");
-  const projection=voxelProjection(world,controller,views);world=projection.world;writeFileSync(join(assets,'world.pack.ts'),world);
+  const projection=voxelProjection(world,controller,views);world=projection.world;
+  if(views.some(v=>v.projection==='orthographic')){world=bindVoxelAmbientOcclusion(world);save(join(root,'ambient-occlusion-export.json'),{...VOXEL_AMBIENT_OCCLUSION,scope:'固定 Engine 屏幕空间环境光遮蔽，只压暗凹缝与开口内侧；不新增几何、光源或材质，不表示质量通过'});}
+  writeFileSync(join(assets,'world.pack.ts'),world);
   writeFileSync(join(assets,'camera.plugin.ts'),projection.controller);copyFileSync(join(W,'src/native/camera-motion.ts'),join(assets,'camera-motion.ts'));
   let ui=readFileSync(join(W,'src/ui-v3.txt'),'utf8').replace('Space 巡航/暂停 · 方向键移动 · H 隐藏/恢复 · R 开始/停止录屏','WASD 移动 · Q/E 升降 · 拖动转向 · 数字键选择机位 · Space 连续观测 · H 隐藏 · R 录屏');
   ui=ui.replace('const hud=document.createElement',"const motionStatus=document.createElement('div');motionStatus.setAttribute('role','status');const hud=document.createElement").replace('hud.append(help);','hud.append(help,motionStatus);').replace('sources.add(e.data.sourceId);',"sources.add(e.data.sourceId);motionStatus.textContent=e.data.motionBlockReason??'';");
