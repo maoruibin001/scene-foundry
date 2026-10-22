@@ -67,3 +67,14 @@ test('refinement without a sealed detail basis fails before any model invocation
   expect(stderr).toBe('');expect(exit).toBe(0);expect(stdout).toContain('0 model calls');
  }finally{rmSync(root,{recursive:true,force:true});}
 },20000);
+
+test('a repair may rebind a part to another frozen material, never to a new one',()=>{
+ // Camp 08f393d2: rebinding the tent lining and chimney to existing scene materials was refused as unallocated four times.
+ const f=fixture(),second={...f.layout.program.materials[0],id:'n',color:[.3,.2,.1,1]};
+ const layout=structuredClone(f.layout);layout.program.materials.push(second);layout.program.templates[1].materialIds=['n'];
+ const accepted=structuredClone(f.acceptedScene);accepted.program.materials.push(second);accepted.program.templates[1].parts[0].material='n';
+ const basis=createVoxelDetailBasis(layout,accepted),rebound=structuredClone(accepted);rebound.program.templates[0].parts[0].material='n';
+ expect(()=>assertVoxelDetailScene(rebound,basis,{})).not.toThrow();
+ const invented=structuredClone(rebound);invented.program.templates[0].parts[0].material='z';
+ expect(()=>assertVoxelDetailScene(invented,basis,{})).toThrow();
+});

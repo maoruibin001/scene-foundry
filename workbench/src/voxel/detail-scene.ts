@@ -43,9 +43,12 @@ export function assertVoxelDetailScene(value:any,inputBasis:VoxelDetailBasis,tex
  fail(equal(ids(value.program.materials),ids(layout.program.materials)),'精修改变冻结材料ID');
  fail(equal(byId(value.entities,'instanceId'),byId(layout.entities,'instanceId')),'精修改变冻结实体语义或绑定');
  for(const key of ['spatialOpenings','spatialContacts','spatialRelations','observedBindings'])fail(equal(value[key],(layout as any)[key]),'精修改变冻结 '+key);
- const currentLayout:SceneLayout={...layout,program:{...layout.program,materials:value.program.materials,instances:value.program.instances},textures:value.textures,textureReuse:value.textureReuse};
+ // The material set is frozen above; within it a repair may move a part to any existing material. Camp 08f393d2's repair rebound the
+ // tent entrance lining to the scene's dark brown and the chimney to its grey brick, and the per-template allocation refused both.
+ const palette=ids(layout.program.materials),templates=layout.program.templates.map(t=>({...t,materialIds:[...new Set([...t.materialIds,...palette])]}));
+ const currentLayout:SceneLayout={...layout,program:{...layout.program,templates,materials:value.program.materials,instances:value.program.instances},textures:value.textures,textureReuse:value.textureReuse};
  const assets:AssetGeometry[]=value.program.templates.map((template:any)=>({version:'asset-geometry-v1',template}));
- const preservation=layout.program.templates.map(brief=>{
+ const preservation=currentLayout.program.templates.map(brief=>{
   const asset=assets.find(a=>a.template.id===brief.id)!;
   validateVoxelEntityDetail(asset,brief,currentLayout,basis.allocation,textures);
   return {templateId:brief.id,...assertVoxelDetailPreservation(asset,brief,currentLayout,basis.acceptedScene)};
