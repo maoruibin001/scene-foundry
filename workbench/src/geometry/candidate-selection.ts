@@ -1,4 +1,5 @@
 import {requiredSpecRule} from '../spec-rule-kind';
+import {passedDelivery,progressRule} from './progress-policy';
 /** 对同契约评分进行退步保护；不重算分数，不把分差当作画面改善的证明。 */
 export function candidateSelection(before:any,after:any){
  if(!before)return {eligible:true,reasons:[],minGain:2};
@@ -24,6 +25,8 @@ export function candidateSelection(before:any,after:any){
 export function candidateProgress(before:any,after:any){
  const selection=candidateSelection(before,after),reasons:string[]=[],closed:string[]=[];
  if(before?.deliveryStandard==='basic70'&&after.deliveryStandard==='basic70'&&before.status!=='passed'&&after.status==='passed'&&after.deliveryStatus==='passed'&&!after.hardFailures?.length)return {eligible:true,reasons:[],minGain:2,meaningful:true,progressReasons:['已达到完整70分基础交付，停止提分'],closed:[]};
+ // progress-v1: a round that passed its own delivery assessment is adopted even if a protected dimension fell (study c1ba845b round 3).
+ if(progressRule(after)&&before?.status!=='passed'&&passedDelivery(after))return {eligible:true,reasons:[],minGain:2,meaningful:true,progressReasons:['已通过本轮交付评估，采用为交付候选'],closed:[]};
  if(!selection.eligible)return {...selection,meaningful:false,progressReasons:reasons,closed};
  if(!before)return {...selection,meaningful:true,progressReasons:['首个真实候选'],closed};
  if(before.status==='passed')return {...selection,meaningful:false,progressReasons:[],closed};
@@ -49,4 +52,4 @@ export function candidateProgress(before:any,after:any){
  if(!basic&&Number.isFinite(before.score)&&Number.isFinite(after.score)&&after.score-before.score>=selection.minGain-1e-9)reasons.push('正式分提升至少 '+selection.minGain);
  return {...selection,meaningful:reasons.length>0,progressReasons:reasons,closed,rawGain};
 }
-export function candidateEvidence(job:any){return {...(job.pipelinePlan?{pipelinePlanId:job.pipelinePlan.id}:{}),deliveryStandard:job.policy?.deliveryStandard??'strict',deliveryStatus:job.deliveryAssessment?.status,deliveryReasons:job.deliveryAssessment?.reasons,assessmentScope:job.partialOutput?'partial':'scene',status:job.status,score:job.quality?.score??null,dimensions:job.quality?.dimensions,rawDimensions:job.review?.dimensions,criteria:job.review?.criteria,criticalMissing:job.quality?.criticalMissing,hardFailures:job.quality?.hardFailures,specRules:job.spec?.rules,dimensionWeights:job.policy?.dimensionWeights,dimensionFloor:job.policy?.dimensionFloor,policyVersion:job.policy?.version};}
+export function candidateEvidence(job:any){return {...(progressRule(job)?{progressPolicy:job.progressPolicy}:{}),...(job.pipelinePlan?{pipelinePlanId:job.pipelinePlan.id}:{}),deliveryStandard:job.policy?.deliveryStandard??'strict',deliveryStatus:job.deliveryAssessment?.status,deliveryReasons:job.deliveryAssessment?.reasons,assessmentScope:job.partialOutput?'partial':'scene',status:job.status,score:job.quality?.score??null,dimensions:job.quality?.dimensions,rawDimensions:job.review?.dimensions,criteria:job.review?.criteria,criticalMissing:job.quality?.criticalMissing,hardFailures:job.quality?.hardFailures,specRules:job.spec?.rules,dimensionWeights:job.policy?.dimensionWeights,dimensionFloor:job.policy?.dimensionFloor,policyVersion:job.policy?.version};}

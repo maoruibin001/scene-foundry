@@ -3,6 +3,7 @@ import {reserveOptimizationCall} from './optimization-rounds';
 import {mkdirSync,existsSync} from 'node:fs';
 import {join,resolve,relative} from 'node:path';
 import {DATA,read,save,digest,listJobs} from './store';
+import {progressLimits,progressRule} from './geometry/progress-policy';
 export const IMPROVEMENT_LIMITS={repairs:2,calls:100,noGain:2,minGain:2};
 /** 比较键代表相同评审契约；实验名称只用于审计，不能隔离质量历史。 */
 export function qualityComparison(job:any){return digest(JSON.stringify([job.policy,job.modelSettings,job.profile.assessmentProtocolSha256,...(job.pipelinePlan?[job.pipelinePlan.id]:[])]));}
@@ -13,7 +14,7 @@ export function storedAssessmentScope(r:any){
  const a=read(p);return a.immutable===true&&a.id===r.assessmentId&&a.jobId===r.jobId&&a.score===r.score&&['scene','partial'].includes(a.assessmentScope)?a.assessmentScope:null;
 }
 const resultScope=(r:any)=>r.assessmentScope??r.evidence?.assessmentScope??'legacy-unknown';
-export function scoreProgress(results:any[],current:any,minGain:number,streakStart=0){
+export function scoreProgress(results:any[],current:any,minGain:number,streakStart=0,judgeStep?:number){
  if(!Number.isInteger(streakStart)||streakStart<0||streakStart>results.length)throw Error('策略结果边界无效');
  const family=(r:any)=>r.comparison?.startsWith('scene-quality-')?'final':r.metric??r.kind;
  const same=(r:any)=>r.comparison===current.comparison&&family(r)===family(current)&&resultScope(r)===resultScope(current)&&Number.isFinite(r.score);
@@ -26,11 +27,13 @@ export function scoreProgress(results:any[],current:any,minGain:number,streakSta
   const previousBest=Math.max(...rows.map((r:any)=>r.score));const numericBest=Math.max(previousBest,current.score);
   return {comparable:rows.length,previousBest,bestScore:numericBest,bestJobId:current.score>previousBest?current.jobId:rows.find((r:any)=>r.score===previousBest)?.jobId,selectedJobId:meaningful?current.jobId:selected.jobId,noGain,delta:Math.round((current.score-previousBest)*100)/100,improved:meaningful,selection:progress};
  }
- let best=-Infinity,noGain=0,bestJobId:string|null=null;
- for(const r of rows){if(best!==-Infinity&&r.resultIndex>=streakStart)noGain=r.score-best>=minGain&&!r.requiresDiagnosis?0:noGain+1;if(r.score>best){best=r.score;bestJobId=r.jobId??null;}}
+ // progress-v1: a judge rise of judgeStep over the best judge score is a gain even when the objective score moves by less than minGain.
+ let best=-Infinity,bestJudge=-Infinity,noGain=0,bestJobId:string|null=null;
+ const gain=(r:any)=>!r.requiresDiagnosis&&(r.score-best>=minGain||(Number.isFinite(judgeStep)&&Number.isFinite(r.judgeScore)&&r.judgeScore-bestJudge>=judgeStep!-1e-9&&r.score>=best-1e-9));
+ for(const r of rows){if(best!==-Infinity&&r.resultIndex>=streakStart)noGain=gain(r)?0:noGain+1;if(r.score>best){best=r.score;bestJobId=r.jobId??null;}if(Number.isFinite(r.judgeScore)&&r.judgeScore>bestJudge)bestJudge=r.judgeScore;}
  const previousBest=Number.isFinite(best)?best:null;
  if(!Number.isFinite(current.score))return {comparable:rows.length,previousBest,bestScore:previousBest,bestJobId,noGain,delta:null,improved:false};
- if(previousBest!==null)noGain=current.score-previousBest>=minGain&&!current.requiresDiagnosis?0:noGain+1;
+ if(previousBest!==null)noGain=gain(current)?0:noGain+1;
  const improved=previousBest===null||current.score>previousBest;
  return {comparable:rows.length,previousBest,bestScore:improved?current.score:previousBest,bestJobId:improved?current.jobId??null:bestJobId,noGain,delta:previousBest===null?null:Math.round((current.score-previousBest)*100)/100,improved};
 }
@@ -51,7 +54,7 @@ export class ImprovementLedger {
   const key=digest(JSON.stringify(rows.map(r=>[r.jobId,r.assessmentId,r.assessmentScope])));
   if(v.scopeCorrections?.some((r:any)=>r.key===key))return;
   const before={noGain:v.noGain,progress:v.progress,stopped:v.stopped??null,diagnosis:v.diagnosis??null};
-  const boundary=strategyResultBoundary(v),progress=scoreProgress(rows.slice(0,-1),last,v.limits.minGain,Math.min(boundary,rows.length-1));
+  const boundary=strategyResultBoundary(v),progress=scoreProgress(rows.slice(0,-1),last,v.limits.minGain,Math.min(boundary,rows.length-1),v.limits.judgeGain);
   if(boundary>=rows.length)progress.noGain=0;
   v.noGain=progress.noGain;v.progress=progress;
   if(progress.noGain<v.limits.noGain&&typeof v.stopped==='string'&&v.stopped.startsWith('同一评审契约连续两轮')){delete v.stopped;delete v.diagnosis;}
@@ -62,7 +65,7 @@ export class ImprovementLedger {
  key(input:any){const key=this.inputKey(input);return input.reuseMode==='fresh'&&input.generationMode==='first-pass'&&input.baselineId?digest(JSON.stringify([key,'fresh-first-pass',input.baselineId])):key;}
  path(id:string){if(!/^[a-f0-9]{64}$/.test(id))throw Error('实验标识无效');return join(this.root,id+'.json');}
  get(id:string){return read(this.path(id));}
- enter(input:any,jobId:string,historical:any[]=[],source?:any,mode='generation'){const id=source?.improvementId??this.key(input),p=this.path(id),v=existsSync(p)?read(p):{id,createdAt:Date.now(),strategy:'image-first-graybox-v1',limits:input.generationMode==='qualified'?{...IMPROVEMENT_LIMITS,repairs:null,calls:null}:IMPROVEMENT_LIMITS,repairs:0,calls:0,noGain:0,jobs:[],results:[],history:historical.map(j=>({id:j.id,score:j.quality?.score??null,status:j.status,pipelineVersion:j.pipelineVersion?.label})),scope:this.key(input)!==this.inputKey(input)?'用户确认的从头首轮验证；绑定参考基准，同基准和技术恢复不重置；历史案例独立保留，全局调用仍累计': '历史运行保留审计；新机制从首次启用起统一累计，换模型、版本或新任务不重置',inputKey:this.inputKey(input),firstPassBaseline:this.key(input)!==this.inputKey(input)?input.baselineId:null};
+ enter(input:any,jobId:string,historical:any[]=[],source?:any,mode='generation'){const id=source?.improvementId??this.key(input),p=this.path(id),v=existsSync(p)?read(p):{id,createdAt:Date.now(),strategy:'image-first-graybox-v1',limits:(l=>progressRule(input)?progressLimits(l):l)(input.generationMode==='qualified'?{...IMPROVEMENT_LIMITS,repairs:null,calls:null}:IMPROVEMENT_LIMITS),repairs:0,calls:0,noGain:0,jobs:[],results:[],history:historical.map(j=>({id:j.id,score:j.quality?.score??null,status:j.status,pipelineVersion:j.pipelineVersion?.label})),scope:this.key(input)!==this.inputKey(input)?'用户确认的从头首轮验证；绑定参考基准，同基准和技术恢复不重置；历史案例独立保留，全局调用仍累计': '历史运行保留审计；新机制从首次启用起统一累计，换模型、版本或新任务不重置',inputKey:this.inputKey(input),firstPassBaseline:this.key(input)!==this.inputKey(input)?input.baselineId:null};
   this.reconcileScopeProgress(v);this.allowed(v,mode==='assessment');if(mode!=='assessment'&&v.jobs.length&&(!source||(mode==='generation'&&Number.isFinite(source.quality?.score))))this.repair(v,'重新生成','相同输入新建任务计入同一实验，不重新获得首轮预算');v.jobs.push(jobId);save(p,v);return id;
  }
  allowed(v:any,assessmentOnly=false){if(v.stopped&&!assessmentOnly)throw Error('IMPROVEMENT_STOPPED：'+v.stopped);if(v.limits.calls!==null&&v.calls>=v.limits.calls)this.stop(v,'累计模型调用已达上限，需诊断机制与基础条件');}
@@ -87,7 +90,7 @@ export class ImprovementLedger {
   (v.strategyRevisions??=[]).push({...change,at:Date.now(),resultCount:v.results.length,before,after:{limits:{...v.limits},repairs:v.repairs,calls:v.calls,noGain:0}});v.strategy=change.id;save(this.path(id),v);return v;
  }
  call(id:string,role:string,assessmentOnly=false){const v=this.get(id);this.allowed(v,assessmentOnly);v.calls++;(v.requests??=[]).push({role,at:Date.now()});save(this.path(id),v);}
- result(id:string,r:any){const auditPath=typeof r.jobId==='string'&&/^[a-f0-9-]{36}$/.test(r.jobId)?join(DATA,'runs',r.jobId,'repair-outcome.json'):null;if(auditPath&&existsSync(auditPath)){const audit=read(auditPath);if(['repair-outcome-v3','repair-outcome-v5'].includes(audit.version)&&audit.comparison.scoreAfter===r.score)r={...r,requiresDiagnosis:audit.requiresDiagnosis,scoreSignal:audit.scoreSignal};}const v=this.get(id),progress=scoreProgress(this.scopedResults(v.results),this.scopedResults([r])[0],v.limits.minGain,strategyResultBoundary(v));v.noGain=progress.noGain;v.progress=progress;v.results.push({...r,progress,at:Date.now()});if(r.status!=='passed'&&v.noGain>=v.limits.noGain){v.stopped='同一评审契约连续两轮未有效超过历史最佳，停止当前策略';v.diagnosis={at:Date.now(),reason:v.stopped,progress,next:'保留历史最佳和退步证据；先复核空间、表达能力和评分证据，再提交可验证的新机制实验'};}save(this.path(id),v);return v;}
+ result(id:string,r:any){const auditPath=typeof r.jobId==='string'&&/^[a-f0-9-]{36}$/.test(r.jobId)?join(DATA,'runs',r.jobId,'repair-outcome.json'):null;if(auditPath&&existsSync(auditPath)){const audit=read(auditPath);if(['repair-outcome-v3','repair-outcome-v5'].includes(audit.version)&&audit.comparison.scoreAfter===r.score)r={...r,requiresDiagnosis:audit.requiresDiagnosis,scoreSignal:audit.scoreSignal};}const v=this.get(id),progress=scoreProgress(this.scopedResults(v.results),this.scopedResults([r])[0],v.limits.minGain,strategyResultBoundary(v),v.limits.judgeGain);v.noGain=progress.noGain;v.progress=progress;v.results.push({...r,progress,at:Date.now()});if(r.status!=='passed'&&v.noGain>=v.limits.noGain){v.stopped='同一评审契约连续两轮未有效超过历史最佳，停止当前策略';v.diagnosis={at:Date.now(),reason:v.stopped,progress,next:'保留历史最佳和退步证据；先复核空间、表达能力和评分证据，再提交可验证的新机制实验'};}save(this.path(id),v);return v;}
  remaining(id:string){const v=this.get(id);return v.stopped?0:v.limits.repairs===null?Infinity:Math.max(0,v.limits.repairs-v.repairs);}
 }
 export const improvement=new ImprovementLedger(join(DATA,'improvement'));

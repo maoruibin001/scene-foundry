@@ -55,7 +55,8 @@ function acceptanceFeedback(best:any){
 /** An objectively judged round enters the ledger as its own family; judge-only rounds keep the score*20 history they were compared under. */
 function spaceProgress(gate:any,space:any){
  const score=gate.objective?objectiveProgressScore(gate,space):null;
- return score===null?{score:gate.review.score*20}:{score,metric:OBJECTIVE_PROGRESS};
+ // judgeScore lets progress-v1 count a judge rise the objective score compresses to +0.02 per rubric step.
+ return score===null?{score:gate.review.score*20}:{score,metric:OBJECTIVE_PROGRESS,judgeScore:gate.review.score};
 }
 export async function acceptSpatialLayout(initial:any,ctx:any,command:any,stage:any){let space=validateSpaceRelations(initial),feedback:any=null,round=0,reviewedFolder:string|null=null;const {job,plan,images,signal}=ctx;let best:SpatialCandidate|null=null;job.blockout={status:'running',rounds:[]};saveJob(job);
  const validateRepair=(v:any)=>{const checked=validateSpaceRelations(validateSpace(v,plan,images.length,job.complexity));return ctx.observation?bindObservedSpace(checked,ctx.observation):checked;};

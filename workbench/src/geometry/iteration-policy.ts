@@ -6,7 +6,7 @@ export const MIN_MEANINGFUL_GAIN=2;
 export type CycleResult={index:number;status:string;score:number|null;startedAt:number;endedAt:number;rawDimensions?:any[];dimensionWeights?:Record<string,number>;dimensionFloor?:number;specRules?:any[];hardFailures?:string[];dimensions?:any[];criteria?:any[];criticalMissing?:string[];policyVersion?:string;selection?:any};
 export type IterationResult={cycles:CycleResult[];bestIndex:number;firstDraft:CycleResult;stopReason:'passed'|'limit'|'no-improvement'|'budget'|'runtime-evidence'|'no-actionable-repair'};
 export async function boundedIterations(options:{
- maxRepairs:number|null;firstStartedAt?:number;signal:AbortSignal;canRefine:()=>boolean;
+ maxRepairs:number|null;firstStartedAt?:number;signal:AbortSignal;canRefine:()=>boolean;noGainLimit?:number;
  refineBlockedReason?:()=>Exclude<IterationResult['stopReason'],'passed'>;
  evaluate:(index:number)=>Promise<{status:string;score:number|null;rawDimensions?:any[];dimensionWeights?:Record<string,number>;dimensionFloor?:number;specRules?:any[];hardFailures?:string[];dimensions?:any[];criteria?:any[];criticalMissing?:string[];policyVersion?:string}>;
  snapshot:(cycle:CycleResult)=>Promise<void>;
@@ -27,7 +27,7 @@ export async function boundedIterations(options:{
   options.onProgress?.(structuredClone(cycles),bestIndex);
   if(result.status==='passed'&&bestIndex===index){stopReason='passed';break;}
   if(index>0)noGain=bestIndex!==index?noGain+1:0;
-  if(noGain>=2){stopReason='no-improvement';break;}
+  if(noGain>=(options.noGainLimit??2)){stopReason='no-improvement';break;}
   if(index===options.maxRepairs){stopReason='limit';break;}
   if(!options.canRefine()){stopReason=options.refineBlockedReason?.()??'budget';break;}
  }

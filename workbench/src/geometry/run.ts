@@ -36,6 +36,7 @@ import {improvement} from '../improvement-governance';
 import {restoreSavedRefinement} from './refinement-recovery';
 import {inspectOpenings,openingSummary} from './openings';
 import {boundedIterations} from './iteration-policy';
+import {progressRule,PROGRESS_LIMITS} from './progress-policy';
 import {capturePlan} from './capture-plan.mjs';
 import {snapshotIteration,restoreIteration} from './iteration-snapshots';
 import {refineScene} from './refinement';
@@ -212,7 +213,7 @@ export async function runGeneralScene({job,plan,dir,signal,stage,command,preview
 
  let lastIndex=0;
  try{
- const result=await boundedIterations({maxRepairs,firstStartedAt:job.startedAt,signal,canRefine:()=>!job.runtime?.captureIssue&&hasBudget(3)&&improvement.remaining(job.improvementId)>0,
+ const result=await boundedIterations({maxRepairs,firstStartedAt:job.startedAt,signal,noGainLimit:progressRule(job)?PROGRESS_LIMITS.noGain:undefined,canRefine:()=>!job.runtime?.captureIssue&&hasBudget(3)&&improvement.remaining(job.improvementId)>0,
  refineBlockedReason:()=>job.runtime?.captureIssue?'runtime-evidence':!hasBudget(3)?'budget':improvement.get(job.improvementId).stopped?'no-improvement':'limit',
  evaluate:async(index)=>{job.iteration=index;job.status='running';lastIndex=index;saveJob(job);
  const runtime=await renderCurrent();
