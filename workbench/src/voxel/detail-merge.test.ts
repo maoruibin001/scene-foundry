@@ -1,5 +1,5 @@
 import {test,expect} from 'bun:test';
-import {mergeVoxelDetails} from './detail-merge';
+import {mergeVoxelDetails,withoutOpeningBlockers} from './detail-merge';
 import {allocateVoxelEntityDetails} from './entity-detail';
 const pose={position:[0,0,0],rotation:[0,0,0],scale:[1,1,1]};
 const part=(id:string,x=0)=>({...pose,id,material:'m',position:[x,0,0],shape:{type:'voxelVolume',cellSize:.1,origin:[0,0,0],dimensions:[1,1,1],operations:[{mode:'fill',min:[0,0,0],size:[1,1,1],repeat:null}]}});
@@ -28,4 +28,22 @@ test('continued conflict, abort, or unavailable model budget never dispatches an
 test('budget and missing-asset faults are not relabeled as repairable ownership feedback',async()=>{
  const f=fixture();let calls=0;
  await expect(mergeVoxelDetails(f.layout,[f.assets[0]],f.accepted,f.allocation,{}, {signal:new AbortController().signal,canRepair:()=>true,repair:async()=>{calls++;return f.assets[1];}})).rejects.toThrow('不齐全');expect(calls).toBe(0);
+});
+test('an added part across another accepted opening is removed before any repair; a seed blocker is never removed',()=>{
+ const f=fixture();
+ // The opening sits on instance a, just outside its seed cell; b's added detail at x 0.6 fills it.
+ f.layout.spatialOpenings=[{id:'O1',label:'门',instanceId:'i_a',center:[.65,-.05,.05],normal:[0,1,0],up:[0,0,1],width:.06,height:.06,clearDepth:.2,expectedBeyond:'empty',beyondDescription:'空'}];
+ f.accepted.program.materials=f.layout.program.materials;
+ // Only b adds a part in the doorway; a's own detail moves clear of it.
+ f.assets[0]={...f.assets[0],template:{...f.assets[0].template,parts:[part('anchor'),part('detail',.3)]}};
+ const clean=[f.assets[0],{...f.assets[1],template:{...f.assets[1].template,parts:[part('anchor')]}}];
+ expect(withoutOpeningBlockers(f.layout,clean,f.accepted).removed).toEqual([]);
+ const r=withoutOpeningBlockers(f.layout,f.assets,f.accepted);
+ expect(r.removed).toEqual([{templateId:'b',partId:'detail',opening:'O1'}]);
+ expect(r.assets.find((a:any)=>a.template.id==='a').template.parts.length).toBe(2);
+ expect(r.assets.find((a:any)=>a.template.id==='b').template.parts.map((p:any)=>p.id)).not.toContain('detail');
+ expect(f.assets[1].template.parts.length).toBe(2);
+ // A seed part moved into the doorway is not an added part: it is reported, never silently removed.
+ const moved=structuredClone(f);moved.assets[1].template.parts=[part('anchor',.6)];
+ expect(()=>withoutOpeningBlockers(moved.layout,moved.assets,moved.accepted)).toThrow('封堵已接受开口');
 });

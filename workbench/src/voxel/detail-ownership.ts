@@ -138,15 +138,19 @@ export function assertVoxelDetailOwnership(layout:SceneLayout,assets:AssetGeomet
   addedOccupiedUpperBound+=checkAddedCells(layout,asset,acceptedScene,baseline,addedOwners,addedOccupiedUpperBound);
   fail(baseline.expanded+addedOccupiedUpperBound<=VOXEL_LIMITS.filledCells,'合并实例展开实际占用上界超过500000');
  }
- // A new part can occupy an empty opening belonging to another template without
- // touching any coarse owner. Only the assembled ray audit sees that regression.
- let openings={checked:0,clearSamples:0};
- if(layout.spatialOpenings?.length){
-  const materials=[...new Map<string,any>([...(acceptedScene.program.materials??[]),...layout.program.materials].map(m=>[m.id,m])).values()];
-  const program={...layout.program,materials,instances:layout.program.instances.map(({surfaceOverrides,...pose})=>pose)};
-  openings=assertOpeningSamples(inspectOpenings({program:{...program,templates:acceptedScene.program.templates},spatialOpenings:layout.spatialOpenings}),inspectOpenings({program:{...program,templates:assets.map(a=>a.template)},spatialOpenings:layout.spatialOpenings}));
- }
+ const openings=assertAssembledOpenings(layout,assets,acceptedScene);
  return {version:'voxel-detail-ownership-v1',baselineOccupiedUpperBound:baseline.expanded,baselineOwnedCells:baseline.owners.size,addedOccupiedUpperBound,newOwnedCells:addedOwners.size,openings};
+}
+
+/**
+ * A new part can occupy an empty opening belonging to another template without touching any coarse owner. Only the assembled ray audit
+ * sees that regression; merge runs it alone first, because a cell conflict elsewhere would otherwise hide it.
+ */
+export function assertAssembledOpenings(layout:SceneLayout,assets:AssetGeometry[],acceptedScene:any){
+ if(!layout.spatialOpenings?.length)return {checked:0,clearSamples:0};
+ const materials=[...new Map<string,any>([...(acceptedScene.program.materials??[]),...layout.program.materials].map(m=>[m.id,m])).values()];
+ const program={...layout.program,materials,instances:layout.program.instances.map(({surfaceOverrides,...pose})=>pose)};
+ return assertOpeningSamples(inspectOpenings({program:{...program,templates:acceptedScene.program.templates},spatialOpenings:layout.spatialOpenings}),inspectOpenings({program:{...program,templates:assets.map(a=>a.template)},spatialOpenings:layout.spatialOpenings}));
 }
 
 /**
