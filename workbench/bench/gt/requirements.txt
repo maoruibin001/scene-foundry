@@ -1,0 +1,6 @@
+numpy
+scipy
+# building Set A only
+h5py
+pillow
+opencv-python-headless

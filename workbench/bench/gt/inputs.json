@@ -1,0 +1,392 @@
+[
+ {
+  "set": "A",
+  "id": "ai_003_010",
+  "kind": "ordinary",
+  "images": [
+   "hypersim/images/ai_003_010/cam_01_0024.jpg",
+   "hypersim/images/ai_003_010/cam_01_0048.jpg"
+  ],
+  "prompt": "依据参考图生成一个可从多个机位观察的完整三维室内场景：客厅。保留椅子、桌子、沙发。"
+ },
+ {
+  "set": "A",
+  "id": "ai_005_010",
+  "kind": "ordinary",
+  "images": [
+   "hypersim/images/ai_005_010/cam_00_0000.jpg",
+   "hypersim/images/ai_005_010/cam_00_0023.jpg"
+  ],
+  "prompt": "依据参考图生成一个可从多个机位观察的完整三维室内场景：餐厅。保留椅子、挂画、柜子、桌子、沙发。"
+ },
+ {
+  "set": "A",
+  "id": "ai_007_001",
+  "kind": "ordinary",
+  "images": [
+   "hypersim/images/ai_007_001/cam_00_0001.jpg",
+   "hypersim/images/ai_007_001/cam_01_0076.jpg"
+  ],
+  "prompt": "依据参考图生成一个可从多个机位观察的完整三维室内场景：卧室。保留百叶帘、靠枕、灯、床、柜子、窗、床头柜。"
+ },
+ {
+  "set": "A",
+  "id": "ai_008_005",
+  "kind": "ordinary",
+  "images": [
+   "hypersim/images/ai_008_005/cam_00_0037.jpg",
+   "hypersim/images/ai_008_005/cam_00_0092.jpg"
+  ],
+  "prompt": "依据参考图生成一个可从多个机位观察的完整三维室内场景：餐厅。保留椅子。"
+ },
+ {
+  "set": "A",
+  "id": "ai_010_007",
+  "kind": "ordinary",
+  "images": [
+   "hypersim/images/ai_010_007/cam_00_0000.jpg",
+   "hypersim/images/ai_010_007/cam_00_0054.jpg"
+  ],
+  "prompt": "依据参考图生成一个可从多个机位观察的完整三维室内场景：客厅。保留挂画、靠枕、床、椅子、百叶帘、桌子。"
+ },
+ {
+  "set": "A",
+  "id": "ai_015_001",
+  "kind": "ordinary",
+  "images": [
+   "hypersim/images/ai_015_001/cam_00_0029.jpg",
+   "hypersim/images/ai_015_001/cam_00_0033.jpg"
+  ],
+  "prompt": "依据参考图生成一个可从多个机位观察的完整三维室内场景：厨房。保留柜子、椅子、冰箱、桌子、灯。"
+ },
+ {
+  "set": "A",
+  "id": "ai_015_010",
+  "kind": "ordinary",
+  "images": [
+   "hypersim/images/ai_015_010/cam_00_0003.jpg",
+   "hypersim/images/ai_015_010/cam_00_0090.jpg"
+  ],
+  "prompt": "依据参考图生成一个可从多个机位观察的完整三维室内场景：客厅。保留靠枕、窗、沙发、门、椅子、桌子。"
+ },
+ {
+  "set": "A",
+  "id": "ai_016_004",
+  "kind": "ordinary",
+  "images": [
+   "hypersim/images/ai_016_004/cam_00_0000.jpg",
+   "hypersim/images/ai_016_004/cam_00_0001.jpg"
+  ],
+  "prompt": "依据参考图生成一个可从多个机位观察的完整三维室内场景：走廊。保留窗。"
+ },
+ {
+  "set": "A",
+  "id": "ai_030_001",
+  "kind": "ordinary",
+  "images": [
+   "hypersim/images/ai_030_001/cam_00_0043.jpg",
+   "hypersim/images/ai_030_001/cam_00_0064.jpg"
+  ],
+  "prompt": "依据参考图生成一个可从多个机位观察的完整三维室内场景：厨房。保留百叶帘、窗、柜子、桌子、灯。"
+ },
+ {
+  "set": "A",
+  "id": "ai_033_002",
+  "kind": "ordinary",
+  "images": [
+   "hypersim/images/ai_033_002/cam_00_0071.jpg",
+   "hypersim/images/ai_033_002/cam_00_0089.jpg"
+  ],
+  "prompt": "依据参考图生成一个可从多个机位观察的完整三维室内场景：办公室。保留书桌、窗、柜子、椅子。"
+ },
+ {
+  "set": "A",
+  "id": "ai_034_002",
+  "kind": "ordinary",
+  "images": [
+   "hypersim/images/ai_034_002/cam_00_0032.jpg",
+   "hypersim/images/ai_034_002/cam_00_0083.jpg"
+  ],
+  "prompt": "依据参考图生成一个可从多个机位观察的完整三维室内场景：客厅。保留椅子、书架、书。"
+ },
+ {
+  "set": "A",
+  "id": "ai_035_001",
+  "kind": "ordinary",
+  "images": [
+   "hypersim/images/ai_035_001/cam_00_0005.jpg",
+   "hypersim/images/ai_035_001/cam_00_0010.jpg"
+  ],
+  "prompt": "依据参考图生成一个可从多个机位观察的完整三维室内场景：卧室。保留百叶帘、挂画、床、柜子、椅子、灯。"
+ },
+ {
+  "set": "A",
+  "id": "ai_035_004",
+  "kind": "ordinary",
+  "images": [
+   "hypersim/images/ai_035_004/cam_00_0000.jpg",
+   "hypersim/images/ai_035_004/cam_00_0008.jpg"
+  ],
+  "prompt": "依据参考图生成一个可从多个机位观察的完整三维室内场景：卧室。保留窗、床、床头柜、灯。"
+ },
+ {
+  "set": "A",
+  "id": "ai_039_002",
+  "kind": "ordinary",
+  "images": [
+   "hypersim/images/ai_039_002/cam_00_0000.jpg",
+   "hypersim/images/ai_039_002/cam_00_0055.jpg"
+  ],
+  "prompt": "依据参考图生成一个可从多个机位观察的完整三维室内场景：浴室。保留灯、柜子、镜子、窗帘、台面、桌子、浴缸。"
+ },
+ {
+  "set": "A",
+  "id": "ai_041_002",
+  "kind": "ordinary",
+  "images": [
+   "hypersim/images/ai_041_002/cam_00_0088.jpg",
+   "hypersim/images/ai_041_002/cam_00_0092.jpg"
+  ],
+  "prompt": "依据参考图生成一个可从多个机位观察的完整三维室内场景：零售店铺。保留椅子。"
+ },
+ {
+  "set": "A",
+  "id": "ai_044_003",
+  "kind": "ordinary",
+  "images": [
+   "hypersim/images/ai_044_003/cam_01_0022.jpg",
+   "hypersim/images/ai_044_003/cam_01_0091.jpg"
+  ],
+  "prompt": "依据参考图生成一个可从多个机位观察的完整三维室内场景：酒店大堂。保留书桌、灯、桌子。"
+ },
+ {
+  "set": "A",
+  "id": "ai_048_008",
+  "kind": "ordinary",
+  "images": [
+   "hypersim/images/ai_048_008/cam_00_0000.jpg",
+   "hypersim/images/ai_048_008/cam_00_0008.jpg"
+  ],
+  "prompt": "依据参考图生成一个可从多个机位观察的完整三维室内场景：客厅。保留窗、挂画、书架。"
+ },
+ {
+  "set": "A",
+  "id": "ai_052_009",
+  "kind": "ordinary",
+  "images": [
+   "hypersim/images/ai_052_009/cam_00_0001.jpg",
+   "hypersim/images/ai_052_009/cam_00_0018.jpg"
+  ],
+  "prompt": "依据参考图生成一个可从多个机位观察的完整三维室内场景：餐厅。保留窗、百叶帘、桌子、椅子、灯、沙发、柜子。"
+ },
+ {
+  "set": "A",
+  "id": "ai_053_007",
+  "kind": "ordinary",
+  "images": [
+   "hypersim/images/ai_053_007/cam_00_0004.jpg",
+   "hypersim/images/ai_053_007/cam_01_0073.jpg"
+  ],
+  "prompt": "依据参考图生成一个可从多个机位观察的完整三维室内场景：阶梯教室。保留门。"
+ },
+ {
+  "set": "B",
+  "id": "vox_1101_00",
+  "kind": "voxel",
+  "images": [
+   "voxel/images/vox_1101_00/view-1.png",
+   "voxel/images/vox_1101_00/view-2.png"
+  ],
+  "prompt": "根据参考图片生成同一个体素营地 diorama：方形草地底座上保留帐篷、松树、岩石、木栅栏、木箱。"
+ },
+ {
+  "set": "B",
+  "id": "vox_1101_01",
+  "kind": "voxel",
+  "images": [
+   "voxel/images/vox_1101_01/view-1.png",
+   "voxel/images/vox_1101_01/view-2.png"
+  ],
+  "prompt": "根据参考图片生成同一个体素营地 diorama：方形草地底座上保留帐篷、岩石、圆木、松树、木箱。"
+ },
+ {
+  "set": "B",
+  "id": "vox_1101_02",
+  "kind": "voxel",
+  "images": [
+   "voxel/images/vox_1101_02/view-1.png",
+   "voxel/images/vox_1101_02/view-2.png"
+  ],
+  "prompt": "根据参考图片生成同一个体素营地 diorama：方形草地底座上保留木箱、松树、岩石、圆木、树桩、帐篷。"
+ },
+ {
+  "set": "B",
+  "id": "vox_1101_03",
+  "kind": "voxel",
+  "images": [
+   "voxel/images/vox_1101_03/view-1.png",
+   "voxel/images/vox_1101_03/view-2.png"
+  ],
+  "prompt": "根据参考图片生成同一个体素营地 diorama：方形草地底座上保留圆木、松树、岩石、木栅栏、树桩、木桶、木箱、工作台。"
+ },
+ {
+  "set": "B",
+  "id": "vox_1101_04",
+  "kind": "voxel",
+  "images": [
+   "voxel/images/vox_1101_04/view-1.png",
+   "voxel/images/vox_1101_04/view-2.png"
+  ],
+  "prompt": "根据参考图片生成同一个体素营地 diorama：方形草地底座上保留树桩、松树、岩石、木桶。"
+ },
+ {
+  "set": "B",
+  "id": "vox_1101_05",
+  "kind": "voxel",
+  "images": [
+   "voxel/images/vox_1101_05/view-1.png",
+   "voxel/images/vox_1101_05/view-2.png"
+  ],
+  "prompt": "根据参考图片生成同一个体素营地 diorama：方形草地底座上保留岩石、木桶、松树、圆木、帐篷。"
+ },
+ {
+  "set": "B",
+  "id": "vox_1101_06",
+  "kind": "voxel",
+  "images": [
+   "voxel/images/vox_1101_06/view-1.png",
+   "voxel/images/vox_1101_06/view-2.png"
+  ],
+  "prompt": "根据参考图片生成同一个体素营地 diorama：方形草地底座上保留树桩、木桶、岩石、木栅栏、圆木、工作台。"
+ },
+ {
+  "set": "B",
+  "id": "vox_1101_07",
+  "kind": "voxel",
+  "images": [
+   "voxel/images/vox_1101_07/view-1.png",
+   "voxel/images/vox_1101_07/view-2.png"
+  ],
+  "prompt": "根据参考图片生成同一个体素营地 diorama：方形草地底座上保留圆木、岩石、松树、帐篷、工作台。"
+ },
+ {
+  "set": "B",
+  "id": "vox_1101_08",
+  "kind": "voxel",
+  "images": [
+   "voxel/images/vox_1101_08/view-1.png",
+   "voxel/images/vox_1101_08/view-2.png"
+  ],
+  "prompt": "根据参考图片生成同一个体素营地 diorama：方形草地底座上保留岩石、木栅栏、圆木、松树、工作台。"
+ },
+ {
+  "set": "B",
+  "id": "vox_1101_09",
+  "kind": "voxel",
+  "images": [
+   "voxel/images/vox_1101_09/view-1.png",
+   "voxel/images/vox_1101_09/view-2.png"
+  ],
+  "prompt": "根据参考图片生成同一个体素营地 diorama：方形草地底座上保留木桶、圆木、松树、岩石、树桩、帐篷。"
+ },
+ {
+  "set": "B",
+  "id": "vox_1101_10",
+  "kind": "voxel",
+  "images": [
+   "voxel/images/vox_1101_10/view-1.png",
+   "voxel/images/vox_1101_10/view-2.png"
+  ],
+  "prompt": "根据参考图片生成同一个体素营地 diorama：方形草地底座上保留岩石、松树、木栅栏、工作台。"
+ },
+ {
+  "set": "B",
+  "id": "vox_1101_11",
+  "kind": "voxel",
+  "images": [
+   "voxel/images/vox_1101_11/view-1.png",
+   "voxel/images/vox_1101_11/view-2.png"
+  ],
+  "prompt": "根据参考图片生成同一个体素营地 diorama：方形草地底座上保留岩石、木栅栏、帐篷、圆木、木桶、松树。"
+ },
+ {
+  "set": "B",
+  "id": "vox_1101_12",
+  "kind": "voxel",
+  "images": [
+   "voxel/images/vox_1101_12/view-1.png",
+   "voxel/images/vox_1101_12/view-2.png"
+  ],
+  "prompt": "根据参考图片生成同一个体素营地 diorama：方形草地底座上保留帐篷、岩石、工作台。"
+ },
+ {
+  "set": "B",
+  "id": "vox_1101_13",
+  "kind": "voxel",
+  "images": [
+   "voxel/images/vox_1101_13/view-1.png",
+   "voxel/images/vox_1101_13/view-2.png"
+  ],
+  "prompt": "根据参考图片生成同一个体素营地 diorama：方形草地底座上保留松树、木栅栏、圆木。"
+ },
+ {
+  "set": "B",
+  "id": "vox_1101_14",
+  "kind": "voxel",
+  "images": [
+   "voxel/images/vox_1101_14/view-1.png",
+   "voxel/images/vox_1101_14/view-2.png"
+  ],
+  "prompt": "根据参考图片生成同一个体素营地 diorama：方形草地底座上保留帐篷、松树、木桶、木栅栏、工作台。"
+ },
+ {
+  "set": "B",
+  "id": "vox_1101_15",
+  "kind": "voxel",
+  "images": [
+   "voxel/images/vox_1101_15/view-1.png",
+   "voxel/images/vox_1101_15/view-2.png"
+  ],
+  "prompt": "根据参考图片生成同一个体素营地 diorama：方形草地底座上保留岩石、圆木、树桩、帐篷。"
+ },
+ {
+  "set": "B",
+  "id": "vox_1101_16",
+  "kind": "voxel",
+  "images": [
+   "voxel/images/vox_1101_16/view-1.png",
+   "voxel/images/vox_1101_16/view-2.png"
+  ],
+  "prompt": "根据参考图片生成同一个体素营地 diorama：方形草地底座上保留木栅栏、岩石、圆木、松树。"
+ },
+ {
+  "set": "B",
+  "id": "vox_1101_17",
+  "kind": "voxel",
+  "images": [
+   "voxel/images/vox_1101_17/view-1.png",
+   "voxel/images/vox_1101_17/view-2.png"
+  ],
+  "prompt": "根据参考图片生成同一个体素营地 diorama：方形草地底座上保留树桩、圆木、岩石、松树、木栅栏。"
+ },
+ {
+  "set": "B",
+  "id": "vox_1101_18",
+  "kind": "voxel",
+  "images": [
+   "voxel/images/vox_1101_18/view-1.png",
+   "voxel/images/vox_1101_18/view-2.png"
+  ],
+  "prompt": "根据参考图片生成同一个体素营地 diorama：方形草地底座上保留岩石、圆木、木箱、松树、工作台。"
+ },
+ {
+  "set": "B",
+  "id": "vox_1101_19",
+  "kind": "voxel",
+  "images": [
+   "voxel/images/vox_1101_19/view-1.png",
+   "voxel/images/vox_1101_19/view-2.png"
+  ],
+  "prompt": "根据参考图片生成同一个体素营地 diorama：方形草地底座上保留木箱、木桶、木栅栏、树桩、岩石、松树、帐篷、工作台。"
+ }
+]

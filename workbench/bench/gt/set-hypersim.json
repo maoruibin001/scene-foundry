@@ -1,0 +1,254 @@
+{
+ "version": "gt-hypersim-v1",
+ "frozenAt": "2026-10-26",
+ "selection": "stratified random from Hypersim v1 val/test (seed 20261026), view pair by metadata only, exposure rule fixed in advance; backups drawn with seed 20261027",
+ "scenes": [
+  {
+   "id": "ai_010_007",
+   "type": "Living room",
+   "split": "val",
+   "views": [
+    "cam_00/0000",
+    "cam_00/0054"
+   ],
+   "sharedObjects": 20,
+   "baselineM": 3.81,
+   "angleDeg": 29.6,
+   "objects": 21
+  },
+  {
+   "id": "ai_015_010",
+   "type": "Living room",
+   "split": "test",
+   "views": [
+    "cam_00/0003",
+    "cam_00/0090"
+   ],
+   "sharedObjects": 21,
+   "baselineM": 2.34,
+   "angleDeg": 33.5,
+   "objects": 22
+  },
+  {
+   "id": "ai_048_008",
+   "type": "Living room",
+   "split": "test",
+   "views": [
+    "cam_00/0000",
+    "cam_00/0008"
+   ],
+   "sharedObjects": 88,
+   "baselineM": 3.0,
+   "angleDeg": 62.0,
+   "objects": 88
+  },
+  {
+   "id": "ai_007_001",
+   "type": "Bedroom",
+   "split": "val",
+   "views": [
+    "cam_00/0001",
+    "cam_01/0076"
+   ],
+   "sharedObjects": 20,
+   "baselineM": 3.78,
+   "angleDeg": 30.4,
+   "objects": 21
+  },
+  {
+   "id": "ai_035_001",
+   "type": "Bedroom",
+   "split": "test",
+   "views": [
+    "cam_00/0005",
+    "cam_00/0010"
+   ],
+   "sharedObjects": 20,
+   "baselineM": 2.93,
+   "angleDeg": 33.8,
+   "objects": 21
+  },
+  {
+   "id": "ai_035_004",
+   "type": "Bedroom",
+   "split": "val",
+   "views": [
+    "cam_00/0000",
+    "cam_00/0008"
+   ],
+   "sharedObjects": 15,
+   "baselineM": 1.73,
+   "angleDeg": 28.9,
+   "objects": 20
+  },
+  {
+   "id": "ai_030_001",
+   "type": "Kitchen",
+   "split": "test",
+   "views": [
+    "cam_00/0043",
+    "cam_00/0064"
+   ],
+   "sharedObjects": 53,
+   "baselineM": 1.21,
+   "angleDeg": 27.3,
+   "objects": 66
+  },
+  {
+   "id": "ai_008_005",
+   "type": "Restaurant",
+   "split": "test",
+   "views": [
+    "cam_00/0037",
+    "cam_00/0092"
+   ],
+   "sharedObjects": 79,
+   "baselineM": 3.08,
+   "angleDeg": 30.2,
+   "objects": 79
+  },
+  {
+   "id": "ai_033_002",
+   "type": "Office",
+   "split": "test",
+   "views": [
+    "cam_00/0071",
+    "cam_00/0089"
+   ],
+   "sharedObjects": 73,
+   "baselineM": 1.36,
+   "angleDeg": 25.2,
+   "objects": 93
+  },
+  {
+   "id": "ai_005_010",
+   "type": "Dining room",
+   "split": "test",
+   "views": [
+    "cam_00/0000",
+    "cam_00/0023"
+   ],
+   "sharedObjects": 24,
+   "baselineM": 3.66,
+   "angleDeg": 54.2,
+   "objects": 25
+  },
+  {
+   "id": "ai_044_003",
+   "type": "Hotel lobby",
+   "split": "val",
+   "views": [
+    "cam_01/0022",
+    "cam_01/0091"
+   ],
+   "sharedObjects": 20,
+   "baselineM": 3.6,
+   "angleDeg": 26.3,
+   "objects": 39
+  },
+  {
+   "id": "ai_041_002",
+   "type": "Retail space",
+   "split": "test",
+   "views": [
+    "cam_00/0088",
+    "cam_00/0092"
+   ],
+   "sharedObjects": 26,
+   "baselineM": 3.35,
+   "angleDeg": 25.7,
+   "objects": 40
+  },
+  {
+   "id": "ai_053_007",
+   "type": "Lecture theater",
+   "split": "test",
+   "views": [
+    "cam_00/0004",
+    "cam_01/0073"
+   ],
+   "sharedObjects": 45,
+   "baselineM": 3.93,
+   "angleDeg": 31.8,
+   "objects": 46
+  },
+  {
+   "id": "ai_016_004",
+   "type": "Hallway",
+   "split": "val",
+   "views": [
+    "cam_00/0000",
+    "cam_00/0001"
+   ],
+   "sharedObjects": 4,
+   "baselineM": 1.35,
+   "angleDeg": 56.0,
+   "objects": 4
+  },
+  {
+   "id": "ai_015_001",
+   "type": "Kitchen",
+   "split": "val",
+   "views": [
+    "cam_00/0029",
+    "cam_00/0033"
+   ],
+   "sharedObjects": 39,
+   "baselineM": 1.59,
+   "angleDeg": 26.7,
+   "objects": 45
+  },
+  {
+   "id": "ai_039_002",
+   "type": "Bathroom",
+   "split": "test",
+   "views": [
+    "cam_00/0000",
+    "cam_00/0055"
+   ],
+   "sharedObjects": 18,
+   "baselineM": 1.04,
+   "angleDeg": 29.3,
+   "objects": 25
+  },
+  {
+   "id": "ai_003_010",
+   "type": "Living room",
+   "split": "val",
+   "views": [
+    "cam_01/0024",
+    "cam_01/0048"
+   ],
+   "sharedObjects": 47,
+   "baselineM": 1.19,
+   "angleDeg": 25.7,
+   "objects": 47
+  },
+  {
+   "id": "ai_034_002",
+   "type": "Living room",
+   "split": "test",
+   "views": [
+    "cam_00/0032",
+    "cam_00/0083"
+   ],
+   "sharedObjects": 502,
+   "baselineM": 3.41,
+   "angleDeg": 25.6,
+   "objects": 867
+  },
+  {
+   "id": "ai_052_009",
+   "type": "Restaurant",
+   "split": "test",
+   "views": [
+    "cam_00/0001",
+    "cam_00/0018"
+   ],
+   "sharedObjects": 470,
+   "baselineM": 3.35,
+   "angleDeg": 28.1,
+   "objects": 531
+  }
+ ]
+}

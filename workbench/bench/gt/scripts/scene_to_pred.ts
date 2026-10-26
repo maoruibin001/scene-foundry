@@ -1,0 +1,12 @@
+// usage: bun scene_to_pred.ts <generated-scene.json> <out pred.json> — a pipeline scene in the scoring schema (instance AABBs, cameras)
+const {compileGeometryProgram}=await import(process.env.SF_REPO+'/workbench/src/geometry/program.ts');
+const [p,out]=process.argv.slice(2);const s=await Bun.file(p).json();
+const c=compileGeometryProgram({...s.program,materials:s.program.materials.map((m:any)=>({...m,textureId:null,surfaceDetail:null}))});
+const B:any={};for(const m of c.meshes){const e=B[m.entityId]??={min:[1e9,1e9,1e9],max:[-1e9,-1e9,-1e9]};const v=m.geometry.positions;for(let i=0;i<v.length;i++){e.min[i%3]=Math.min(e.min[i%3],v[i]);e.max[i%3]=Math.max(e.max[i%3],v[i]);}}
+const role=Object.fromEntries((s.entities??[]).map((e:any)=>[e.instanceId,e]));
+// Free-form Chinese categories mapped to the ground-truth vocabulary by fixed keywords (first hit wins; unmapped keeps its own text).
+const KEY:[string,string][]=[['床头柜','night stand'],['沙发','sofa'],['椅','chair'],['凳','chair'],['书桌','desk'],['桌','table'],['台面','counter'],['书架','bookshelf'],['置物架','shelves'],['架','shelves'],['柜','cabinet'],['床','bed'],['百叶','blinds'],['窗帘','curtain'],['帘','curtain'],['窗','window'],['门','door'],['画','picture'],['镜','mirror'],['地毯','floor mat'],['毯','floor mat'],['靠枕','pillow'],['枕','pillow'],['灯','lamp'],['电视','television'],['冰箱','refrigerator'],['水槽','sink'],['马桶','toilet'],['浴缸','bathtub'],['帐篷','tent'],['篝火','campfire'],['火','campfire'],['松','tree'],['树桩','stump'],['树','tree'],['岩','rock'],['石','rock'],['圆木','log'],['木桶','barrel'],['桶','barrel'],['木箱','crate'],['箱','crate'],['工作台','workbench'],['栅栏','fence'],['路标','signpost'],['睡袋','bedroll']];
+const vocab=(s:string)=>KEY.find(([k])=>s.includes(k))?.[1]??s;
+const objects=Object.entries(B).filter(([id])=>!['ground','context'].includes(role[id]?.role)).map(([id,b]:any)=>({id,label:vocab(role[id]?.category??id),rawLabel:role[id]?.category??id,center:b.min.map((v:number,k:number)=>(v+b.max[k])/2),size:b.max.map((v:number,k:number)=>v-b.min[k]),yaw:0}));
+const cameras=s.cameras.filter((x:any)=>Number.isInteger(x.referenceIndex)).map((x:any)=>{const f=x.target.map((v:number,k:number)=>v-x.position[k]),l=Math.hypot(...f);return {view:x.referenceIndex,position:x.position,forward:f.map((v:number)=>v/l),up:[0,0,1],vfov:x.fov,projection:x.projection,orthographicHeight:x.orthographicHeight??null};});
+await Bun.write(out,JSON.stringify({cameras,objects}));console.log(objects.length,'objects',cameras.length,'cameras');
