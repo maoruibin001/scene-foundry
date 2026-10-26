@@ -4,7 +4,12 @@ import {randomUUID} from 'node:crypto';
 import {DATA,read,save,listJobs} from './store';
 import {ProviderPressure} from './provider-pressure';
 
-export const DEFAULT_LIMITS={scenes:3,models:8,renders:2};
+/**
+ * Per backend, i.e. per scene kind (ordinary and voxel each run their own). Two scenes at a time: each model call carries the
+ * reference images and a long brief, and the codex6 relay limits tokens per minute. Four scenes at once (2026-10-26 19:56) drew
+ * HTTP 429 within a minute and then only "high demand" errors, while one or two ran without error. Edited on the 并行与队列 page.
+ */
+export const DEFAULT_LIMITS={scenes:2,models:4,renders:2};
 export const MAX_LIMITS={scenes:8,models:16,renders:4};
 export function validateLimits(value:any){
  const out={...DEFAULT_LIMITS,...value};

@@ -64,5 +64,7 @@ def one(sid):
   except Exception as e:
     st['failed']='driver: '+str(e)[:300];save();log(sid,'FAILED driver',str(e)[:200])
 log('start',len(IDS),'scenes')
+# Every scene's driver thread starts at once; the backends' own scene limit (并行与队列, default 2 per kind) decides how many run,
+# so the relay sees the same load as normal use. Jobs beyond the limit wait in the backend queue, not here.
 with ThreadPoolExecutor(len(IDS)) as ex:list(ex.map(one,IDS))
 done=[s for s in IDS if state.get(s,{}).get('result')];log('ALL DONE scored',len(done),'of',len(IDS),'failed',[s for s in IDS if state.get(s,{}).get('failed')])

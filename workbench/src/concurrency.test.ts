@@ -22,7 +22,7 @@ test('legacy reservations count toward cap and are released without interrupting
 test('lowered model cap waits for drain; abort queued requests do not consume capacity',async()=>{
  const pool=new PermitPool(2),a=await pool.acquire('a'),b=await pool.acquire('b');pool.setLimit(1);let got=false;const c=pool.acquire('c').then(r=>{got=true;return r;});a();await tick();expect(got).toBe(false);b();const release=await c;expect(got).toBe(true);release();
 });
-test('limits reject malformed and excessive values',()=>{for(const v of [{scenes:0},{models:17},{renders:5},{models:1.1},{scenes:'3'}])expect(()=>validateLimits(v)).toThrow();expect(validateLimits({})).toEqual({scenes:3,models:8,renders:2});});
+test('limits reject malformed and excessive values',()=>{for(const v of [{scenes:0},{models:17},{renders:5},{models:1.1},{scenes:'3'}])expect(()=>validateLimits(v)).toThrow();expect(validateLimits({})).toEqual({scenes:2,models:4,renders:2});});
 test('200-job batch keeps scene and aggregate model caps and continues after an individual failure',async()=>{
  const q=new SceneQueue(3),models=new PermitPool(4);let done=0,active=0,peak=0,peakScenes=0;const complete=deferred();
  for(let i=0;i<200;i++)q.enqueue('batch-'+i,'experiment-'+i,async()=>{peakScenes=Math.max(peakScenes,q.active.size);try{await Promise.all(Array.from({length:3},(_,k)=>models.use(i+':'+k,undefined,async()=>{active++;peak=Math.max(peak,active);try{await tick();if(i===4&&k===0)throw Error('one case failed');}finally{active--;}})).map(p=>p.catch(()=>{})));}finally{if(++done===200)complete.done();}});
