@@ -39,7 +39,7 @@ If either check changes, the metric changed. Log the change in PROTOCOL.md befor
 
 ## Run the pipeline on the set
 `scripts/full_run.py` runs all scenes against running workbench backends, as parallel as the backends allow. For each scene it:
-1. creates the job through the UI (`scripts/create-job.js`, which needs playwright-core on `NODE_PATH`);
+1. creates the job through the UI (`scripts/create-job.cjs`, which needs playwright-core on `NODE_PATH`);
 2. cancels the job once the first graybox round has a judge score;
 3. scores that round against ground truth.
 

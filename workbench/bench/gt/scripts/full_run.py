@@ -25,9 +25,9 @@ def api(p,path,method='GET'):
 create_slots=threading.Semaphore(3)
 def create(x):
   with create_slots:
-    # create-job.js drives the workbench UI (needs playwright-core on NODE_PATH)
+    # create-job.cjs drives the workbench UI (needs playwright-core on NODE_PATH)
     env={**os.environ,'UI':UI}
-    r=subprocess.run(['node',os.path.join(B,'scripts','create-job.js'),UI,'voxel/' if x['kind']=='voxel' else '',','.join(x['images']),x['prompt'],'go'],capture_output=True,text=True,env=env,timeout=600)
+    r=subprocess.run(['node',os.path.join(B,'scripts','create-job.cjs'),UI,'voxel/' if x['kind']=='voxel' else '',','.join(x['images']),x['prompt'],'go'],capture_output=True,text=True,env=env,timeout=600)
     for line in r.stdout.splitlines():
       if line.startswith('HASH #job/'):return line.split('/')[-1].strip()
     raise RuntimeError('create failed: '+(r.stdout+r.stderr)[-300:])

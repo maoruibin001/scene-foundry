@@ -1,4 +1,4 @@
-// usage: node create.js <port> <base: ''|voxel/> <image> <prompt> [go]
+// usage: node create-job.cjs <port> <base: ''|voxel/> <image> <prompt> [go]
 const {chromium}=require('playwright-core');
 (async()=>{
  const [port,base,image,prompt,go]=process.argv.slice(2);
