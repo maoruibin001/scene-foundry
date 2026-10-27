@@ -1,0 +1,89 @@
+{
+ "version": "gt-scene-score-v3",
+ "summary": {
+  "scale": 0.8818173647539003,
+  "absScaleErr": 0.12577031385720464,
+  "cameraPositionErrM": 8.609370879450106,
+  "cameraForwardErrDeg": 145.57887035487173,
+  "cameraHeightErrM": 1.1172452041766725,
+  "vfovErrDeg": 2.0053522829578796,
+  "orthoHeightLogErr": null,
+  "objectRecall": 0.38461538461538464,
+  "objectPrecision": 0.625,
+  "centerErrM": 0.4210382172416349,
+  "sizeErr": 0.35074347918217513,
+  "meanIoU3d": 0.029322780700976193,
+  "anchored": {
+   "objectRecall": 0.0,
+   "objectPrecision": 0.0,
+   "centerErrM": null,
+   "sizeErr": null,
+   "meanIoU3d": 0.0
+  }
+ },
+ "cameras": [
+  {
+   "view": 1,
+   "positionErrM": 7.247586103598424,
+   "heightErrM": 0.965150084081704,
+   "forwardErrDeg": 121.84452414221686,
+   "pitchErrDeg": -3.490292136438338,
+   "vfovErrDeg": -0.4168688799779314
+  },
+  {
+   "view": 2,
+   "positionErrM": 9.971155655301787,
+   "heightErrM": 1.2693403242716408,
+   "forwardErrDeg": 169.3132165675266,
+   "pitchErrDeg": -6.719440047491999,
+   "vfovErrDeg": 3.593835685937828
+  }
+ ],
+ "objects": [
+  {
+   "gt": 0.0,
+   "pred": 3.0,
+   "label": "cabinet",
+   "labelMatch": true,
+   "centerErrM": 0.7961397622101309,
+   "logSizeRatio": 0.35074347918217513,
+   "iou3d": 0.058800935254316115
+  },
+  {
+   "gt": 8.0,
+   "pred": 6.0,
+   "label": "otherstructure",
+   "labelMatch": false,
+   "centerErrM": 0.21848046458727952,
+   "logSizeRatio": 1.1209316616041145,
+   "iou3d": 0.05049473485996377
+  },
+  {
+   "gt": 10.0,
+   "pred": 0.0,
+   "label": "bed",
+   "labelMatch": true,
+   "centerErrM": 0.4210382172416349,
+   "logSizeRatio": 0.29694871029827413,
+   "iou3d": 0.15279872777262643
+  },
+  {
+   "gt": 11.0,
+   "pred": 2.0,
+   "label": "pillow",
+   "labelMatch": false,
+   "centerErrM": 0.3766414821870641,
+   "logSizeRatio": 0.5946689427704827,
+   "iou3d": 0.06757148827550548
+  },
+  {
+   "gt": 12.0,
+   "pred": 7.0,
+   "label": "lamp",
+   "labelMatch": true,
+   "centerErrM": 0.7460059377752589,
+   "logSizeRatio": 0.3502928558128026,
+   "iou3d": 0.051530262950278766
+  }
+ ]
+}

@@ -1,0 +1,141 @@
+{
+ "version": "gt-scene-score-v3",
+ "summary": {
+  "scale": 1.0111338675014023,
+  "absScaleErr": 0.011072342253389789,
+  "cameraPositionErrM": null,
+  "cameraForwardErrDeg": 0.7689129344252967,
+  "cameraHeightErrM": null,
+  "vfovErrDeg": null,
+  "orthoHeightLogErr": 0.011072342253389789,
+  "objectRecall": 0.7857142857142857,
+  "objectPrecision": 1.0,
+  "centerErrM": 0.1576788534153002,
+  "sizeErr": 0.1508233105394736,
+  "meanIoU3d": 0.4095714839669046,
+  "anchored": {
+   "objectRecall": 0.7857142857142857,
+   "objectPrecision": 1.0,
+   "centerErrM": 0.1576788534153002,
+   "sizeErr": 0.1508233105394736,
+   "meanIoU3d": 0.4095714839669046
+  }
+ },
+ "cameras": [
+  {
+   "view": 1,
+   "orthographic": true,
+   "forwardErrDeg": 0.7689129344252967,
+   "pitchErrDeg": -0.26338375083305576,
+   "orthoHeightLogErr": 0.011072342253389789
+  },
+  {
+   "view": 2,
+   "orthographic": true,
+   "forwardErrDeg": 0.7689129344252967,
+   "pitchErrDeg": -0.26338375083305576,
+   "orthoHeightLogErr": 0.011072342253389789
+  }
+ ],
+ "objects": [
+  {
+   "gt": 0.0,
+   "pred": 0.0,
+   "label": "tent",
+   "labelMatch": true,
+   "centerErrM": 0.3791216220331068,
+   "logSizeRatio": 0.1705299849193476,
+   "iou3d": 0.5692808994727163
+  },
+  {
+   "gt": 1.0,
+   "pred": 1.0,
+   "label": "tent",
+   "labelMatch": true,
+   "centerErrM": 0.20506689398091818,
+   "logSizeRatio": 0.16877096588573295,
+   "iou3d": 0.607437130141338
+  },
+  {
+   "gt": 2.0,
+   "pred": 6.0,
+   "label": "workbench",
+   "labelMatch": true,
+   "centerErrM": 0.15680181265063098,
+   "logSizeRatio": 0.1197953526685644,
+   "iou3d": 0.654522808182531
+  },
+  {
+   "gt": 3.0,
+   "pred": 4.0,
+   "label": "tree",
+   "labelMatch": true,
+   "centerErrM": 0.0932676217970832,
+   "logSizeRatio": 0.15363100144917652,
+   "iou3d": 0.6442529067569562
+  },
+  {
+   "gt": 4.0,
+   "pred": 5.0,
+   "label": "tree",
+   "labelMatch": true,
+   "centerErrM": 0.09237076335669502,
+   "logSizeRatio": 0.1508233105394736,
+   "iou3d": 0.6479958542811952
+  },
+  {
+   "gt": 5.0,
+   "pred": 3.0,
+   "label": "tree",
+   "labelMatch": true,
+   "centerErrM": 0.1576788534153002,
+   "logSizeRatio": 0.14895738536853032,
+   "iou3d": 0.6453765516440924
+  },
+  {
+   "gt": 6.0,
+   "pred": 2.0,
+   "label": "log",
+   "labelMatch": false,
+   "centerErrM": 0.46025080726588047,
+   "logSizeRatio": 0.09829145375508767,
+   "iou3d": 0.2238994826235799
+  },
+  {
+   "gt": 8.0,
+   "pred": 8.0,
+   "label": "barrel",
+   "labelMatch": true,
+   "centerErrM": 0.18014146703921294,
+   "logSizeRatio": 0.1248357443371924,
+   "iou3d": 0.4790885140053094
+  },
+  {
+   "gt": 9.0,
+   "pred": 7.0,
+   "label": "barrel",
+   "labelMatch": true,
+   "centerErrM": 0.04860842142268978,
+   "logSizeRatio": 0.0855747324517313,
+   "iou3d": 0.7566112467888378
+  },
+  {
+   "gt": 10.0,
+   "pred": 9.0,
+   "label": "fence",
+   "labelMatch": true,
+   "centerErrM": 0.06452234816982862,
+   "logSizeRatio": 0.4132509151179958,
+   "iou3d": 0.2721545118258945
+  },
+  {
+   "gt": 11.0,
+   "pred": 10.0,
+   "label": "fence",
+   "labelMatch": true,
+   "centerErrM": 0.20704291524100885,
+   "logSizeRatio": 0.21386252441769604,
+   "iou3d": 0.2333808698142145
+  }
+ ]
+}

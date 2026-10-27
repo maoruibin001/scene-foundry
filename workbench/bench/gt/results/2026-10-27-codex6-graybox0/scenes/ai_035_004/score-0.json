@@ -1,0 +1,71 @@
+{
+ "version": "gt-scene-score-v3",
+ "summary": {
+  "scale": 0.7917568335415713,
+  "absScaleErr": 0.23350096266716863,
+  "cameraPositionErrM": 2.43533501517856,
+  "cameraForwardErrDeg": 32.62336020843962,
+  "cameraHeightErrM": 0.12806816453709402,
+  "vfovErrDeg": 16.658167535311115,
+  "orthoHeightLogErr": null,
+  "objectRecall": 0.6,
+  "objectPrecision": 0.75,
+  "centerErrM": 0.45215424821069106,
+  "sizeErr": 0.22540224073852752,
+  "meanIoU3d": 0.16179845239468088,
+  "anchored": {
+   "objectRecall": 0.6,
+   "objectPrecision": 0.75,
+   "centerErrM": 0.45215424821069106,
+   "sizeErr": 0.22540224073852752,
+   "meanIoU3d": 0.16179845239468088
+  }
+ },
+ "cameras": [
+  {
+   "view": 1,
+   "positionErrM": 2.085753229178025,
+   "heightErrM": -0.05272817504344651,
+   "forwardErrDeg": 25.265410177946784,
+   "pitchErrDeg": 1.507149568240655,
+   "vfovErrDeg": 17.23112533044194
+  },
+  {
+   "view": 2,
+   "positionErrM": 2.784916801179095,
+   "heightErrM": -0.20340815403074153,
+   "forwardErrDeg": 39.98131023893245,
+   "pitchErrDeg": 1.355243217498842,
+   "vfovErrDeg": 16.085209740180293
+  }
+ ],
+ "objects": [
+  {
+   "gt": 0.0,
+   "pred": 0.0,
+   "label": "bed",
+   "labelMatch": true,
+   "centerErrM": 0.27909975164805734,
+   "logSizeRatio": 0.10748720291161971,
+   "iou3d": 0.6407944031282053
+  },
+  {
+   "gt": 1.0,
+   "pred": 2.0,
+   "label": "night stand",
+   "labelMatch": true,
+   "centerErrM": 0.45215424821069106,
+   "logSizeRatio": 0.22540224073852752,
+   "iou3d": 0.16819785884519908
+  },
+  {
+   "gt": 2.0,
+   "pred": 3.0,
+   "label": "lamp",
+   "labelMatch": true,
+   "centerErrM": 0.4657860345881533,
+   "logSizeRatio": 0.5788002135181961,
+   "iou3d": 0.0
+  }
+ ]
+}

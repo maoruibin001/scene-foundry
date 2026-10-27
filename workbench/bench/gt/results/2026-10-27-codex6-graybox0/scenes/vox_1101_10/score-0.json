@@ -1,0 +1,177 @@
+{
+ "version": "gt-scene-score-v3",
+ "summary": {
+  "scale": 1.2611360710405068,
+  "absScaleErr": 0.23201295840983177,
+  "cameraPositionErrM": null,
+  "cameraForwardErrDeg": 4.451777323807354,
+  "cameraHeightErrM": null,
+  "vfovErrDeg": null,
+  "orthoHeightLogErr": 0.010212590642089714,
+  "objectRecall": 1.0,
+  "objectPrecision": 1.0,
+  "centerErrM": 0.12888041998488428,
+  "sizeErr": 0.08984912160095086,
+  "meanIoU3d": 0.5803526747035969,
+  "anchored": {
+   "objectRecall": 1.0,
+   "objectPrecision": 1.0,
+   "centerErrM": 0.12888041998488428,
+   "sizeErr": 0.08984912160095086,
+   "meanIoU3d": 0.5803526747035969
+  }
+ },
+ "cameras": [
+  {
+   "view": 1,
+   "orthographic": true,
+   "forwardErrDeg": 4.451777323807354,
+   "pitchErrDeg": 4.424335087228401,
+   "orthoHeightLogErr": 0.010212590642089714
+  },
+  {
+   "view": 2,
+   "orthographic": true,
+   "forwardErrDeg": 4.451777323807354,
+   "pitchErrDeg": 4.424335087228401,
+   "orthoHeightLogErr": 0.010212590642089714
+  }
+ ],
+ "objects": [
+  {
+   "gt": 0.0,
+   "pred": 9.0,
+   "label": "log",
+   "labelMatch": false,
+   "centerErrM": 0.12888041998488428,
+   "logSizeRatio": 0.08984912160095086,
+   "iou3d": 0.6040910533803756
+  },
+  {
+   "gt": 1.0,
+   "pred": 11.0,
+   "label": "crate",
+   "labelMatch": true,
+   "centerErrM": 0.05200219929499108,
+   "logSizeRatio": 0.054798719959938735,
+   "iou3d": 0.7696909361144009
+  },
+  {
+   "gt": 2.0,
+   "pred": 12.0,
+   "label": "barrel",
+   "labelMatch": false,
+   "centerErrM": 0.040367863175418184,
+   "logSizeRatio": 0.05065787996041977,
+   "iou3d": 0.7910023527382652
+  },
+  {
+   "gt": 3.0,
+   "pred": 8.0,
+   "label": "signpost",
+   "labelMatch": false,
+   "centerErrM": 0.20599711081318806,
+   "logSizeRatio": 0.06467081274733928,
+   "iou3d": 0.5188974518368923
+  },
+  {
+   "gt": 4.0,
+   "pred": 10.0,
+   "label": "workbench",
+   "labelMatch": false,
+   "centerErrM": 0.1314984261907226,
+   "logSizeRatio": 0.19945912066416013,
+   "iou3d": 0.5844529580519823
+  },
+  {
+   "gt": 5.0,
+   "pred": 13.0,
+   "label": "bedroll",
+   "labelMatch": false,
+   "centerErrM": 0.10206382166159647,
+   "logSizeRatio": 0.017184146277869437,
+   "iou3d": 0.576982349573128
+  },
+  {
+   "gt": 6.0,
+   "pred": 2.0,
+   "label": "rock",
+   "labelMatch": true,
+   "centerErrM": 0.10977954550528439,
+   "logSizeRatio": 0.2027166046803003,
+   "iou3d": 0.5692571012381897
+  },
+  {
+   "gt": 7.0,
+   "pred": 4.0,
+   "label": "rock",
+   "labelMatch": true,
+   "centerErrM": 0.22873680168299468,
+   "logSizeRatio": 0.29717109504224165,
+   "iou3d": 0.4335577976785813
+  },
+  {
+   "gt": 8.0,
+   "pred": 5.0,
+   "label": "rock",
+   "labelMatch": true,
+   "centerErrM": 0.443315402028088,
+   "logSizeRatio": 0.11999810177916544,
+   "iou3d": 0.38457281074296573
+  },
+  {
+   "gt": 9.0,
+   "pred": 3.0,
+   "label": "rock",
+   "labelMatch": true,
+   "centerErrM": 0.16389578045658595,
+   "logSizeRatio": 0.20454304590300054,
+   "iou3d": 0.5719408674066959
+  },
+  {
+   "gt": 10.0,
+   "pred": 14.0,
+   "label": "stump",
+   "labelMatch": false,
+   "centerErrM": 0.13219520720205127,
+   "logSizeRatio": 0.015537708074478074,
+   "iou3d": 0.44442313270005634
+  },
+  {
+   "gt": 11.0,
+   "pred": 1.0,
+   "label": "tree",
+   "labelMatch": true,
+   "centerErrM": 0.08249339214571084,
+   "logSizeRatio": 0.06037037971990061,
+   "iou3d": 0.81259206768391
+  },
+  {
+   "gt": 12.0,
+   "pred": 0.0,
+   "label": "tree",
+   "labelMatch": true,
+   "centerErrM": 0.2085677607094983,
+   "logSizeRatio": 0.1685192707782643,
+   "iou3d": 0.5932587029530018
+  },
+  {
+   "gt": 13.0,
+   "pred": 6.0,
+   "label": "fence",
+   "labelMatch": true,
+   "centerErrM": 0.1228231055257664,
+   "logSizeRatio": 0.13957925445252603,
+   "iou3d": 0.2948144916399917
+  },
+  {
+   "gt": 14.0,
+   "pred": 7.0,
+   "label": "fence",
+   "labelMatch": true,
+   "centerErrM": 0.06711421865406036,
+   "logSizeRatio": 0.02593705879566159,
+   "iou3d": 0.7557560468155158
+  }
+ ]
+}

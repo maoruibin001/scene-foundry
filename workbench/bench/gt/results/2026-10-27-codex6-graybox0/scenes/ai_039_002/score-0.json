@@ -1,0 +1,98 @@
+{
+ "version": "gt-scene-score-v3",
+ "summary": {
+  "scale": 0.864589834983765,
+  "absScaleErr": 0.1455000637182911,
+  "cameraPositionErrM": 0.7525241399886542,
+  "cameraForwardErrDeg": 8.124754278191693,
+  "cameraHeightErrM": 0.1426307279481625,
+  "vfovErrDeg": 4.1087675585913495,
+  "orthoHeightLogErr": null,
+  "objectRecall": 0.42857142857142855,
+  "objectPrecision": 0.5,
+  "centerErrM": 0.6241637612085988,
+  "sizeErr": 0.2656360526031019,
+  "meanIoU3d": 0.06518804045519902,
+  "anchored": {
+   "objectRecall": 0.21428571428571427,
+   "objectPrecision": 0.25,
+   "centerErrM": 0.3862549977129954,
+   "sizeErr": 1.0149888619718437,
+   "meanIoU3d": 0.0109000414119865
+  }
+ },
+ "cameras": [
+  {
+   "view": 1,
+   "positionErrM": 0.2912605003058518,
+   "heightErrM": 0.16495850001417034,
+   "forwardErrDeg": 4.874647562521695,
+   "pitchErrDeg": -3.3909675295789885,
+   "vfovErrDeg": 3.535809763460526
+  },
+  {
+   "view": 2,
+   "positionErrM": 1.2137877796714567,
+   "heightErrM": 0.12030295588215467,
+   "forwardErrDeg": 11.374860993861692,
+   "pitchErrDeg": -3.3512062641653415,
+   "vfovErrDeg": 4.6817253537221735
+  }
+ ],
+ "objects": [
+  {
+   "gt": 1.0,
+   "pred": 5.0,
+   "label": "counter",
+   "labelMatch": true,
+   "centerErrM": 0.305768627276376,
+   "logSizeRatio": 0.3194518797087727,
+   "iou3d": 0.40509818314785484
+  },
+  {
+   "gt": 2.0,
+   "pred": 9.0,
+   "label": "mirror",
+   "labelMatch": true,
+   "centerErrM": 0.7384673147431259,
+   "logSizeRatio": 0.5273490363150204,
+   "iou3d": 0.1938967965632849
+  },
+  {
+   "gt": 5.0,
+   "pred": 2.0,
+   "label": "curtain",
+   "labelMatch": true,
+   "centerErrM": 0.4423734927725005,
+   "logSizeRatio": 0.37676192408072584,
+   "iou3d": 0.03766049043935289
+  },
+  {
+   "gt": 6.0,
+   "pred": 1.0,
+   "label": "bathtub",
+   "labelMatch": true,
+   "centerErrM": 0.7368865755888445,
+   "logSizeRatio": 0.21182022549743115,
+   "iou3d": 0.0
+  },
+  {
+   "gt": 7.0,
+   "pred": 0.0,
+   "label": "blinds",
+   "labelMatch": true,
+   "centerErrM": 0.7448803273422065,
+   "logSizeRatio": 0.13985723549800996,
+   "iou3d": 0.0
+  },
+  {
+   "gt": 8.0,
+   "pred": 11.0,
+   "label": "table",
+   "labelMatch": true,
+   "centerErrM": 0.5114409468283531,
+   "logSizeRatio": 0.09502285347256889,
+   "iou3d": 0.2759770962222935
+  }
+ ]
+}

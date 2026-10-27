@@ -1,0 +1,71 @@
+{
+ "version": "gt-scene-score-v3",
+ "summary": {
+  "scale": 1.5932811099016266,
+  "absScaleErr": 0.46579548108573493,
+  "cameraPositionErrM": 6.67998285251186,
+  "cameraForwardErrDeg": 39.874757699573166,
+  "cameraHeightErrM": 0.7803340145980451,
+  "vfovErrDeg": 13.907075998292644,
+  "orthoHeightLogErr": null,
+  "objectRecall": 0.23076923076923078,
+  "objectPrecision": 0.6,
+  "centerErrM": 0.31291712022394214,
+  "sizeErr": 0.8227391182970764,
+  "meanIoU3d": 0.0187280664219423,
+  "anchored": {
+   "objectRecall": 0.0,
+   "objectPrecision": 0.0,
+   "centerErrM": null,
+   "sizeErr": null,
+   "meanIoU3d": 0.0
+  }
+ },
+ "cameras": [
+  {
+   "view": 1,
+   "positionErrM": 5.825868909752384,
+   "heightErrM": 0.6431279697458236,
+   "forwardErrDeg": 48.129851991402575,
+   "pitchErrDeg": 0.3215605683954887,
+   "vfovErrDeg": 15.05299158855429
+  },
+  {
+   "view": 2,
+   "positionErrM": 7.534096795271336,
+   "heightErrM": 0.9175400594502665,
+   "forwardErrDeg": 31.619663407743765,
+   "pitchErrDeg": -0.9864211854396948,
+   "vfovErrDeg": 12.761160408030996
+  }
+ ],
+ "objects": [
+  {
+   "gt": 0.0,
+   "pred": 4.0,
+   "label": "chair",
+   "labelMatch": true,
+   "centerErrM": 0.43064798409906857,
+   "logSizeRatio": 0.4613372428872367,
+   "iou3d": 0.12883945182315737
+  },
+  {
+   "gt": 3.0,
+   "pred": 0.0,
+   "label": "sofa",
+   "labelMatch": true,
+   "centerErrM": 0.31291712022394214,
+   "logSizeRatio": 0.8227391182970764,
+   "iou3d": 0.08473577826451668
+  },
+  {
+   "gt": 5.0,
+   "pred": 1.0,
+   "label": "pillow",
+   "labelMatch": true,
+   "centerErrM": 0.26582155574386335,
+   "logSizeRatio": 1.170081189271391,
+   "iou3d": 0.029889633397575836
+  }
+ ]
+}

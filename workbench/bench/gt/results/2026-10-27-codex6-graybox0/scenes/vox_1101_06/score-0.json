@@ -1,0 +1,186 @@
+{
+ "version": "gt-scene-score-v3",
+ "summary": {
+  "scale": 0.8381373637496231,
+  "absScaleErr": 0.17657327337759635,
+  "cameraPositionErrM": null,
+  "cameraForwardErrDeg": 0.43477908234722734,
+  "cameraHeightErrM": null,
+  "vfovErrDeg": null,
+  "orthoHeightLogErr": 0.006643939544302713,
+  "objectRecall": 1.0,
+  "objectPrecision": 0.8,
+  "centerErrM": 0.07032853251238305,
+  "sizeErr": 0.11510628453991048,
+  "meanIoU3d": 0.5448091468553884,
+  "anchored": {
+   "objectRecall": 1.0,
+   "objectPrecision": 0.8,
+   "centerErrM": 0.07032853251238305,
+   "sizeErr": 0.11510628453991048,
+   "meanIoU3d": 0.5448091468553884
+  }
+ },
+ "cameras": [
+  {
+   "view": 1,
+   "orthographic": true,
+   "forwardErrDeg": 0.43477908234722734,
+   "pitchErrDeg": -0.33635675219381983,
+   "orthoHeightLogErr": 0.006643939544302713
+  },
+  {
+   "view": 2,
+   "orthographic": true,
+   "forwardErrDeg": 0.43477908234722734,
+   "pitchErrDeg": -0.33635675219381983,
+   "orthoHeightLogErr": 0.006643939544302713
+  }
+ ],
+ "objects": [
+  {
+   "gt": 0.0,
+   "pred": 15.0,
+   "label": "stump",
+   "labelMatch": true,
+   "centerErrM": 0.06570081124078776,
+   "logSizeRatio": 0.08013445308225176,
+   "iou3d": 0.6047175626997268
+  },
+  {
+   "gt": 1.0,
+   "pred": 16.0,
+   "label": "stump",
+   "labelMatch": true,
+   "centerErrM": 0.059925897962048974,
+   "logSizeRatio": 0.08013445308225176,
+   "iou3d": 0.6568533525763467
+  },
+  {
+   "gt": 2.0,
+   "pred": 17.0,
+   "label": "stump",
+   "labelMatch": true,
+   "centerErrM": 0.06836572007987735,
+   "logSizeRatio": 0.06652712157550034,
+   "iou3d": 0.5983917528151206
+  },
+  {
+   "gt": 3.0,
+   "pred": 0.0,
+   "label": "workbench",
+   "labelMatch": true,
+   "centerErrM": 0.07229134494488877,
+   "logSizeRatio": 0.0691149773481166,
+   "iou3d": 0.7990969395258694
+  },
+  {
+   "gt": 4.0,
+   "pred": 1.0,
+   "label": "barrel",
+   "labelMatch": true,
+   "centerErrM": 0.07316019748088241,
+   "logSizeRatio": 0.01833337863846463,
+   "iou3d": 0.747545925134208
+  },
+  {
+   "gt": 5.0,
+   "pred": 2.0,
+   "label": "barrel",
+   "labelMatch": true,
+   "centerErrM": 0.046201357178083644,
+   "logSizeRatio": 0.0727687544600736,
+   "iou3d": 0.7624822997399638
+  },
+  {
+   "gt": 6.0,
+   "pred": 7.0,
+   "label": "rock",
+   "labelMatch": true,
+   "centerErrM": 0.23101596865421517,
+   "logSizeRatio": 0.3829817609263677,
+   "iou3d": 0.31697090781229076
+  },
+  {
+   "gt": 7.0,
+   "pred": 4.0,
+   "label": "rock",
+   "labelMatch": true,
+   "centerErrM": 0.09710563041866789,
+   "logSizeRatio": 0.7099234022484215,
+   "iou3d": 0.11886460499878647
+  },
+  {
+   "gt": 8.0,
+   "pred": 5.0,
+   "label": "rock",
+   "labelMatch": true,
+   "centerErrM": 0.3079107715741937,
+   "logSizeRatio": 0.46702560098124274,
+   "iou3d": 0.24633157051877314
+  },
+  {
+   "gt": 9.0,
+   "pred": 10.0,
+   "label": "fence",
+   "labelMatch": true,
+   "centerErrM": 0.05516132598780682,
+   "logSizeRatio": 0.13569133013676998,
+   "iou3d": 0.6748091413800238
+  },
+  {
+   "gt": 10.0,
+   "pred": 11.0,
+   "label": "fence",
+   "labelMatch": true,
+   "centerErrM": 0.09458539844523176,
+   "logSizeRatio": 0.1708115020227121,
+   "iou3d": 0.5934562125531416
+  },
+  {
+   "gt": 11.0,
+   "pred": 9.0,
+   "label": "fence",
+   "labelMatch": true,
+   "centerErrM": 0.11410117256763834,
+   "logSizeRatio": 0.42033269657731287,
+   "iou3d": 0.30463828937309606
+  },
+  {
+   "gt": 12.0,
+   "pred": 12.0,
+   "label": "log",
+   "labelMatch": false,
+   "centerErrM": 0.053466670461876656,
+   "logSizeRatio": 0.09452123894305098,
+   "iou3d": 0.6806508696407336
+  },
+  {
+   "gt": 13.0,
+   "pred": 14.0,
+   "label": "log",
+   "labelMatch": false,
+   "centerErrM": 0.033692979482831745,
+   "logSizeRatio": 0.15054333909169046,
+   "iou3d": 0.6598878677514471
+  },
+  {
+   "gt": 14.0,
+   "pred": 13.0,
+   "label": "log",
+   "labelMatch": false,
+   "centerErrM": 0.012570758066958183,
+   "logSizeRatio": 0.0761621553202874,
+   "iou3d": 0.8045442643312274
+  },
+  {
+   "gt": 15.0,
+   "pred": 19.0,
+   "label": "signpost",
+   "labelMatch": false,
+   "centerErrM": 0.44552658172100223,
+   "logSizeRatio": 0.8987223300563839,
+   "iou3d": 0.14770478883545934
+  }
+ ]
+}

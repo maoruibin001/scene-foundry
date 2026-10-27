@@ -1,0 +1,43 @@
+{
+ "version": "gt-scene-score-v3",
+ "summary": {
+  "scale": 0.8459048667026199,
+  "absScaleErr": 0.1673483764050915,
+  "cameraPositionErrM": 0.39164797709023813,
+  "cameraForwardErrDeg": 139.39945070475602,
+  "cameraHeightErrM": 0.2679837775897502,
+  "vfovErrDeg": 12.473997072763456,
+  "orthoHeightLogErr": null,
+  "objectRecall": 0.0,
+  "objectPrecision": 0.0,
+  "centerErrM": null,
+  "sizeErr": null,
+  "meanIoU3d": 0.0,
+  "anchored": {
+   "objectRecall": 0.0,
+   "objectPrecision": 0.0,
+   "centerErrM": null,
+   "sizeErr": null,
+   "meanIoU3d": 0.0
+  }
+ },
+ "cameras": [
+  {
+   "view": 1,
+   "positionErrM": 0.39164797709023774,
+   "heightErrM": -0.26798377758975045,
+   "forwardErrDeg": 123.34032009529162,
+   "pitchErrDeg": -4.095421307991256,
+   "vfovErrDeg": 12.187518175198043
+  },
+  {
+   "view": 2,
+   "positionErrM": 0.3916479770902385,
+   "heightErrM": 0.26798377758975,
+   "forwardErrDeg": 155.4585813142204,
+   "pitchErrDeg": 1.5204095828371205,
+   "vfovErrDeg": 12.760475970328867
+  }
+ ],
+ "objects": []
+}

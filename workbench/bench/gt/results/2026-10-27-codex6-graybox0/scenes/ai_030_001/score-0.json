@@ -1,0 +1,134 @@
+{
+ "version": "gt-scene-score-v3",
+ "summary": {
+  "scale": 0.9867637983052082,
+  "absScaleErr": 0.01332458094920416,
+  "cameraPositionErrM": 1.2410759663268225,
+  "cameraForwardErrDeg": 8.245999807047664,
+  "cameraHeightErrM": 0.13438676066817878,
+  "vfovErrDeg": 13.599705737160196,
+  "orthoHeightLogErr": null,
+  "objectRecall": 0.7692307692307693,
+  "objectPrecision": 0.5263157894736842,
+  "centerErrM": 0.22877131847127735,
+  "sizeErr": 0.5673799930803833,
+  "meanIoU3d": 0.10609919721555658,
+  "anchored": {
+   "objectRecall": 0.7692307692307693,
+   "objectPrecision": 0.5263157894736842,
+   "centerErrM": 0.2516559473910738,
+   "sizeErr": 0.5743843113476925,
+   "meanIoU3d": 0.10514483436965318
+  }
+ },
+ "cameras": [
+  {
+   "view": 1,
+   "positionErrM": 0.9078324921735265,
+   "heightErrM": 0.00668815112331389,
+   "forwardErrDeg": 3.1158800036161147,
+   "pitchErrDeg": -3.0121311817626113,
+   "vfovErrDeg": 12.167311249333137
+  },
+  {
+   "view": 2,
+   "positionErrM": 1.5743194404801184,
+   "heightErrM": 0.2620853702130437,
+   "forwardErrDeg": 13.376119610479213,
+   "pitchErrDeg": -2.5266133564103255,
+   "vfovErrDeg": 15.032100224987257
+  }
+ ],
+ "objects": [
+  {
+   "gt": 1.0,
+   "pred": 14.0,
+   "label": "shelves",
+   "labelMatch": false,
+   "centerErrM": 0.2101778085278989,
+   "logSizeRatio": 1.2457907428640385,
+   "iou3d": 0.010268586892030848
+  },
+  {
+   "gt": 2.0,
+   "pred": 9.0,
+   "label": "otherstructure",
+   "labelMatch": false,
+   "centerErrM": 0.2964455313542887,
+   "logSizeRatio": 0.7386131147291507,
+   "iou3d": 0.08944238279217685
+  },
+  {
+   "gt": 3.0,
+   "pred": 10.0,
+   "label": "otherprop",
+   "labelMatch": false,
+   "centerErrM": 0.30175379911237,
+   "logSizeRatio": 0.3391551956006646,
+   "iou3d": 0.1076774460340442
+  },
+  {
+   "gt": 4.0,
+   "pred": 8.0,
+   "label": "otherstructure",
+   "labelMatch": false,
+   "centerErrM": 0.3176175825688057,
+   "logSizeRatio": 0.07172687732802178,
+   "iou3d": 0.3114426049630384
+  },
+  {
+   "gt": 5.0,
+   "pred": 13.0,
+   "label": "otherprop",
+   "labelMatch": false,
+   "centerErrM": 0.24736482841465576,
+   "logSizeRatio": 1.3669991231279,
+   "iou3d": 0.016556154562768544
+  },
+  {
+   "gt": 6.0,
+   "pred": 18.0,
+   "label": "otherprop",
+   "labelMatch": false,
+   "centerErrM": 0.18195311119541216,
+   "logSizeRatio": 0.5616102924380366,
+   "iou3d": 0.14622964275513137
+  },
+  {
+   "gt": 7.0,
+   "pred": 0.0,
+   "label": "blinds",
+   "labelMatch": true,
+   "centerErrM": 0.5051329008413855,
+   "logSizeRatio": 0.8038529670818221,
+   "iou3d": 0.1019870841933543
+  },
+  {
+   "gt": 9.0,
+   "pred": 5.0,
+   "label": "lamp",
+   "labelMatch": true,
+   "centerErrM": 0.1823663821529051,
+   "logSizeRatio": 0.10372702431863991,
+   "iou3d": 0.37985269464409627
+  },
+  {
+   "gt": 10.0,
+   "pred": 3.0,
+   "label": "table",
+   "labelMatch": true,
+   "centerErrM": 0.15853445335042265,
+   "logSizeRatio": 0.5731496937227302,
+   "iou3d": 0.215832966965595
+  },
+  {
+   "gt": 12.0,
+   "pred": 7.0,
+   "label": "counter",
+   "labelMatch": true,
+   "centerErrM": 0.1012472267217459,
+   "logSizeRatio": 0.558052830308158,
+   "iou3d": 0.0
+  }
+ ]
+}

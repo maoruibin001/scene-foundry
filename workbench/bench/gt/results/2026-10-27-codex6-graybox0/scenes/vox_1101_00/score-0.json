@@ -1,0 +1,150 @@
+{
+ "version": "gt-scene-score-v3",
+ "summary": {
+  "scale": 1.2019579615261728,
+  "absScaleErr": 0.1839518617295164,
+  "cameraPositionErrM": null,
+  "cameraForwardErrDeg": 0.5138479907315437,
+  "cameraHeightErrM": null,
+  "vfovErrDeg": null,
+  "orthoHeightLogErr": 0.0020603199927150036,
+  "objectRecall": 0.7058823529411765,
+  "objectPrecision": 1.0,
+  "centerErrM": 0.1626768259445103,
+  "sizeErr": 0.09129923187853259,
+  "meanIoU3d": 0.40561840590932374,
+  "anchored": {
+   "objectRecall": 0.7058823529411765,
+   "objectPrecision": 1.0,
+   "centerErrM": 0.1626768259445103,
+   "sizeErr": 0.09129923187853259,
+   "meanIoU3d": 0.40561840590932374
+  }
+ },
+ "cameras": [
+  {
+   "view": 1,
+   "orthographic": true,
+   "forwardErrDeg": 0.5138479907315437,
+   "pitchErrDeg": -0.36443465021372956,
+   "orthoHeightLogErr": 0.0020603199927150036
+  },
+  {
+   "view": 2,
+   "orthographic": true,
+   "forwardErrDeg": 0.5138479907315437,
+   "pitchErrDeg": -0.36443465021372956,
+   "orthoHeightLogErr": 0.0020603199927150036
+  }
+ ],
+ "objects": [
+  {
+   "gt": 1.0,
+   "pred": 1.0,
+   "label": "tent",
+   "labelMatch": true,
+   "centerErrM": 0.0859839374960391,
+   "logSizeRatio": 0.19355089940455406,
+   "iou3d": 0.5974032932362636
+  },
+  {
+   "gt": 2.0,
+   "pred": 0.0,
+   "label": "tent",
+   "labelMatch": true,
+   "centerErrM": 0.04498379239445553,
+   "logSizeRatio": 0.13626748042900103,
+   "iou3d": 0.684772748628483
+  },
+  {
+   "gt": 3.0,
+   "pred": 4.0,
+   "label": "tree",
+   "labelMatch": true,
+   "centerErrM": 0.16183795683046834,
+   "logSizeRatio": 0.02320865313963975,
+   "iou3d": 0.7016947015089039
+  },
+  {
+   "gt": 4.0,
+   "pred": 3.0,
+   "label": "tree",
+   "labelMatch": true,
+   "centerErrM": 0.23616004402221105,
+   "logSizeRatio": 0.07332798198404183,
+   "iou3d": 0.7038860973705977
+  },
+  {
+   "gt": 5.0,
+   "pred": 2.0,
+   "label": "tree",
+   "labelMatch": true,
+   "centerErrM": 0.2417015556412779,
+   "logSizeRatio": 0.07305576201518998,
+   "iou3d": 0.6723780270873114
+  },
+  {
+   "gt": 7.0,
+   "pred": 5.0,
+   "label": "rock",
+   "labelMatch": true,
+   "centerErrM": 0.178109098512924,
+   "logSizeRatio": 0.08523795785005352,
+   "iou3d": 0.6541301700571334
+  },
+  {
+   "gt": 8.0,
+   "pred": 7.0,
+   "label": "rock",
+   "labelMatch": true,
+   "centerErrM": 0.16519351949009378,
+   "logSizeRatio": 0.0852379578500533,
+   "iou3d": 0.6695885378801049
+  },
+  {
+   "gt": 9.0,
+   "pred": 6.0,
+   "label": "rock",
+   "labelMatch": true,
+   "centerErrM": 0.15881042024629272,
+   "logSizeRatio": 0.09736050590701166,
+   "iou3d": 0.7123976663027942
+  },
+  {
+   "gt": 11.0,
+   "pred": 8.0,
+   "label": "fence",
+   "labelMatch": true,
+   "centerErrM": 0.20729704247623762,
+   "logSizeRatio": 0.30534836918443,
+   "iou3d": 0.2606357593557098
+  },
+  {
+   "gt": 12.0,
+   "pred": 10.0,
+   "label": "fence",
+   "labelMatch": true,
+   "centerErrM": 0.08767628181276235,
+   "logSizeRatio": 0.026209667830084465,
+   "iou3d": 0.5242947945499639
+  },
+  {
+   "gt": 13.0,
+   "pred": 9.0,
+   "label": "fence",
+   "labelMatch": true,
+   "centerErrM": 0.16107328374823962,
+   "logSizeRatio": 0.3053483691844302,
+   "iou3d": 0.17051939465959665
+  },
+  {
+   "gt": 14.0,
+   "pred": 11.0,
+   "label": "crate",
+   "labelMatch": true,
+   "centerErrM": 0.16351569505855226,
+   "logSizeRatio": 0.14048634619186803,
+   "iou3d": 0.5438117098216405
+  }
+ ]
+}

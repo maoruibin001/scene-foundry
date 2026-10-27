@@ -1,0 +1,168 @@
+{
+ "version": "gt-scene-score-v3",
+ "summary": {
+  "scale": 0.8737185381544417,
+  "absScaleErr": 0.13499699391710232,
+  "cameraPositionErrM": null,
+  "cameraForwardErrDeg": 0.7061166472212498,
+  "cameraHeightErrM": null,
+  "vfovErrDeg": null,
+  "orthoHeightLogErr": 0.0010316530359567122,
+  "objectRecall": 0.9333333333333333,
+  "objectPrecision": 1.0,
+  "centerErrM": 0.19946824812311884,
+  "sizeErr": 0.07747664056514578,
+  "meanIoU3d": 0.5904454363855842,
+  "anchored": {
+   "objectRecall": 0.9333333333333333,
+   "objectPrecision": 1.0,
+   "centerErrM": 0.19946824812311884,
+   "sizeErr": 0.07747664056514578,
+   "meanIoU3d": 0.5904454363855842
+  }
+ },
+ "cameras": [
+  {
+   "view": 1,
+   "orthographic": true,
+   "forwardErrDeg": 0.7061166472212498,
+   "pitchErrDeg": -0.6276970569739777,
+   "orthoHeightLogErr": 0.0010316530359567122
+  },
+  {
+   "view": 2,
+   "orthographic": true,
+   "forwardErrDeg": 0.7061166472212498,
+   "pitchErrDeg": -0.6276970569739777,
+   "orthoHeightLogErr": 0.0010316530359567122
+  }
+ ],
+ "objects": [
+  {
+   "gt": 0.0,
+   "pred": 8.0,
+   "label": "stump",
+   "labelMatch": true,
+   "centerErrM": 0.08195628542239207,
+   "logSizeRatio": 0.10829569274792084,
+   "iou3d": 0.5955835809415478
+  },
+  {
+   "gt": 1.0,
+   "pred": 7.0,
+   "label": "stump",
+   "labelMatch": true,
+   "centerErrM": 0.04146268272677465,
+   "logSizeRatio": 0.07907154906783752,
+   "iou3d": 0.7477605613117331
+  },
+  {
+   "gt": 3.0,
+   "pred": 5.0,
+   "label": "tree",
+   "labelMatch": true,
+   "centerErrM": 0.29050900466334995,
+   "logSizeRatio": 0.012729234175986287,
+   "iou3d": 0.6275905358234399
+  },
+  {
+   "gt": 4.0,
+   "pred": 2.0,
+   "label": "tree",
+   "labelMatch": true,
+   "centerErrM": 0.20334706772707617,
+   "logSizeRatio": 0.07588173206245402,
+   "iou3d": 0.7003137670840669
+  },
+  {
+   "gt": 5.0,
+   "pred": 1.0,
+   "label": "tree",
+   "labelMatch": true,
+   "centerErrM": 0.09146778488821204,
+   "logSizeRatio": 0.02504378421684972,
+   "iou3d": 0.8312194181519087
+  },
+  {
+   "gt": 6.0,
+   "pred": 4.0,
+   "label": "tree",
+   "labelMatch": true,
+   "centerErrM": 0.2226186724951066,
+   "logSizeRatio": 0.03702112062553755,
+   "iou3d": 0.6556690173560501
+  },
+  {
+   "gt": 7.0,
+   "pred": 0.0,
+   "label": "tree",
+   "labelMatch": true,
+   "centerErrM": 0.25234103400414853,
+   "logSizeRatio": 0.0374618491768518,
+   "iou3d": 0.680324748114607
+  },
+  {
+   "gt": 8.0,
+   "pred": 6.0,
+   "label": "tree",
+   "labelMatch": true,
+   "centerErrM": 0.2681717361565353,
+   "logSizeRatio": 0.04488885767733347,
+   "iou3d": 0.6585910499958982
+  },
+  {
+   "gt": 9.0,
+   "pred": 3.0,
+   "label": "tree",
+   "labelMatch": true,
+   "centerErrM": 0.1726004692757143,
+   "logSizeRatio": 0.020960105039443358,
+   "iou3d": 0.7502533819754521
+  },
+  {
+   "gt": 10.0,
+   "pred": 10.0,
+   "label": "rock",
+   "labelMatch": true,
+   "centerErrM": 0.1955894285191615,
+   "logSizeRatio": 0.13238932915581306,
+   "iou3d": 0.5757120505800207
+  },
+  {
+   "gt": 11.0,
+   "pred": 11.0,
+   "label": "rock",
+   "labelMatch": true,
+   "centerErrM": 0.21108141772304856,
+   "logSizeRatio": 0.1715945997546203,
+   "iou3d": 0.4811362942261166
+  },
+  {
+   "gt": 12.0,
+   "pred": 9.0,
+   "label": "log",
+   "labelMatch": false,
+   "centerErrM": 0.41613710700085815,
+   "logSizeRatio": 0.30675671613876415,
+   "iou3d": 0.1843428831229986
+  },
+  {
+   "gt": 13.0,
+   "pred": 13.0,
+   "label": "barrel",
+   "labelMatch": true,
+   "centerErrM": 0.11480256380706547,
+   "logSizeRatio": 0.10124052705953719,
+   "iou3d": 0.6893652171583283
+  },
+  {
+   "gt": 14.0,
+   "pred": 12.0,
+   "label": "barrel",
+   "labelMatch": true,
+   "centerErrM": 0.11662019087978602,
+   "logSizeRatio": 0.1073569066156027,
+   "iou3d": 0.678819039941595
+  }
+ ]
+}

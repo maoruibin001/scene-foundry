@@ -1,0 +1,98 @@
+{
+ "version": "gt-scene-score-v3",
+ "summary": {
+  "scale": 0.751796924330548,
+  "absScaleErr": 0.2852890389344529,
+  "cameraPositionErrM": 0.9145140573126151,
+  "cameraForwardErrDeg": 7.435254351731528,
+  "cameraHeightErrM": 0.058364736236305725,
+  "vfovErrDeg": 4.739751263010174,
+  "orthoHeightLogErr": null,
+  "objectRecall": 0.5454545454545454,
+  "objectPrecision": 0.75,
+  "centerErrM": 0.29208547948342245,
+  "sizeErr": 0.2486856705245355,
+  "meanIoU3d": 0.1456681946751144,
+  "anchored": {
+   "objectRecall": 0.5454545454545454,
+   "objectPrecision": 0.75,
+   "centerErrM": 0.29208547948342245,
+   "sizeErr": 0.2486856705245355,
+   "meanIoU3d": 0.1456681946751144
+  }
+ },
+ "cameras": [
+  {
+   "view": 1,
+   "positionErrM": 0.9298537289145875,
+   "heightErrM": 0.017713406902998885,
+   "forwardErrDeg": 3.587946730590172,
+   "pitchErrDeg": -2.1572604477847745,
+   "vfovErrDeg": 4.739751263010174
+  },
+  {
+   "view": 2,
+   "positionErrM": 0.8991743857106428,
+   "heightErrM": -0.09901606556961257,
+   "forwardErrDeg": 11.282561972872884,
+   "pitchErrDeg": 1.5968159141052094,
+   "vfovErrDeg": 4.739751263010174
+  }
+ ],
+ "objects": [
+  {
+   "gt": 3.0,
+   "pred": 6.0,
+   "label": "chair",
+   "labelMatch": false,
+   "centerErrM": 0.3466985687917056,
+   "logSizeRatio": 0.21947210804106107,
+   "iou3d": 0.18547112032194235
+  },
+  {
+   "gt": 4.0,
+   "pred": 5.0,
+   "label": "chair",
+   "labelMatch": true,
+   "centerErrM": 0.42812113907265004,
+   "logSizeRatio": 0.2307144036929262,
+   "iou3d": 0.1172971697683412
+  },
+  {
+   "gt": 6.0,
+   "pred": 3.0,
+   "label": "chair",
+   "labelMatch": true,
+   "centerErrM": 0.260346308462604,
+   "logSizeRatio": 0.1884723960221356,
+   "iou3d": 0.31059791685897953
+  },
+  {
+   "gt": 7.0,
+   "pred": 2.0,
+   "label": "chair",
+   "labelMatch": true,
+   "centerErrM": 0.17811939925334758,
+   "logSizeRatio": 0.34491426787476503,
+   "iou3d": 0.3355086529342121
+  },
+  {
+   "gt": 8.0,
+   "pred": 1.0,
+   "label": "chair",
+   "labelMatch": true,
+   "centerErrM": 0.323824650504241,
+   "logSizeRatio": 0.3887688958503676,
+   "iou3d": 0.2041332022511051
+  },
+  {
+   "gt": 9.0,
+   "pred": 0.0,
+   "label": "table",
+   "labelMatch": true,
+   "centerErrM": 0.15480283517437585,
+   "logSizeRatio": 0.26665693735614476,
+   "iou3d": 0.44934207929167835
+  }
+ ]
+}

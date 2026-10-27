@@ -1,0 +1,177 @@
+{
+ "version": "gt-scene-score-v3",
+ "summary": {
+  "scale": 1.000132008648133,
+  "absScaleErr": 0.00013199993575803732,
+  "cameraPositionErrM": null,
+  "cameraForwardErrDeg": 0.5334809103079747,
+  "cameraHeightErrM": null,
+  "vfovErrDeg": null,
+  "orthoHeightLogErr": 0.00013199993575803732,
+  "objectRecall": 1.0,
+  "objectPrecision": 1.0,
+  "centerErrM": 0.1612503334352298,
+  "sizeErr": 0.14599528465676417,
+  "meanIoU3d": 0.5455110059727707,
+  "anchored": {
+   "objectRecall": 1.0,
+   "objectPrecision": 1.0,
+   "centerErrM": 0.1612503334352298,
+   "sizeErr": 0.14599528465676417,
+   "meanIoU3d": 0.5455110059727707
+  }
+ },
+ "cameras": [
+  {
+   "view": 1,
+   "orthographic": true,
+   "forwardErrDeg": 0.5334809103079747,
+   "pitchErrDeg": -0.39897444489719325,
+   "orthoHeightLogErr": 0.00013199993575803732
+  },
+  {
+   "view": 2,
+   "orthographic": true,
+   "forwardErrDeg": 0.5334809103079747,
+   "pitchErrDeg": -0.39897444489719325,
+   "orthoHeightLogErr": 0.00013199993575803732
+  }
+ ],
+ "objects": [
+  {
+   "gt": 0.0,
+   "pred": 11.0,
+   "label": "fence",
+   "labelMatch": true,
+   "centerErrM": 0.04768047937538269,
+   "logSizeRatio": 0.22471579854126278,
+   "iou3d": 0.4761740368712885
+  },
+  {
+   "gt": 1.0,
+   "pred": 10.0,
+   "label": "fence",
+   "labelMatch": true,
+   "centerErrM": 0.06630050810165113,
+   "logSizeRatio": 0.21769324901457954,
+   "iou3d": 0.41737752091842234
+  },
+  {
+   "gt": 2.0,
+   "pred": 14.0,
+   "label": "stump",
+   "labelMatch": false,
+   "centerErrM": 0.1638489598463696,
+   "logSizeRatio": 0.12662160169686937,
+   "iou3d": 0.38459088320062934
+  },
+  {
+   "gt": 3.0,
+   "pred": 5.0,
+   "label": "campfire",
+   "labelMatch": false,
+   "centerErrM": 0.04181319928930347,
+   "logSizeRatio": 0.19507828289827586,
+   "iou3d": 0.5943702074151649
+  },
+  {
+   "gt": 4.0,
+   "pred": 12.0,
+   "label": "barrel",
+   "labelMatch": false,
+   "centerErrM": 0.09077307871246582,
+   "logSizeRatio": 0.20455032259706343,
+   "iou3d": 0.5749579043358958
+  },
+  {
+   "gt": 5.0,
+   "pred": 13.0,
+   "label": "bedroll",
+   "labelMatch": false,
+   "centerErrM": 0.23680600674053984,
+   "logSizeRatio": 0.10661517037832545,
+   "iou3d": 0.37443879390067825
+  },
+  {
+   "gt": 6.0,
+   "pred": 9.0,
+   "label": "rock",
+   "labelMatch": true,
+   "centerErrM": 0.1672987907010788,
+   "logSizeRatio": 0.17904765805511214,
+   "iou3d": 0.591127099172051
+  },
+  {
+   "gt": 7.0,
+   "pred": 4.0,
+   "label": "rock",
+   "labelMatch": true,
+   "centerErrM": 0.23276805296223796,
+   "logSizeRatio": 0.14369472295585642,
+   "iou3d": 0.526623875700145
+  },
+  {
+   "gt": 8.0,
+   "pred": 8.0,
+   "label": "log",
+   "labelMatch": true,
+   "centerErrM": 0.1612503334352298,
+   "logSizeRatio": 0.15444975805369884,
+   "iou3d": 0.5914083357678901
+  },
+  {
+   "gt": 9.0,
+   "pred": 6.0,
+   "label": "log",
+   "labelMatch": true,
+   "centerErrM": 0.15965990340875835,
+   "logSizeRatio": 0.0936759057890469,
+   "iou3d": 0.4787758056801376
+  },
+  {
+   "gt": 10.0,
+   "pred": 7.0,
+   "label": "log",
+   "labelMatch": true,
+   "centerErrM": 0.19645360827646485,
+   "logSizeRatio": 0.1846276751126735,
+   "iou3d": 0.44017405687063227
+  },
+  {
+   "gt": 11.0,
+   "pred": 2.0,
+   "label": "tree",
+   "labelMatch": true,
+   "centerErrM": 0.21639195678440584,
+   "logSizeRatio": 0.11708209155225885,
+   "iou3d": 0.6689703636834795
+  },
+  {
+   "gt": 12.0,
+   "pred": 3.0,
+   "label": "tree",
+   "labelMatch": true,
+   "centerErrM": 0.18740203608713135,
+   "logSizeRatio": 0.14599528465676417,
+   "iou3d": 0.6199142174898342
+  },
+  {
+   "gt": 13.0,
+   "pred": 1.0,
+   "label": "tree",
+   "labelMatch": true,
+   "centerErrM": 0.10283087050990114,
+   "logSizeRatio": 0.10296233360587831,
+   "iou3d": 0.6940287698011727
+  },
+  {
+   "gt": 14.0,
+   "pred": 0.0,
+   "label": "tree",
+   "labelMatch": true,
+   "centerErrM": 0.11328026510603685,
+   "logSizeRatio": 0.09851188921425698,
+   "iou3d": 0.7497332187841395
+  }
+ ]
+}

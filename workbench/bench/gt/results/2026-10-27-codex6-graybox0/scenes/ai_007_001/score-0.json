@@ -1,0 +1,89 @@
+{
+ "version": "gt-scene-score-v3",
+ "summary": {
+  "scale": 0.967186485741652,
+  "absScaleErr": 0.03336395233743013,
+  "cameraPositionErrM": 1.2881277407145122,
+  "cameraForwardErrDeg": 11.821257123013442,
+  "cameraHeightErrM": 0.7194666233739605,
+  "vfovErrDeg": 7.891019146499709,
+  "orthoHeightLogErr": null,
+  "objectRecall": 0.4166666666666667,
+  "objectPrecision": 0.5,
+  "centerErrM": 0.43325478444261906,
+  "sizeErr": 0.556159030600012,
+  "meanIoU3d": 0.06506083158373825,
+  "anchored": {
+   "objectRecall": 0.4166666666666667,
+   "objectPrecision": 0.5,
+   "centerErrM": 0.43325478444261906,
+   "sizeErr": 0.556159030600012,
+   "meanIoU3d": 0.06506083158373825
+  }
+ },
+ "cameras": [
+  {
+   "view": 1,
+   "positionErrM": 2.0417716034288262,
+   "heightErrM": 0.9683949900772024,
+   "forwardErrDeg": 18.531069580204395,
+   "pitchErrDeg": -6.320350278813475,
+   "vfovErrDeg": 7.604540248934297
+  },
+  {
+   "view": 2,
+   "positionErrM": 0.5344838780001979,
+   "heightErrM": 0.4705382566707186,
+   "forwardErrDeg": 5.111444665822489,
+   "pitchErrDeg": -0.5682582487093343,
+   "vfovErrDeg": 8.177498044065121
+  }
+ ],
+ "objects": [
+  {
+   "gt": 3.0,
+   "pred": 6.0,
+   "label": "cabinet",
+   "labelMatch": true,
+   "centerErrM": 0.43325478444261906,
+   "logSizeRatio": 0.5282921069785921,
+   "iou3d": 0.2401238488236246
+  },
+  {
+   "gt": 7.0,
+   "pred": 5.0,
+   "label": "pillow",
+   "labelMatch": true,
+   "centerErrM": 0.5568388939363218,
+   "logSizeRatio": 0.556159030600012,
+   "iou3d": 0.08902867879836993
+  },
+  {
+   "gt": 8.0,
+   "pred": 3.0,
+   "label": "bed",
+   "labelMatch": true,
+   "centerErrM": 0.34917579458709086,
+   "logSizeRatio": 0.2883392867040468,
+   "iou3d": 0.36128865141521016
+  },
+  {
+   "gt": 9.0,
+   "pred": 7.0,
+   "label": "otherprop",
+   "labelMatch": false,
+   "centerErrM": 0.42418675832930935,
+   "logSizeRatio": 1.4220234810236807,
+   "iou3d": 0.0062370611012298426
+  },
+  {
+   "gt": 10.0,
+   "pred": 8.0,
+   "label": "lamp",
+   "labelMatch": true,
+   "centerErrM": 0.9460349817498414,
+   "logSizeRatio": 0.8696736004706761,
+   "iou3d": 0.0840517388664245
+  }
+ ]
+}

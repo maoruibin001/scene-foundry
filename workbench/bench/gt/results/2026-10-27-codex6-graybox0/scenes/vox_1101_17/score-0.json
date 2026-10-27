@@ -1,0 +1,177 @@
+{
+ "version": "gt-scene-score-v3",
+ "summary": {
+  "scale": 1.1771872687463445,
+  "absScaleErr": 0.1631279224583059,
+  "cameraPositionErrM": null,
+  "cameraForwardErrDeg": 0.30469224458262384,
+  "cameraHeightErrM": null,
+  "vfovErrDeg": null,
+  "orthoHeightLogErr": 0.009872898758991992,
+  "objectRecall": 0.8333333333333334,
+  "objectPrecision": 0.5769230769230769,
+  "centerErrM": 0.1380702076052322,
+  "sizeErr": 0.1455183570048195,
+  "meanIoU3d": 0.4690347384207622,
+  "anchored": {
+   "objectRecall": 0.8333333333333334,
+   "objectPrecision": 0.5769230769230769,
+   "centerErrM": 0.1380702076052322,
+   "sizeErr": 0.1455183570048195,
+   "meanIoU3d": 0.4690347384207622
+  }
+ },
+ "cameras": [
+  {
+   "view": 1,
+   "orthographic": true,
+   "forwardErrDeg": 0.30469224458262384,
+   "pitchErrDeg": -0.29284028236412624,
+   "orthoHeightLogErr": 0.009872898758991992
+  },
+  {
+   "view": 2,
+   "orthographic": true,
+   "forwardErrDeg": 0.30469224458262384,
+   "pitchErrDeg": -0.29284028236412624,
+   "orthoHeightLogErr": 0.009872898758991992
+  }
+ ],
+ "objects": [
+  {
+   "gt": 0.0,
+   "pred": 19.0,
+   "label": "barrel",
+   "labelMatch": false,
+   "centerErrM": 0.1380702076052322,
+   "logSizeRatio": 0.08571250224752162,
+   "iou3d": 0.6332314868043335
+  },
+  {
+   "gt": 4.0,
+   "pred": 23.0,
+   "label": "bedroll",
+   "labelMatch": false,
+   "centerErrM": 0.20129759687979187,
+   "logSizeRatio": 0.12864503794683896,
+   "iou3d": 0.5277072390130364
+  },
+  {
+   "gt": 5.0,
+   "pred": 21.0,
+   "label": "log",
+   "labelMatch": false,
+   "centerErrM": 0.13606118781750393,
+   "logSizeRatio": 0.06230206885219899,
+   "iou3d": 0.6562200325800963
+  },
+  {
+   "gt": 6.0,
+   "pred": 22.0,
+   "label": "log",
+   "labelMatch": false,
+   "centerErrM": 0.08812030898598121,
+   "logSizeRatio": 0.156514450009649,
+   "iou3d": 0.592580742708015
+  },
+  {
+   "gt": 7.0,
+   "pred": 16.0,
+   "label": "rock",
+   "labelMatch": true,
+   "centerErrM": 0.13052714072450633,
+   "logSizeRatio": 0.15517445144529815,
+   "iou3d": 0.6492783851751318
+  },
+  {
+   "gt": 8.0,
+   "pred": 18.0,
+   "label": "rock",
+   "labelMatch": true,
+   "centerErrM": 0.08686514751344394,
+   "logSizeRatio": 0.10527680410874173,
+   "iou3d": 0.7172343196907934
+  },
+  {
+   "gt": 9.0,
+   "pred": 17.0,
+   "label": "rock",
+   "labelMatch": true,
+   "centerErrM": 0.020743914288409875,
+   "logSizeRatio": 0.1932186382183774,
+   "iou3d": 0.5731724189271029
+  },
+  {
+   "gt": 10.0,
+   "pred": 15.0,
+   "label": "rock",
+   "labelMatch": true,
+   "centerErrM": 0.13159158544958446,
+   "logSizeRatio": 0.1455183570048195,
+   "iou3d": 0.6579027764413153
+  },
+  {
+   "gt": 11.0,
+   "pred": 4.0,
+   "label": "tree",
+   "labelMatch": true,
+   "centerErrM": 0.6320149939699691,
+   "logSizeRatio": 0.14197225218703197,
+   "iou3d": 0.5194435457941531
+  },
+  {
+   "gt": 12.0,
+   "pred": 10.0,
+   "label": "tree",
+   "labelMatch": true,
+   "centerErrM": 0.4488240443204932,
+   "logSizeRatio": 0.14410209943738736,
+   "iou3d": 0.6034130087151032
+  },
+  {
+   "gt": 13.0,
+   "pred": 13.0,
+   "label": "tree",
+   "labelMatch": true,
+   "centerErrM": 0.4906141696674441,
+   "logSizeRatio": 0.1615857521946766,
+   "iou3d": 0.5967514886627328
+  },
+  {
+   "gt": 14.0,
+   "pred": 7.0,
+   "label": "tree",
+   "labelMatch": true,
+   "centerErrM": 0.5035391188838665,
+   "logSizeRatio": 0.174354545562541,
+   "iou3d": 0.5628490707218661
+  },
+  {
+   "gt": 15.0,
+   "pred": 1.0,
+   "label": "tree",
+   "labelMatch": true,
+   "centerErrM": 0.5549408622146061,
+   "logSizeRatio": 0.11696195963586624,
+   "iou3d": 0.5239367561448841
+  },
+  {
+   "gt": 16.0,
+   "pred": 24.0,
+   "label": "fence",
+   "labelMatch": true,
+   "centerErrM": 0.08247085307554641,
+   "logSizeRatio": 0.2737869423292228,
+   "iou3d": 0.4356355625051521
+  },
+  {
+   "gt": 17.0,
+   "pred": 25.0,
+   "label": "fence",
+   "labelMatch": true,
+   "centerErrM": 0.16864242104176427,
+   "logSizeRatio": 0.716765621758276,
+   "iou3d": 0.19326845769000275
+  }
+ ]
+}

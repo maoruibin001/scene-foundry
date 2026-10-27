@@ -1,0 +1,134 @@
+{
+ "version": "gt-scene-score-v3",
+ "summary": {
+  "scale": 0.9676758336755679,
+  "absScaleErr": 0.032858130357810614,
+  "cameraPositionErrM": 1.0457898489061646,
+  "cameraForwardErrDeg": 12.67951754902148,
+  "cameraHeightErrM": 0.4638369918435718,
+  "vfovErrDeg": 15.339463355660643,
+  "orthoHeightLogErr": null,
+  "objectRecall": 0.6666666666666666,
+  "objectPrecision": 0.7142857142857143,
+  "centerErrM": 0.3698460935788399,
+  "sizeErr": 0.1423678629607801,
+  "meanIoU3d": 0.16320961232490022,
+  "anchored": {
+   "objectRecall": 0.6666666666666666,
+   "objectPrecision": 0.7142857142857143,
+   "centerErrM": 0.3698460935788399,
+   "sizeErr": 0.1423678629607801,
+   "meanIoU3d": 0.16320961232490022
+  }
+ },
+ "cameras": [
+  {
+   "view": 1,
+   "positionErrM": 0.6184372252158716,
+   "heightErrM": 0.3376175782584758,
+   "forwardErrDeg": 4.54811790861706,
+   "pitchErrDeg": 2.1952170400784925,
+   "vfovErrDeg": 12.761153277571943
+  },
+  {
+   "view": 2,
+   "positionErrM": 1.4731424725964577,
+   "heightErrM": 0.5900564054286678,
+   "forwardErrDeg": 20.810917189425897,
+   "pitchErrDeg": -1.636596503386156,
+   "vfovErrDeg": 17.917773433749343
+  }
+ ],
+ "objects": [
+  {
+   "gt": 0.0,
+   "pred": 8.0,
+   "label": "cabinet",
+   "labelMatch": true,
+   "centerErrM": 0.8528382853282116,
+   "logSizeRatio": 0.4629586211263484,
+   "iou3d": 0.2213659317158841
+  },
+  {
+   "gt": 1.0,
+   "pred": 7.0,
+   "label": "refrigerator",
+   "labelMatch": true,
+   "centerErrM": 0.23450573253980278,
+   "logSizeRatio": 0.1741524743388906,
+   "iou3d": 0.43323370232999725
+  },
+  {
+   "gt": 2.0,
+   "pred": 11.0,
+   "label": "chair",
+   "labelMatch": true,
+   "centerErrM": 0.6127038421524893,
+   "logSizeRatio": 0.11058325158266961,
+   "iou3d": 0.10654991560206545
+  },
+  {
+   "gt": 3.0,
+   "pred": 10.0,
+   "label": "chair",
+   "labelMatch": true,
+   "centerErrM": 0.5636329992536513,
+   "logSizeRatio": 0.26951287035384675,
+   "iou3d": 0.0955156169211685
+  },
+  {
+   "gt": 4.0,
+   "pred": 9.0,
+   "label": "table",
+   "labelMatch": true,
+   "centerErrM": 0.27499926856551765,
+   "logSizeRatio": 0.4253237616912193,
+   "iou3d": 0.3413256600748253
+  },
+  {
+   "gt": 6.0,
+   "pred": 12.0,
+   "label": "lamp",
+   "labelMatch": true,
+   "centerErrM": 0.3496338312866482,
+   "logSizeRatio": 0.0772489533191235,
+   "iou3d": 0.36839705868468603
+  },
+  {
+   "gt": 7.0,
+   "pred": 5.0,
+   "label": "otherstructure",
+   "labelMatch": false,
+   "centerErrM": 0.3796062364540329,
+   "logSizeRatio": 0.2750320628653377,
+   "iou3d": 0.0590710607723593
+  },
+  {
+   "gt": 8.0,
+   "pred": 1.0,
+   "label": "cabinet",
+   "labelMatch": true,
+   "centerErrM": 0.36008595070364696,
+   "logSizeRatio": 0.07643069799233627,
+   "iou3d": 0.2334405428528467
+  },
+  {
+   "gt": 10.0,
+   "pred": 4.0,
+   "label": "otherstructure",
+   "labelMatch": false,
+   "centerErrM": 0.32631464120149,
+   "logSizeRatio": 0.06391586048552536,
+   "iou3d": 0.31657704537455844
+  },
+  {
+   "gt": 12.0,
+   "pred": 2.0,
+   "label": "cabinet",
+   "labelMatch": true,
+   "centerErrM": 0.5386289814842072,
+   "logSizeRatio": 0.0956633025593401,
+   "iou3d": 0.2726676505451122
+  }
+ ]
+}

@@ -1,0 +1,98 @@
+{
+ "version": "gt-scene-score-v3",
+ "summary": {
+  "scale": 0.942721373908291,
+  "absScaleErr": 0.05898450776154447,
+  "cameraPositionErrM": 1.9473381143656792,
+  "cameraForwardErrDeg": 13.9873718943415,
+  "cameraHeightErrM": 0.5268852723201192,
+  "vfovErrDeg": 15.052991588554297,
+  "orthoHeightLogErr": null,
+  "objectRecall": 0.4,
+  "objectPrecision": 0.4,
+  "centerErrM": 0.6039415351953201,
+  "sizeErr": 1.1270983935095642,
+  "meanIoU3d": 0.013801728510587188,
+  "anchored": {
+   "objectRecall": 0.0,
+   "objectPrecision": 0.0,
+   "centerErrM": null,
+   "sizeErr": null,
+   "meanIoU3d": 0.0
+  }
+ },
+ "cameras": [
+  {
+   "view": 1,
+   "positionErrM": 1.1740823678494565,
+   "heightErrM": 0.4349538327585514,
+   "forwardErrDeg": 11.217559703289618,
+   "pitchErrDeg": -2.8683640448620715,
+   "vfovErrDeg": 15.052991588554297
+  },
+  {
+   "view": 2,
+   "positionErrM": 2.720593860881902,
+   "heightErrM": 0.618816711881687,
+   "forwardErrDeg": 16.757184085393384,
+   "pitchErrDeg": -3.5941259479609813,
+   "vfovErrDeg": 15.052991588554297
+  }
+ ],
+ "objects": [
+  {
+   "gt": 5.0,
+   "pred": 2.0,
+   "label": "window",
+   "labelMatch": true,
+   "centerErrM": 0.572023333233965,
+   "logSizeRatio": 0.7643073339195453,
+   "iou3d": 0.0
+  },
+  {
+   "gt": 6.0,
+   "pred": 3.0,
+   "label": "window",
+   "labelMatch": true,
+   "centerErrM": 0.6380855074540184,
+   "logSizeRatio": 0.7405501181968827,
+   "iou3d": 0.08679356761558589
+  },
+  {
+   "gt": 8.0,
+   "pred": 8.0,
+   "label": "cabinet",
+   "labelMatch": true,
+   "centerErrM": 0.42592566056212117,
+   "logSizeRatio": 1.2165046273716285,
+   "iou3d": 0.02600376660279632
+  },
+  {
+   "gt": 10.0,
+   "pred": 9.0,
+   "label": "cabinet",
+   "labelMatch": true,
+   "centerErrM": 0.6358597371566752,
+   "logSizeRatio": 1.2165055131446822,
+   "iou3d": 0.026003697502580837
+  },
+  {
+   "gt": 12.0,
+   "pred": 11.0,
+   "label": "chair",
+   "labelMatch": true,
+   "centerErrM": 0.699176492444812,
+   "logSizeRatio": 1.153788724348483,
+   "iou3d": 0.03138685284202728
+  },
+  {
+   "gt": 13.0,
+   "pred": 10.0,
+   "label": "chair",
+   "labelMatch": true,
+   "centerErrM": 0.31885564460289834,
+   "logSizeRatio": 1.1004080626706454,
+   "iou3d": 0.03683804309581747
+  }
+ ]
+}

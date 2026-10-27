@@ -1,0 +1,71 @@
+{
+ "version": "gt-scene-score-v3",
+ "summary": {
+  "scale": 0.6003648293165942,
+  "absScaleErr": 0.5102177596918066,
+  "cameraPositionErrM": 2.9276088826256172,
+  "cameraForwardErrDeg": 8.146952237843536,
+  "cameraHeightErrM": 1.6157710032448254,
+  "vfovErrDeg": 11.042287008282084,
+  "orthoHeightLogErr": null,
+  "objectRecall": 0.6,
+  "objectPrecision": 0.21428571428571427,
+  "centerErrM": 0.22346307277340857,
+  "sizeErr": 0.6662324055554687,
+  "meanIoU3d": 0.08830215839723562,
+  "anchored": {
+   "objectRecall": 0.4,
+   "objectPrecision": 0.14285714285714285,
+   "centerErrM": 0.43146322121438907,
+   "sizeErr": 0.20626598960900305,
+   "meanIoU3d": 0.10940519841914365
+  }
+ },
+ "cameras": [
+  {
+   "view": 1,
+   "positionErrM": 3.15063942413185,
+   "heightErrM": -1.7258961902284806,
+   "forwardErrDeg": 7.609963283218656,
+   "pitchErrDeg": -1.9700079773034664,
+   "vfovErrDeg": 9.323413622889614
+  },
+  {
+   "view": 2,
+   "positionErrM": 2.704578341119384,
+   "heightErrM": -1.5056458162611703,
+   "forwardErrDeg": 8.683941192468414,
+   "pitchErrDeg": -6.006801627830362,
+   "vfovErrDeg": 12.761160393674556
+  }
+ ],
+ "objects": [
+  {
+   "gt": 0.0,
+   "pred": 11.0,
+   "label": "chair",
+   "labelMatch": true,
+   "centerErrM": 0.22346307277340857,
+   "logSizeRatio": 0.667758612100112,
+   "iou3d": 0.12283512606160255
+  },
+  {
+   "gt": 1.0,
+   "pred": 10.0,
+   "label": "chair",
+   "labelMatch": true,
+   "centerErrM": 0.2083908291263533,
+   "logSizeRatio": 0.6662324055554687,
+   "iou3d": 0.11902506715156629
+  },
+  {
+   "gt": 2.0,
+   "pred": 12.0,
+   "label": "otherstructure",
+   "labelMatch": false,
+   "centerErrM": 0.23084253759945766,
+   "logSizeRatio": 0.450429581529922,
+   "iou3d": 0.19965059877300936
+  }
+ ]
+}

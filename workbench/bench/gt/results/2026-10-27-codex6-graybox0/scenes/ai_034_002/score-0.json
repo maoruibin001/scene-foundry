@@ -1,0 +1,89 @@
+{
+ "version": "gt-scene-score-v3",
+ "summary": {
+  "scale": 0.9227242079508067,
+  "absScaleErr": 0.08042488874871348,
+  "cameraPositionErrM": 1.8377125775836305,
+  "cameraForwardErrDeg": 5.448357026903772,
+  "cameraHeightErrM": 0.32058720935973417,
+  "vfovErrDeg": 24.506795198466023,
+  "orthoHeightLogErr": null,
+  "objectRecall": 0.38461538461538464,
+  "objectPrecision": 0.38461538461538464,
+  "centerErrM": 0.2880703754391577,
+  "sizeErr": 0.8024235039962323,
+  "meanIoU3d": 0.02340371799928206,
+  "anchored": {
+   "objectRecall": 0.38461538461538464,
+   "objectPrecision": 0.38461538461538464,
+   "centerErrM": 0.2880703754391577,
+   "sizeErr": 0.8024235039962323,
+   "meanIoU3d": 0.02340371799928206
+  }
+ },
+ "cameras": [
+  {
+   "view": 1,
+   "positionErrM": 1.7098372599317087,
+   "heightErrM": -0.20789596762787665,
+   "forwardErrDeg": 7.661491840975685,
+   "pitchErrDeg": -1.0766633277961448,
+   "vfovErrDeg": 23.07440071063896
+  },
+  {
+   "view": 2,
+   "positionErrM": 1.965587895235552,
+   "heightErrM": -0.4332784510915917,
+   "forwardErrDeg": 3.2352222128318595,
+   "pitchErrDeg": -0.3678008451536221,
+   "vfovErrDeg": 25.93918968629308
+  }
+ ],
+ "objects": [
+  {
+   "gt": 0.0,
+   "pred": 12.0,
+   "label": "chair",
+   "labelMatch": true,
+   "centerErrM": 0.3561062423173254,
+   "logSizeRatio": 0.8024235039962323,
+   "iou3d": 0.08490973248922501
+  },
+  {
+   "gt": 4.0,
+   "pred": 0.0,
+   "label": "books",
+   "labelMatch": false,
+   "centerErrM": 0.2880703754391577,
+   "logSizeRatio": 2.8771082784754545,
+   "iou3d": 0.00017842810063963284
+  },
+  {
+   "gt": 5.0,
+   "pred": 1.0,
+   "label": "books",
+   "labelMatch": false,
+   "centerErrM": 0.25787163331106533,
+   "logSizeRatio": 2.691776975726311,
+   "iou3d": 0.0003111202927447215
+  },
+  {
+   "gt": 7.0,
+   "pred": 6.0,
+   "label": "chair",
+   "labelMatch": false,
+   "centerErrM": 0.4176893810011334,
+   "logSizeRatio": 0.7073520194266775,
+   "iou3d": 0.10876365911028812
+  },
+  {
+   "gt": 9.0,
+   "pred": 4.0,
+   "label": "table",
+   "labelMatch": false,
+   "centerErrM": 0.2568954968923485,
+   "logSizeRatio": 0.6920847317172322,
+   "iou3d": 0.11008539399776936
+  }
+ ]
+}

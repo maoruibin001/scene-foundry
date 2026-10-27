@@ -1,0 +1,159 @@
+{
+ "version": "gt-scene-score-v3",
+ "summary": {
+  "scale": 0.9936903279744147,
+  "absScaleErr": 0.006329662137851668,
+  "cameraPositionErrM": null,
+  "cameraForwardErrDeg": 0.4163887084114899,
+  "cameraHeightErrM": null,
+  "vfovErrDeg": null,
+  "orthoHeightLogErr": 0.006329662137851668,
+  "objectRecall": 1.0,
+  "objectPrecision": 0.9285714285714286,
+  "centerErrM": 0.152857717386396,
+  "sizeErr": 0.14514298064791162,
+  "meanIoU3d": 0.6064067167677741,
+  "anchored": {
+   "objectRecall": 1.0,
+   "objectPrecision": 0.9285714285714286,
+   "centerErrM": 0.152857717386396,
+   "sizeErr": 0.14514298064791162,
+   "meanIoU3d": 0.6064067167677741
+  }
+ },
+ "cameras": [
+  {
+   "view": 1,
+   "orthographic": true,
+   "forwardErrDeg": 0.4163887084114899,
+   "pitchErrDeg": -0.4162336806835245,
+   "orthoHeightLogErr": 0.006329662137851668
+  },
+  {
+   "view": 2,
+   "orthographic": true,
+   "forwardErrDeg": 0.4163887084114899,
+   "pitchErrDeg": -0.4162336806835245,
+   "orthoHeightLogErr": 0.006329662137851668
+  }
+ ],
+ "objects": [
+  {
+   "gt": 0.0,
+   "pred": 11.0,
+   "label": "bedroll",
+   "labelMatch": false,
+   "centerErrM": 0.0484664864261493,
+   "logSizeRatio": 0.058408477370860495,
+   "iou3d": 0.7379527327821136
+  },
+  {
+   "gt": 1.0,
+   "pred": 9.0,
+   "label": "crate",
+   "labelMatch": true,
+   "centerErrM": 0.13752541147550842,
+   "logSizeRatio": 0.14514298064791162,
+   "iou3d": 0.6566683459330943
+  },
+  {
+   "gt": 2.0,
+   "pred": 1.0,
+   "label": "tent",
+   "labelMatch": true,
+   "centerErrM": 0.152857717386396,
+   "logSizeRatio": 0.19064201632942335,
+   "iou3d": 0.6000998565384216
+  },
+  {
+   "gt": 3.0,
+   "pred": 0.0,
+   "label": "tent",
+   "labelMatch": true,
+   "centerErrM": 0.11906930735937425,
+   "logSizeRatio": 0.1723072415697691,
+   "iou3d": 0.6030216601695682
+  },
+  {
+   "gt": 4.0,
+   "pred": 12.0,
+   "label": "stump",
+   "labelMatch": false,
+   "centerErrM": 0.05059298809655567,
+   "logSizeRatio": 0.15315397508628512,
+   "iou3d": 0.6316234146934819
+  },
+  {
+   "gt": 5.0,
+   "pred": 8.0,
+   "label": "barrel",
+   "labelMatch": false,
+   "centerErrM": 0.1008019121990904,
+   "logSizeRatio": 0.06862578281447045,
+   "iou3d": 0.6552761911886613
+  },
+  {
+   "gt": 6.0,
+   "pred": 5.0,
+   "label": "rock",
+   "labelMatch": true,
+   "centerErrM": 0.2323375314237824,
+   "logSizeRatio": 0.18445895499059162,
+   "iou3d": 0.5498687546902895
+  },
+  {
+   "gt": 7.0,
+   "pred": 3.0,
+   "label": "rock",
+   "labelMatch": true,
+   "centerErrM": 0.17088314326012208,
+   "logSizeRatio": 0.2096001116414248,
+   "iou3d": 0.5145755990257693
+  },
+  {
+   "gt": 8.0,
+   "pred": 4.0,
+   "label": "rock",
+   "labelMatch": true,
+   "centerErrM": 0.29381865810965485,
+   "logSizeRatio": 0.1494441155932142,
+   "iou3d": 0.45743605019637823
+  },
+  {
+   "gt": 9.0,
+   "pred": 7.0,
+   "label": "log",
+   "labelMatch": true,
+   "centerErrM": 0.20487824020752127,
+   "logSizeRatio": 0.11182414806239875,
+   "iou3d": 0.48563819083082543
+  },
+  {
+   "gt": 10.0,
+   "pred": 6.0,
+   "label": "log",
+   "labelMatch": true,
+   "centerErrM": 0.16291414534430498,
+   "logSizeRatio": 0.08192771998637864,
+   "iou3d": 0.5811761319933917
+  },
+  {
+   "gt": 11.0,
+   "pred": 2.0,
+   "label": "tree",
+   "labelMatch": true,
+   "centerErrM": 0.12620185537563988,
+   "logSizeRatio": 0.06945827115727593,
+   "iou3d": 0.7927265666702217
+  },
+  {
+   "gt": 12.0,
+   "pred": 13.0,
+   "label": "campfire",
+   "labelMatch": false,
+   "centerErrM": 0.1833837596437676,
+   "logSizeRatio": 0.06020629417585124,
+   "iou3d": 0.6172238232688475
+  }
+ ]
+}

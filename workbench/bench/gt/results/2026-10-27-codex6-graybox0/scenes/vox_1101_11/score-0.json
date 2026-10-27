@@ -1,0 +1,186 @@
+{
+ "version": "gt-scene-score-v3",
+ "summary": {
+  "scale": 0.8693166317323512,
+  "absScaleErr": 0.14004785675257528,
+  "cameraPositionErrM": null,
+  "cameraForwardErrDeg": 0.42493871990294635,
+  "cameraHeightErrM": null,
+  "vfovErrDeg": null,
+  "orthoHeightLogErr": 0.005173280581585038,
+  "objectRecall": 1.0,
+  "objectPrecision": 0.8888888888888888,
+  "centerErrM": 0.08838497271046031,
+  "sizeErr": 0.16065473175578426,
+  "meanIoU3d": 0.6137937812450434,
+  "anchored": {
+   "objectRecall": 1.0,
+   "objectPrecision": 0.8888888888888888,
+   "centerErrM": 0.08838497271046031,
+   "sizeErr": 0.16065473175578426,
+   "meanIoU3d": 0.6137937812450434
+  }
+ },
+ "cameras": [
+  {
+   "view": 1,
+   "orthographic": true,
+   "forwardErrDeg": 0.42493871990294635,
+   "pitchErrDeg": -0.27675796345963183,
+   "orthoHeightLogErr": 0.005173280581585038
+  },
+  {
+   "view": 2,
+   "orthographic": true,
+   "forwardErrDeg": 0.42493871990294635,
+   "pitchErrDeg": -0.27675796345963183,
+   "orthoHeightLogErr": 0.005173280581585038
+  }
+ ],
+ "objects": [
+  {
+   "gt": 0.0,
+   "pred": 5.0,
+   "label": "rock",
+   "labelMatch": true,
+   "centerErrM": 0.19509754777281255,
+   "logSizeRatio": 0.18366702831409007,
+   "iou3d": 0.47510761745013447
+  },
+  {
+   "gt": 1.0,
+   "pred": 6.0,
+   "label": "rock",
+   "labelMatch": true,
+   "centerErrM": 0.08189901859436013,
+   "logSizeRatio": 0.18353975807990786,
+   "iou3d": 0.5871735528362048
+  },
+  {
+   "gt": 2.0,
+   "pred": 4.0,
+   "label": "rock",
+   "labelMatch": true,
+   "centerErrM": 0.23365383077008942,
+   "logSizeRatio": 0.2306152672880768,
+   "iou3d": 0.4799956612596787
+  },
+  {
+   "gt": 3.0,
+   "pred": 8.0,
+   "label": "fence",
+   "labelMatch": true,
+   "centerErrM": 0.15438575228501106,
+   "logSizeRatio": 0.2556729732501175,
+   "iou3d": 0.37650033244926484
+  },
+  {
+   "gt": 4.0,
+   "pred": 9.0,
+   "label": "fence",
+   "labelMatch": true,
+   "centerErrM": 0.048944829715990866,
+   "logSizeRatio": 0.2824525591607265,
+   "iou3d": 0.47895310270884217
+  },
+  {
+   "gt": 5.0,
+   "pred": 1.0,
+   "label": "tent",
+   "labelMatch": true,
+   "centerErrM": 0.05432540415486545,
+   "logSizeRatio": 0.1737245350803436,
+   "iou3d": 0.6237301419514918
+  },
+  {
+   "gt": 6.0,
+   "pred": 0.0,
+   "label": "tent",
+   "labelMatch": true,
+   "centerErrM": 0.09390964786715669,
+   "logSizeRatio": 0.14758492843122495,
+   "iou3d": 0.6675989159321604
+  },
+  {
+   "gt": 7.0,
+   "pred": 11.0,
+   "label": "log",
+   "labelMatch": true,
+   "centerErrM": 0.08286029755376392,
+   "logSizeRatio": 0.1952769048322418,
+   "iou3d": 0.5799521413661163
+  },
+  {
+   "gt": 8.0,
+   "pred": 10.0,
+   "label": "log",
+   "labelMatch": true,
+   "centerErrM": 0.024593548280925512,
+   "logSizeRatio": 0.10596959051986066,
+   "iou3d": 0.7377385250143108
+  },
+  {
+   "gt": 9.0,
+   "pred": 13.0,
+   "label": "barrel",
+   "labelMatch": true,
+   "centerErrM": 0.06062064295059268,
+   "logSizeRatio": 0.11449480561762677,
+   "iou3d": 0.7157776163406486
+  },
+  {
+   "gt": 10.0,
+   "pred": 14.0,
+   "label": "barrel",
+   "labelMatch": true,
+   "centerErrM": 0.057689973813530346,
+   "logSizeRatio": 0.11449480561762677,
+   "iou3d": 0.7157776163406486
+  },
+  {
+   "gt": 11.0,
+   "pred": 12.0,
+   "label": "crate",
+   "labelMatch": false,
+   "centerErrM": 0.04756403917557001,
+   "logSizeRatio": 0.0787501471044645,
+   "iou3d": 0.7924928830767847
+  },
+  {
+   "gt": 12.0,
+   "pred": 15.0,
+   "label": "workbench",
+   "labelMatch": false,
+   "centerErrM": 0.11874134202115211,
+   "logSizeRatio": 0.11357285073824215,
+   "iou3d": 0.7112837878902211
+  },
+  {
+   "gt": 13.0,
+   "pred": 2.0,
+   "label": "tree",
+   "labelMatch": true,
+   "centerErrM": 0.11310006651824103,
+   "logSizeRatio": 0.14195063402153701,
+   "iou3d": 0.6476629273968393
+  },
+  {
+   "gt": 14.0,
+   "pred": 3.0,
+   "label": "tree",
+   "labelMatch": true,
+   "centerErrM": 0.1419877624784746,
+   "logSizeRatio": 0.03630405657168279,
+   "iou3d": 0.760896862076286
+  },
+  {
+   "gt": 15.0,
+   "pred": 7.0,
+   "label": "signpost",
+   "labelMatch": false,
+   "centerErrM": 0.12135272693133463,
+   "logSizeRatio": 0.26526673499153236,
+   "iou3d": 0.4700588158310612
+  }
+ ]
+}

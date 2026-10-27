@@ -1,0 +1,125 @@
+{
+ "version": "gt-scene-score-v3",
+ "summary": {
+  "scale": 1.0754591016005772,
+  "absScaleErr": 0.0727476416670042,
+  "cameraPositionErrM": 1.5409592314672944,
+  "cameraForwardErrDeg": 6.086687819944363,
+  "cameraHeightErrM": 0.9717356032622975,
+  "vfovErrDeg": 6.172145750837229,
+  "orthoHeightLogErr": null,
+  "objectRecall": 0.6428571428571429,
+  "objectPrecision": 0.6923076923076923,
+  "centerErrM": 0.492631182067233,
+  "sizeErr": 1.388855056106597,
+  "meanIoU3d": 0.05291464540505587,
+  "anchored": {
+   "objectRecall": 0.6428571428571429,
+   "objectPrecision": 0.6923076923076923,
+   "centerErrM": 0.492631182067233,
+   "sizeErr": 1.388855056106597,
+   "meanIoU3d": 0.05291464540505587
+  }
+ },
+ "cameras": [
+  {
+   "view": 1,
+   "positionErrM": 2.0577478527601527,
+   "heightErrM": 1.061052287690148,
+   "forwardErrDeg": 6.928729097756753,
+   "pitchErrDeg": -4.084638351637343,
+   "vfovErrDeg": 4.739751263010174
+  },
+  {
+   "view": 2,
+   "positionErrM": 1.0241706101744361,
+   "heightErrM": 0.8824189188344469,
+   "forwardErrDeg": 5.244646542131972,
+   "pitchErrDeg": -4.795944083514915,
+   "vfovErrDeg": 7.604540238664286
+  }
+ ],
+ "objects": [
+  {
+   "gt": 0.0,
+   "pred": 9.0,
+   "label": "picture",
+   "labelMatch": true,
+   "centerErrM": 0.48917204331037206,
+   "logSizeRatio": 1.5882927743476136,
+   "iou3d": 0.00483635138316212
+  },
+  {
+   "gt": 1.0,
+   "pred": 10.0,
+   "label": "picture",
+   "labelMatch": true,
+   "centerErrM": 0.9860712094828039,
+   "logSizeRatio": 1.445408773874519,
+   "iou3d": 0.0
+  },
+  {
+   "gt": 2.0,
+   "pred": 11.0,
+   "label": "picture",
+   "labelMatch": true,
+   "centerErrM": 0.541537991995685,
+   "logSizeRatio": 1.4393714617759539,
+   "iou3d": 0.0
+  },
+  {
+   "gt": 3.0,
+   "pred": 12.0,
+   "label": "picture",
+   "labelMatch": true,
+   "centerErrM": 0.1861650384427207,
+   "logSizeRatio": 1.4378205543216669,
+   "iou3d": 0.010168610508743148
+  },
+  {
+   "gt": 4.0,
+   "pred": 4.0,
+   "label": "pillow",
+   "labelMatch": true,
+   "centerErrM": 0.621824958944751,
+   "logSizeRatio": 0.4487065816449589,
+   "iou3d": 0.06808394741042655
+  },
+  {
+   "gt": 5.0,
+   "pred": 2.0,
+   "label": "pillow",
+   "labelMatch": false,
+   "centerErrM": 0.492631182067233,
+   "logSizeRatio": 1.388855056106597,
+   "iou3d": 0.014352451325560667
+  },
+  {
+   "gt": 9.0,
+   "pred": 1.0,
+   "label": "chair",
+   "labelMatch": false,
+   "centerErrM": 0.14603784608948184,
+   "logSizeRatio": 0.24864969349818153,
+   "iou3d": 0.4742839526174823
+  },
+  {
+   "gt": 10.0,
+   "pred": 3.0,
+   "label": "pillow",
+   "labelMatch": true,
+   "centerErrM": 0.3917521066832707,
+   "logSizeRatio": 0.5700058692098279,
+   "iou3d": 0.1690797224254074
+  },
+  {
+   "gt": 12.0,
+   "pred": 7.0,
+   "label": "table",
+   "labelMatch": true,
+   "centerErrM": 0.6942707593302241,
+   "logSizeRatio": 0.5152934230471377,
+   "iou3d": 0.0
+  }
+ ]
+}

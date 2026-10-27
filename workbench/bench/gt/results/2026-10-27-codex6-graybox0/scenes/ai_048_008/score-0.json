@@ -1,0 +1,116 @@
+{
+ "version": "gt-scene-score-v3",
+ "summary": {
+  "scale": 1.1972392028510115,
+  "absScaleErr": 0.18001824190884252,
+  "cameraPositionErrM": 1.4110079237922533,
+  "cameraForwardErrDeg": 2.21496997061349,
+  "cameraHeightErrM": 0.33269418956307373,
+  "vfovErrDeg": 12.548378971853387,
+  "orthoHeightLogErr": null,
+  "objectRecall": 0.6666666666666666,
+  "objectPrecision": 0.5,
+  "centerErrM": 0.41265673138653897,
+  "sizeErr": 0.4413116571282458,
+  "meanIoU3d": 0.17257605751055927,
+  "anchored": {
+   "objectRecall": 0.5,
+   "objectPrecision": 0.375,
+   "centerErrM": 0.5283152054880194,
+   "sizeErr": 0.4435300502405214,
+   "meanIoU3d": 0.12453556685929534
+  }
+ },
+ "cameras": [
+  {
+   "view": 1,
+   "positionErrM": 1.9385932443277074,
+   "heightErrM": 0.4433922055093622,
+   "forwardErrDeg": 1.6635619940727384,
+   "pitchErrDeg": 1.2847707958858305,
+   "vfovErrDeg": 14.267252357245859
+  },
+  {
+   "view": 2,
+   "positionErrM": 0.883422603256799,
+   "heightErrM": 0.22199617361678525,
+   "forwardErrDeg": 2.766377947154242,
+   "pitchErrDeg": 2.040960318074952,
+   "vfovErrDeg": 10.829505586460915
+  }
+ ],
+ "objects": [
+  {
+   "gt": 1.0,
+   "pred": 0.0,
+   "label": "window",
+   "labelMatch": true,
+   "centerErrM": 0.4711070886500385,
+   "logSizeRatio": 0.6138521063657516,
+   "iou3d": 0.15551031153517264
+  },
+  {
+   "gt": 3.0,
+   "pred": 1.0,
+   "label": "window",
+   "labelMatch": true,
+   "centerErrM": 0.7105731148040114,
+   "logSizeRatio": 0.4409498356540926,
+   "iou3d": 0.1187782107187182
+  },
+  {
+   "gt": 6.0,
+   "pred": 11.0,
+   "label": "otherprop",
+   "labelMatch": false,
+   "centerErrM": 0.4164722145306688,
+   "logSizeRatio": 0.5770570857350508,
+   "iou3d": 0.15816383751225566
+  },
+  {
+   "gt": 7.0,
+   "pred": 13.0,
+   "label": "floor mat",
+   "labelMatch": true,
+   "centerErrM": 0.5155108369002083,
+   "logSizeRatio": 0.44167347860239903,
+   "iou3d": 0.0
+  },
+  {
+   "gt": 8.0,
+   "pred": 14.0,
+   "label": "otherfurniture",
+   "labelMatch": false,
+   "centerErrM": 0.15154016826244088,
+   "logSizeRatio": 0.13171347907310152,
+   "iou3d": 0.6479056462166627
+  },
+  {
+   "gt": 9.0,
+   "pred": 15.0,
+   "label": "shelves",
+   "labelMatch": true,
+   "centerErrM": 0.3292249645438926,
+   "logSizeRatio": 0.29460895672995097,
+   "iou3d": 0.35808096649832755
+  },
+  {
+   "gt": 10.0,
+   "pred": 2.0,
+   "label": "bookshelf",
+   "labelMatch": true,
+   "centerErrM": 0.3091565666877521,
+   "logSizeRatio": 0.16534180374081917,
+   "iou3d": 0.5181600765279769
+  },
+  {
+   "gt": 11.0,
+   "pred": 4.0,
+   "label": "mirror",
+   "labelMatch": false,
+   "centerErrM": 0.40884124824240914,
+   "logSizeRatio": 0.5233834801778864,
+   "iou3d": 0.11431364111759722
+  }
+ ]
+}
