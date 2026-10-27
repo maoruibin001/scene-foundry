@@ -33,8 +33,8 @@ test('real admission wrapper publishes pressure before releasing permits; queued
   ctl.abort(Error('user cancelled'));await expect(b).rejects.toThrow('user cancelled');expect(calls).toBe(1);
  }finally{providerPressure.until=0;providerPressure.ceiling=Infinity;providerPressure.healthy=0;modelPool.setLimit(oldLimit);}
 });
-test('saved Azure error consumes at most three actual attempts with 60/120 second refill windows',async()=>{
+test('saved Azure token-rate error refills with doubling 60 s windows (capped at 8 min) until the one-hour recovery budget',async()=>{
  const dir=mkdtempSync(join(tmpdir(),'pressure-recovery-'));let now=100,n=0;const delays:number[]=[];
- try{await expect(withProviderRecovery({role:'geometry-asset'},dir,async()=>{n++;throw Error('Your requests to gpt-6-astra in eastus2 have exceeded token rate limit.');},{now:()=>now,wait:async ms=>{delays.push(ms);now+=ms;}})).rejects.toThrow('PROVIDER_RECOVERY_EXHAUSTED');expect(n).toBe(3);expect(delays).toEqual([60000,120000]);}
+ try{await expect(withProviderRecovery({role:'geometry-asset'},dir,async()=>{n++;throw Error('Your requests to gpt-6-astra in eastus2 have exceeded token rate limit.');},{now:()=>now,wait:async ms=>{delays.push(ms);now+=ms;}})).rejects.toThrow('PROVIDER_RECOVERY_EXHAUSTED');expect(delays.slice(0,4)).toEqual([60000,120000,240000,480000]);expect(delays.slice(4).every(d=>d===480000)).toBe(true);expect(now-100).toBeLessThanOrEqual(60*60*1000);expect(n).toBe(delays.length+1);}
  finally{rmSync(dir,{recursive:true,force:true});}
 });

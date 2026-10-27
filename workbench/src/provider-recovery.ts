@@ -4,7 +4,13 @@ import {read,save} from './store';
 import {rateLimitDelay} from './provider-pressure';
 import {externalProviderBlock} from './provider-external-block';
 
-export const RECOVERY_POLICY={version:'provider-recovery-v1',maxAttempts:3,maxTimeouts:2,maxElapsedMs:60*60*1000,delaysMs:[5000,15000]};
+/**
+ * Recoverable faults are retried with growing backoff until the logical call has spent one hour, each attempt still bounded by its
+ * own model timeout. v1 stopped after 3 attempts (2 timeouts) and 5 s / 15 s waits, so on 2026-10-26 every job behind a saturated
+ * relay ("high demand", 429) was exhausted within 10–20 minutes while the hour cap was never reached. The attempt and timeout
+ * counts below are only safety bounds; the elapsed hour is the real limit.
+ */
+export const RECOVERY_POLICY={version:'provider-recovery-v2',maxAttempts:60,maxTimeouts:60,maxElapsedMs:60*60*1000,delaysMs:[5000,15000,30000,60000,120000,300000]};
 // Prompt images arrive as input[n].content[m]; a feedback tool's preview frame as input[n].output[m] (study c947c2b8, 2026-10-22).
 const IMAGE_ENCODING_REJECTED=/Invalid 'input\[\d+\]\.(?:content|output)\[\d+\]\.image_url'[^\n]*invalid base64-encoded value/;
 export const ACTIVE_RECOVERY_POLICY=process.env.PIPELINE_PROVIDER_RECOVERY==='single-attempt'?{...RECOVERY_POLICY,maxAttempts:1,maxTimeouts:1,maxElapsedMs:Number(process.env.PIPELINE_EXECUTION_MAX??3)>3?30*60*1000:15*60*1000}:RECOVERY_POLICY;
@@ -18,7 +24,7 @@ export function providerFault(error:unknown){
  if(/IMPROVEMENT_STOPPED|MODEL_BUDGET_EXHAUSTED|MODEL_ROUTE_UNVERIFIED|CODEX_ROUTE_UNVERIFIED|NOT_CONFIGURED|PROVIDER_PAUSED|PROVIDER_INPUT_INVALID|PROVIDER_HTTP_(?:400|404|413|422)/i.test(s))return {kind:'hard',recoverable:false,reason:'预算、认证、输入或模型路由需要修复后才能继续'};
  if(rateLimitDelay(error)!==null)return {kind:'transient',recoverable:true,reason:'供应商限流；等待请求窗口恢复并统一降低并发'};
  if(/PROVIDER_TIMEOUT|^TimeoutError:/.test(s))return {kind:'timeout',recoverable:true,reason:'模型调用超时；保留已完成步骤，使用延长后的时限恢复当前调用'};
- if(/PROVIDER_HTTP_(?:408|429|500|502|503|504)|fetch failed|ECONNRESET|ETIMEDOUT|EAI_AGAIN|connection (?:reset|closed)|network|stream (?:disconnected|closed|terminated)|stream.*before completion|unexpected (?:eof|end of (?:file|stream))|socket hang up|connection (?:aborted|terminated)|PROVIDER_EMPTY_OUTPUT|PROVIDER_STALLED|reconnecting|temporarily unavailable|rate limit|overloaded/i.test(s))return {kind:'transient',recoverable:true,reason:'临时网络、限流或服务异常；退避后恢复当前调用'};
+ if(/PROVIDER_HTTP_(?:408|429|500|502|503|504)|fetch failed|ECONNRESET|ETIMEDOUT|EAI_AGAIN|connection (?:reset|closed)|network|stream (?:disconnected|closed|terminated)|stream.*before completion|unexpected (?:eof|end of (?:file|stream))|socket hang up|connection (?:aborted|terminated)|PROVIDER_EMPTY_OUTPUT|PROVIDER_STALLED|reconnecting|temporarily unavailable|rate limit|overloaded|high demand|try again later/i.test(s))return {kind:'transient',recoverable:true,reason:'临时网络、限流或服务异常；退避后恢复当前调用'};
  return {kind:'unknown',recoverable:false,reason:'没有可验证的自动恢复方式，保留错误与产物供诊断'};
 }
 export function recoveryWait(ms:number,signal?:AbortSignal){signal?.throwIfAborted();return new Promise<void>((resolve,reject)=>{const abort=()=>{clearTimeout(timer);reject(signal?.reason??Error('CANCELLED'));};const timer=setTimeout(()=>{signal?.removeEventListener('abort',abort);resolve();},ms);signal?.addEventListener('abort',abort,{once:true});});}
