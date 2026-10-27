@@ -34,3 +34,8 @@ test('无损重编码只换压缩流：像素一致、字节不同、校验和�
  expect(parts.map(c=>c.type)).toEqual(['IHDR','IDAT','IEND']);expect(parts[0].data.equals(ihdr)).toBe(true);expect(inflateSync(parts[1].data).equals(raw)).toBe(true);
  expect(()=>losslessPngReencode(Buffer.from([255,216,255,0]))).toThrow('PNG');
 });
+test('worker contract travels in the prompt, never as model_instructions_file (it made every codex6 relay call fail on 2026-10-27)',async()=>{
+ const src=await Bun.file(new URL('./codex-provider.ts',import.meta.url)).text();
+ expect(src).not.toContain('model_instructions_file');
+ expect(src).toContain("input:worker+'\\n\\n'+codexPrompt(");
+});
