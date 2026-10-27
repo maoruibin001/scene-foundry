@@ -13,6 +13,7 @@ import {assertStorageAvailable} from '../storage-preflight';
 import {candidateEvidence} from './candidate-selection';
 import {inspectContacts,contactSummary} from './contacts';
 import {bindReferenceFrames} from './reference-framing';
+import {measuredFovRule,measuredVfov,measureReferenceFov} from './measured-fov';
 import {crossTaskReuse} from '../reuse-mode';
 import {fitAssemblyBudget} from './triangle-budget';
 import {preserveOutput,saveDelivery,failureDisposition} from '../output-delivery';
@@ -62,7 +63,7 @@ export function sceneComplexity(scene:any,level:keyof typeof COMPLEXITIES,parts:
 
 function prepareScene(job:any,plan:any,dir:string,value:any,textures:any,provenance:any){
  assertStorageAvailable(undefined,2*1024**3);
- value=bindReferenceFrames(value,(job.images??[]).map((i:any)=>({path:join(UPLOADS,i.file)})));if(preJudgeRule(job)){const fixed=preJudgeScene(value,textures);value=fixed.scene;textures=fixed.textures;save(join(dir,'pre-judge.json'),fixed.report);}const result={value};save(join(dir,'generated-scene.json'),result.value);job.sceneProgram={version:result.value.version,file:'generated-scene.json'};
+ value=bindReferenceFrames(value,(job.images??[]).map((i:any,k:number)=>({path:join(UPLOADS,i.file),vfov:measuredVfov(job,k)})));if(preJudgeRule(job)){const fixed=preJudgeScene(value,textures);value=fixed.scene;textures=fixed.textures;save(join(dir,'pre-judge.json'),fixed.report);}const result={value};save(join(dir,'generated-scene.json'),result.value);job.sceneProgram={version:result.value.version,file:'generated-scene.json'};
   const prepared=prepareGeometryProject(join(dir,'project'),result.value.program,textures,{id:'scene-'+job.id,summary:plan.summary,scene:result.value,provenance:{pipelineVersion:job.pipelineVersion,references:(job.images??[]).map((i:any)=>i.id),textures:provenance,modelSettings:job.modelSettings}});
   job.bounds=prepared.bounds;job.objectCount=prepared.meshes;job.entityCount=result.value.program.instances.length;job.complexityReport=sceneComplexity(result.value,job.complexity,prepared.meshes,job.sceneKind);
   job.structure={passed:true,semanticCounts:semanticCounts(result.value.entities),categoryRequirements:categoryRequirements(result.value),checks:[{id:'geometry-contract',passed:true},{id:'requirement-bindings',passed:true},{id:'texture-provenance',passed:true}],geometry:{triangles:prepared.triangles,suspects:[],scope:'仅证明网格契约、来源和需求绑定；空间接触、遮挡和穿插由实际画面验收，未冒充碰撞检测'},assumptions:result.value.assumptions};
@@ -76,7 +77,9 @@ function prepareScene(job:any,plan:any,dir:string,value:any,textures:any,provena
   save(join(dir,'structure.json'),job.structure);save(join(dir,'complexity.json'),job.complexityReport);save(join(dir,'recipe.json'),{name:result.value.program.name,objects:prepared.objects,materials:result.value.program.materials,semanticEntities:result.value.entities});return result.value;
 }
 export async function runGeneralScene({job,plan,dir,signal,stage,command,preview,resetPreview,evaluate}:any){
- const images=(job.images??(job.image?[job.image]:[])).map((i:any)=>({path:join(UPLOADS,i.file),mime:i.mime}));
+ const images=(job.images??(job.image?[job.image]:[])).map((i:any)=>({path:join(UPLOADS,i.file),mime:i.mime})) as {path:string;mime:string;vfov?:number}[];
+ if(measuredFovRule(job)&&!job.referenceIntrinsics){job.referenceIntrinsics=await measureReferenceFov(job,images,dir,signal);event(job,'measured-fov','参考图垂直视场已测量：'+job.referenceIntrinsics.views.map((v:any)=>(v.vfov*180/Math.PI).toFixed(1)+'°').join('、'));}
+ images.forEach((im,k)=>{const v=measuredVfov(job,k);if(v!==undefined)im.vfov=v;});
  if(job.sceneKind==='voxel'&&!job.voxelConstructionVersion&&!['reuseSceneFrom','reusePlanFrom','reuseCheckpoint','reuseFrom','spatialRepairSource','executionRecoveryFrom','initialSpaceRecoverySource'].some(k=>job[k]))job.voxelConstructionVersion='voxel-lattice-v1';
  const legacyVoxel=job.sceneKind==='voxel'&&job.reuseSceneFrom&&!existsSync(join(runDir(job.reuseSceneFrom),'voxel-source-scene.json'));
  job.generationMethod=job.sceneKind==='voxel'?(legacyVoxel?'voxel-scene-v1':job.voxelConstructionVersion==='voxel-lattice-v1'?'voxel-geometry-v4':'voxel-geometry-v3'):'general-geometry-v3';job.stageTrackingVersion='exclusive-stages-v1';job.iteration=0;
