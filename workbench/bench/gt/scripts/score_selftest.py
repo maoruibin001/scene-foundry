@@ -26,3 +26,12 @@ for f in sorted(glob.glob(os.path.join(os.path.dirname(os.path.abspath(__file__)
 a=np.array([r[1:] for r in rows],float)
 names=['identity: |log scale| vs 1.37 (want ln1.37=.315)','identity: centre err (want 0)','identity: forward err deg (want 0)','identity: recall (want 1)','noise .2m: centre err (want ~.25)','size x1.3: size err (want .262)','cams +.5m: height err (want .5)','half dropped: recall (want ~.5)']
 for n,col in zip(names,a.T):print('%-48s median %.3f  min %.3f  max %.3f'%(n,np.median(col),col.min(),col.max()))
+# A frame rotated 90 deg with the boxes rotated alike must read zero size error (v3 rotated centres but not box extents).
+rot=[]
+for f in sorted(glob.glob(os.path.join(os.path.dirname(os.path.abspath(__file__)),'..','hypersim','ai_*.json'))):
+ gt=json.load(open(f))
+ if len(gt['objects'])<3:continue
+ P=frame(gt,1.0,math.pi/2,[0,0,0])
+ for o in P['objects']:s=o['size'];o['size']=[s[1],s[0],s[2]]
+ rot.append(score(gt,P)['summary']['sizeErr'])
+print('%-48s median %.3f  min %.3f  max %.3f'%('rotated 90 deg: size err (want 0)',np.median(rot),min(rot),max(rot)))

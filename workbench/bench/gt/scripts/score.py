@@ -90,7 +90,7 @@ def _score(gt,pred,match_radius,s,R,t,yaw):
    'heightErrM':float(T(p['position'])[2]-g['position'][2]),'forwardErrDeg':ang(R@np.asarray(p['forward']),g['forward']),
    'pitchErrDeg':math.degrees(math.asin(np.clip((R@np.asarray(p['forward']))[2],-1,1))-math.asin(np.clip(np.asarray(g['forward'])[2]/np.linalg.norm(g['forward']),-1,1))),
    'vfovErrDeg':math.degrees(p['vfov']-g['vfov'])})
- G=gt['objects'];Q=[{**o,'center':T(o['center']).tolist(),'size':(np.asarray(o['size'])*s).tolist()} for o in pred['objects']]
+ G=gt['objects'];Q=[{**o,'center':T(o['center']).tolist(),'size':(np.abs(R)@np.asarray(o['size'])*s).tolist()} for o in pred['objects']]
  # Hungarian match on centre distance, label agreement as a soft prior (a wrong label costs 0.5 m); unmatched beyond the radius.
  pairs=match(G,Q,match_radius)
  objs=[]

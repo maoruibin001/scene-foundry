@@ -31,12 +31,12 @@ for n in range(N):
     models,height,_=CATS[cat]
     for _ in range(count):
       model=rng.choice(models);s=round(height/NATIVE[model][1]*rng.uniform(.85,1.15),3);g=voxel(model,s);lo,hi=bounds(g)
-      yaw=rng.choice([0,90,180,270]);sx,sy=(hi[0]-lo[0],-(lo[2]-hi[2])) if yaw in(0,180) else (-(lo[2]-hi[2]),hi[0]-lo[0])
+      yaw=rng.choice([0,90,180,270]);sx,sy=(hi[0]-lo[0],hi[1]-lo[1]) if yaw in(0,180) else (hi[1]-lo[1],hi[0]-lo[0])  # voxel json is Z-up
       for _try in range(60):
         cx=round(rng.uniform(-half+sx/2+.25,half-sx/2-.25)/CELL)*CELL;cy=round(rng.uniform(-half+sy/2+.25,half-sy/2-.25)/CELL)*CELL
         box=(cx-sx/2-.25,cy-sy/2-.25,cx+sx/2+.25,cy+sy/2+.25)
         if all(box[2]<=b[0] or box[0]>=b[2] or box[3]<=b[1] or box[1]>=b[3] for b in placed):
-          placed.append(box);objs.append({'label':cat,'model':model,'scale':s,'yaw':math.radians(yaw),'center':[cx,cy,(hi[1]-lo[1])/2],'size':[sx,sy,hi[1]-lo[1]],'voxels':os.path.relpath(os.path.join(cache,f'{model}@{s:.4f}.json'),out)});break
+          placed.append(box);objs.append({'label':cat,'model':model,'scale':s,'yaw':math.radians(yaw),'center':[cx,cy,(hi[2]-lo[2])/2],'size':[sx,sy,hi[2]-lo[2]],'voxels':os.path.relpath(os.path.join(cache,f'{model}@{s:.4f}.json'),out)});break
   # two isometric orthographic views from the front-right and front-left, 45 deg yaw, 35.264 deg down, framing the slab
   d=3*half;cams=[]
   for i,az in enumerate([math.radians(45),math.radians(135)]):

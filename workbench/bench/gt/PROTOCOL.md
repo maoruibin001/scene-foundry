@@ -74,3 +74,15 @@ The v1 metric aligned on cameras only and absorbed the camera-height error, whic
   noised 0.5 m / 5 deg): v2 recall 0 in 11% of trials, v3 0%. v3 also tries a camera-free object-correspondence RANSAC init and keeps
   the better fit. Two readings are now reported: **best-fit** (layout on its own; prior/shuffle floor ≈0.3 recall) and **anchored**
   (camera-initialised; layout as seen from the reference views; floor 0). Primary metrics apply to both, each against its own floor.
+- 2026-10-27, three benchmark defects found when the voxel set read precision 0.50 and size ~1.7x (diagnosis in
+  `~/scene-foundry-verify/bench-gt/diag/voxel.md`, checked against the voxel bounds of all 302 objects):
+  1. **Set B ground truth had height on a horizontal axis.** The voxel meshes are Z-up, but `gen_voxel_set.py` read them as Y-up, so a
+     4.5 m tree was stored 1.5 m tall and its centre sat at half its depth. The generator is fixed and the 20 stored scenes are rewritten
+     by the same permutation, which is exact against the voxel bounds. The rendered references were already right (`gt_to_scene.ts`
+     uses the meshes), so they are unchanged.
+  2. **`score.py` rotated predicted centres into the ground-truth frame but not box extents.** Every voxel round aligned at -90°, so x
+     and y sizes were swapped. Extents are now rotated with `|R|`. A rotated-frame self-test is added (size error must read 0). This
+     also changes Set A size numbers.
+  3. **Objects built from several instances were scored as several objects.** `scene_to_pred.ts` now merges the instances of one
+     `observedBindings` landmark into a single object (union box). Precision is therefore per observed object, not per instance.
+  Matching radius, label prior and alignment are unchanged; floors are unchanged (anchored 0, best-fit ~0.3).
