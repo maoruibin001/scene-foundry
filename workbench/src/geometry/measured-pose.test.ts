@@ -4,7 +4,7 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {reconstructionPython} from '../runtime-paths.mjs';
 import {bindReferenceFrames} from './reference-framing';
-import {MEASURED_POSE,PURE_ROTATION_RATIO,measuredPose,measuredPoseGuidance,measuredPosePolicyFor,poseFromAnchor} from './measured-pose';
+import {MEASURED_POSE,MEASURED_POSE_V1,PURE_ROTATION_RATIO,anchorMedianDepth,measuredPose,measuredPoseGuidance,measuredPosePolicyFor,poseFromAnchor} from './measured-pose';
 
 const sub=(a:number[],b:number[])=>a.map((v,k)=>v-b[k]),unit=(a:number[])=>{const l=Math.hypot(...a);return a.map(v=>v/l);};
 const cross=(a:number[],b:number[])=>[a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]];
@@ -18,7 +18,7 @@ function truePose(a:{position:number[];target:number[]},b:{position:number[];tar
 }
 const close=(a:number[],b:number[],eps=1e-9)=>a.forEach((v,k)=>expect(v).toBeCloseTo(b[k],9));
 
-test('measured-pose-v1 is on only for non-voxel jobs with a configured tool',()=>{
+test('measured-pose is on only for non-voxel jobs with a configured tool',()=>{
  expect(measuredPosePolicyFor('scene',{})).toBeNull();
  expect(measuredPosePolicyFor('voxel',{PIPELINE_POSE_PYTHON:'/x/python'})).toBeNull();
  expect(measuredPosePolicyFor('scene',{PIPELINE_POSE_PYTHON:'/x/python'})).toEqual({...MEASURED_POSE,model:'depth-anything/DA3-BASE'});
@@ -67,3 +67,32 @@ test('bindReferenceFrames re-places only non-anchor perspective reference camera
  expect(noPose.cameras[1].position).toEqual(other.position);
  expect(measuredPoseGuidance({measuredPosePolicy:MEASURED_POSE,referencePose:{views:[{referenceIndex:1},{referenceIndex:2,...pose}]}})).toContain('图2：相对图1朝向左转');
 });
+
+const wall:any={version:'geometry-v1',name:'墙',materials:[{id:'m',color:[1,1,1,1],roughness:.5,metallic:0,textureId:null}],templates:[{id:'t',parts:[{id:'p',material:'m',position:[0,0,0],rotation:[0,0,0],scale:[1,1,1],shape:{type:'box',size:[60,2,60],radius:0}}]}],instances:[{id:'wall',label:'墙',template:'t',position:[0,6,1.5],rotation:[0,0,0],scale:[1,1,1],requirementIds:[]}]};
+
+test('v2 locks spacing, v1 jobs replay with the scene spacing',()=>{
+ const referencePose={views:[{referenceIndex:1},{referenceIndex:2,R:[[1,0,0],[0,1,0],[0,0,1]],base:[1,0,0],baselineRatio:.2}]};
+ expect(measuredPose({measuredPosePolicy:MEASURED_POSE,referencePose},1)?.lockSpacing).toBe(true);
+ expect(measuredPose({measuredPosePolicy:{...MEASURED_POSE,version:MEASURED_POSE_V1},referencePose},1)?.lockSpacing).toBe(false);
+});
+
+test('anchorMedianDepth reads the z-depth of the scene from camera 1',()=>{
+ expect(anchorMedianDepth(wall,{position:[0,0,1.5],target:[0,1,1.5],fov:1})).toBeCloseTo(5,6);
+ expect(anchorMedianDepth(wall,{position:[0,0,1.5],target:[0,-1,1.5],fov:1})).toBeUndefined();
+});
+
+test('with spacing locked, camera 2 sits baselineRatio x scene depth from camera 1 along the measured direction',()=>{
+ const anchor={position:[0,0,1.5],target:[0,4,1.5]},truth={position:[2,1,1.5],target:[-1,5,1.5]};
+ const pose={...truePose(anchor,truth,.4),lockSpacing:true};
+ const placed=poseFromAnchor(anchor,{position:[0.3,0,1.5],target:[0.3,4,1.5]},pose,5);
+ expect(Math.hypot(...sub(placed.position,anchor.position))).toBeCloseTo(2,9);
+ close(unit(sub(placed.position,anchor.position)),unit(sub(truth.position,anchor.position)));
+ const root=mkdtempSync(join(tmpdir(),'measured-pose-')),path=join(root,'ref.png');
+ expect(Bun.spawnSync([reconstructionPython(),'-c','from PIL import Image; import sys; Image.new("RGB",(1024,768)).save(sys.argv[1])',path]).exitCode).toBe(0);
+ const cam=(referenceIndex:number,c:{position:number[];target:number[]})=>({name:'c',referenceIndex,...c,fov:1,projection:'perspective'});
+ const bound=bindReferenceFrames({program:wall,cameras:[cam(1,anchor),cam(2,{position:[0.3,0,1.5],target:[0.3,4,1.5]})]},[{path},{path,pose}]);
+ expect(Math.hypot(...sub(bound.cameras[1].position,anchor.position))).toBeCloseTo(2,6);
+ const v1=bindReferenceFrames({program:wall,cameras:[cam(1,anchor),cam(2,{position:[0.3,0,1.5],target:[0.3,4,1.5]})]},[{path},{path,pose:{...pose,lockSpacing:false}}]);
+ expect(Math.hypot(...sub(v1.cameras[1].position,anchor.position))).toBeCloseTo(.3,9);
+});
+
