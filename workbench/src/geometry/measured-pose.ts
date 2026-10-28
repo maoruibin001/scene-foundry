@@ -57,20 +57,30 @@ const sub=(a:number[],b:number[])=>a.map((v,k)=>v-b[k]),norm=(a:number[])=>Math.
 const cross=(a:number[],b:number[])=>[a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]];
 /** World-from-camera (OpenCV axes) for a roll-free camera in this Z-up world: columns right, down, forward. */
 function opencvBasis(position:number[],target:number[]){const f=unit(sub(target,position)),r=unit(cross(f,[0,0,1])),u=cross(r,f);return (v:number[])=>[0,1,2].map(k=>r[k]*v[0]-u[k]*v[1]+f[k]*v[2]);}
-/** Median z-depth of the scene's geometry seen from `camera` over a fixed ray grid; undefined when nothing is hit. */
-export function anchorMedianDepth(program:any,camera:any){
+/** Camera 2 keeps this distance from the first surface along the baseline, so a measured spacing longer than the model's room
+ * (first live run: 3.2 m measured, 1.6 m to the side wall) cannot put the camera behind a wall, where the capture is empty. */
+export const WALL_MARGIN=.3;
+/** One compile of the scene for both probes: median z-depth seen from a camera, and free distance from a point along a direction. */
+export function sceneProbe(program:any){
  const compiled=compileGeometryProgram({...program,materials:program.materials.map((m:any)=>({...m,textureId:null,surfaceDetail:null}))});
- const cast=rayScene(compiled.meshes.map((m:any)=>({...m,name:m.entityId})),{doubleSided:true}),forward=unit(sub(camera.target,camera.position)),z:number[]=[];
- for(let j=0;j<18;j++)for(let i=0;i<32;i++){const r=cameraRay(camera,[(i+.5)/32,(j+.5)/18]),hit=cast(r.origin,r.direction);if(hit)z.push(sub(hit.point,camera.position).reduce((s,v,k)=>s+v*forward[k],0));}
- if(!z.length)return undefined;z.sort((a,b)=>a-b);return z[z.length>>1];
+ const cast=rayScene(compiled.meshes.map((m:any)=>({...m,name:m.entityId})),{doubleSided:true});
+ return {
+  depth(camera:any){const forward=unit(sub(camera.target,camera.position)),z:number[]=[];
+   for(let j=0;j<18;j++)for(let i=0;i<32;i++){const r=cameraRay(camera,[(i+.5)/32,(j+.5)/18]),hit=cast(r.origin,r.direction);if(hit)z.push(sub(hit.point,camera.position).reduce((s,v,k)=>s+v*forward[k],0));}
+   if(!z.length)return undefined;z.sort((a,b)=>a-b);return z[z.length>>1];},
+  clearance(origin:number[],direction:number[]){return cast(origin,unit(direction))?.distance as number|undefined;},
+ };
 }
+/** Median z-depth of the scene's geometry seen from `camera` over a fixed ray grid; undefined when nothing is hit. */
+export function anchorMedianDepth(program:any,camera:any){return sceneProbe(program).depth(camera);}
 /** Camera `camera` re-placed from `anchor` (reference view 1) by a measured relative pose. Spacing is baselineRatio × `depth` (view 1's
  * median depth in this scene) when the pose locks spacing and a depth is given, else the scene's own. */
-export function poseFromAnchor(anchor:{position:number[];target:number[]},camera:{position:number[];target:number[]},pose:ViewPose,depth?:number){
+export function poseFromAnchor(anchor:{position:number[];target:number[]},camera:{position:number[];target:number[]},pose:ViewPose,depth?:number,clearance?:(origin:number[],direction:number[])=>number|undefined){
  const toWorld=opencvBasis(anchor.position,anchor.target);
  const forward=unit(toWorld([pose.R[0][2],pose.R[1][2],pose.R[2][2]]));
  if(Math.abs(forward[2])>.999)throw Error('测量位姿使参考机位竖直朝向，无法表示为无滚转机位');
- const length=pose.lockSpacing&&depth!==undefined&&depth>0?pose.baselineRatio*depth:norm(sub(camera.position,anchor.position));
+ const locked=pose.lockSpacing&&depth!==undefined&&depth>0,free=locked&&clearance?clearance(anchor.position,toWorld(pose.base)):undefined;
+ const length=locked?Math.min(pose.baselineRatio*depth!,free===undefined?Infinity:Math.max(0,free-WALL_MARGIN)):norm(sub(camera.position,anchor.position));
  const position=pose.baselineRatio<PURE_ROTATION_RATIO||length<1e-6?[...anchor.position]:anchor.position.map((v,k)=>v+length*toWorld(pose.base)[k]);
  const reach=norm(sub(camera.target,camera.position))||1;
  return {position,target:position.map((v,k)=>v+reach*forward[k])};

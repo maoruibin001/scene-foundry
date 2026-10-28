@@ -4,7 +4,7 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {reconstructionPython} from '../runtime-paths.mjs';
 import {bindReferenceFrames} from './reference-framing';
-import {MEASURED_POSE,MEASURED_POSE_V1,PURE_ROTATION_RATIO,anchorMedianDepth,measuredPose,measuredPoseGuidance,measuredPosePolicyFor,poseFromAnchor} from './measured-pose';
+import {MEASURED_POSE,MEASURED_POSE_V1,PURE_ROTATION_RATIO,WALL_MARGIN,anchorMedianDepth,sceneProbe as sceneProbeFor,measuredPose,measuredPoseGuidance,measuredPosePolicyFor,poseFromAnchor} from './measured-pose';
 
 const sub=(a:number[],b:number[])=>a.map((v,k)=>v-b[k]),unit=(a:number[])=>{const l=Math.hypot(...a);return a.map(v=>v/l);};
 const cross=(a:number[],b:number[])=>[a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]];
@@ -94,5 +94,16 @@ test('with spacing locked, camera 2 sits baselineRatio x scene depth from camera
  expect(Math.hypot(...sub(bound.cameras[1].position,anchor.position))).toBeCloseTo(2,6);
  const v1=bindReferenceFrames({program:wall,cameras:[cam(1,anchor),cam(2,{position:[0.3,0,1.5],target:[0.3,4,1.5]})]},[{path},{path,pose:{...pose,lockSpacing:false}}]);
  expect(Math.hypot(...sub(v1.cameras[1].position,anchor.position))).toBeCloseTo(.3,9);
+});
+
+
+test('a locked spacing longer than the room stops short of the first wall along the baseline',()=>{
+ const anchor={position:[0,0,1.5],target:[0,4,1.5]};
+ const side:any={...wall,instances:[{...wall.instances[0],id:'side',position:[-3,0,1.5],rotation:[0,0,Math.PI/2]}]};   // wall face at x=-2
+ const pose={R:[[1,0,0],[0,1,0],[0,0,1]],base:[-1,0,0],baselineRatio:.8,lockSpacing:true};
+ const free=(o:number[],d:number[])=>sceneProbeFor(side).clearance(o,d);
+ const placed=poseFromAnchor(anchor,anchor,pose,5,free);
+ expect(placed.position[0]).toBeCloseTo(-2+WALL_MARGIN,6);
+ expect(poseFromAnchor(anchor,anchor,pose,1,free).position[0]).toBeCloseTo(-.8,9);   // shorter than the clearance: unchanged
 });
 
