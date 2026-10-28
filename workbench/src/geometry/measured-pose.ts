@@ -24,20 +24,23 @@ import {digest,save} from '../store';
 import {compileGeometryProgram} from './program';
 import {cameraRay,rayScene} from './camera-fit';
 
-export const MEASURED_POSE={version:'measured-pose-v2',tool:'depth-anything-3'} as const;
-export const MEASURED_POSE_V1='measured-pose-v1';
+/** Default is v1 (direction only). v2 (direction + spacing) lost to v1 in a live run (ai_035_001 anchored recall 0.23 -> 0): the
+ * measured spacing did not fit the model's room and was cut at the wall. Kept for experiments behind PIPELINE_POSE_SPACING=1. */
+export const MEASURED_POSE={version:'measured-pose-v1',tool:'depth-anything-3'} as const;
+export const MEASURED_POSE_V2='measured-pose-v2';
+export const MEASURED_POSE_V1=MEASURED_POSE.version;
 const SCRIPT=join(import.meta.dir,'measure-pose.py');
 const DEFAULT_MODEL='depth-anything/DA3-BASE';
 /** Baseline below this fraction of view 1's median depth is read as a pure rotation (AI "other angle" edits often barely move). */
 export const PURE_ROTATION_RATIO=.03;
 
 export type ViewPose={R:number[][];base:number[];baselineRatio:number;lockSpacing?:boolean};
-export function measuredPoseRule(job:any){return [MEASURED_POSE.version,MEASURED_POSE_V1].includes(job?.measuredPosePolicy?.version);}
-export function measuredPosePolicyFor(sceneKind:string,env=process.env){return sceneKind!=='voxel'&&env.PIPELINE_POSE_PYTHON?{...MEASURED_POSE,model:env.PIPELINE_POSE_MODEL||DEFAULT_MODEL}:null;}
+export function measuredPoseRule(job:any){return [MEASURED_POSE_V1,MEASURED_POSE_V2].includes(job?.measuredPosePolicy?.version);}
+export function measuredPosePolicyFor(sceneKind:string,env=process.env){return sceneKind!=='voxel'&&env.PIPELINE_POSE_PYTHON?{...MEASURED_POSE,...(env.PIPELINE_POSE_SPACING==='1'?{version:MEASURED_POSE_V2}:{}),model:env.PIPELINE_POSE_MODEL||DEFAULT_MODEL}:null;}
 /** The measured pose of reference image `index` (0-based) relative to image 0, or undefined (always for image 0). */
 export function measuredPose(job:any,index:number):ViewPose|undefined{
  const v=job?.referencePose?.views?.[index];
- return measuredPoseRule(job)&&index>0&&v?.R&&v?.base?{R:v.R,base:v.base,baselineRatio:v.baselineRatio,lockSpacing:job.measuredPosePolicy.version===MEASURED_POSE.version}:undefined;
+ return measuredPoseRule(job)&&index>0&&v?.R&&v?.base?{R:v.R,base:v.base,baselineRatio:v.baselineRatio,lockSpacing:job.measuredPosePolicy.version===MEASURED_POSE_V2}:undefined;
 }
 
 export async function measureReferencePose(job:any,images:{path:string}[],dir:string,signal?:AbortSignal){

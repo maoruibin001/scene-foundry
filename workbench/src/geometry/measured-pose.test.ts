@@ -4,7 +4,7 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {reconstructionPython} from '../runtime-paths.mjs';
 import {bindReferenceFrames} from './reference-framing';
-import {MEASURED_POSE,MEASURED_POSE_V1,PURE_ROTATION_RATIO,WALL_MARGIN,anchorMedianDepth,sceneProbe as sceneProbeFor,measuredPose,measuredPoseGuidance,measuredPosePolicyFor,poseFromAnchor} from './measured-pose';
+import {MEASURED_POSE,MEASURED_POSE_V1,MEASURED_POSE_V2,PURE_ROTATION_RATIO,WALL_MARGIN,anchorMedianDepth,sceneProbe as sceneProbeFor,measuredPose,measuredPoseGuidance,measuredPosePolicyFor,poseFromAnchor} from './measured-pose';
 
 const sub=(a:number[],b:number[])=>a.map((v,k)=>v-b[k]),unit=(a:number[])=>{const l=Math.hypot(...a);return a.map(v=>v/l);};
 const cross=(a:number[],b:number[])=>[a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]];
@@ -23,6 +23,8 @@ test('measured-pose is on only for non-voxel jobs with a configured tool',()=>{
  expect(measuredPosePolicyFor('voxel',{PIPELINE_POSE_PYTHON:'/x/python'})).toBeNull();
  expect(measuredPosePolicyFor('scene',{PIPELINE_POSE_PYTHON:'/x/python'})).toEqual({...MEASURED_POSE,model:'depth-anything/DA3-BASE'});
  expect(measuredPosePolicyFor('scene',{PIPELINE_POSE_PYTHON:'/x/python',PIPELINE_POSE_MODEL:'depth-anything/DA3-SMALL'})?.model).toBe('depth-anything/DA3-SMALL');
+ expect(measuredPosePolicyFor('scene',{PIPELINE_POSE_PYTHON:'/x/python'})?.version).toBe(MEASURED_POSE_V1);
+ expect(measuredPosePolicyFor('scene',{PIPELINE_POSE_PYTHON:'/x/python',PIPELINE_POSE_SPACING:'1'})?.version).toBe(MEASURED_POSE_V2);
 });
 
 test('a measured pose is read only under the policy and never for view 1',()=>{
@@ -72,8 +74,8 @@ const wall:any={version:'geometry-v1',name:'墙',materials:[{id:'m',color:[1,1,1
 
 test('v2 locks spacing, v1 jobs replay with the scene spacing',()=>{
  const referencePose={views:[{referenceIndex:1},{referenceIndex:2,R:[[1,0,0],[0,1,0],[0,0,1]],base:[1,0,0],baselineRatio:.2}]};
- expect(measuredPose({measuredPosePolicy:MEASURED_POSE,referencePose},1)?.lockSpacing).toBe(true);
- expect(measuredPose({measuredPosePolicy:{...MEASURED_POSE,version:MEASURED_POSE_V1},referencePose},1)?.lockSpacing).toBe(false);
+ expect(measuredPose({measuredPosePolicy:{...MEASURED_POSE,version:MEASURED_POSE_V2},referencePose},1)?.lockSpacing).toBe(true);
+ expect(measuredPose({measuredPosePolicy:MEASURED_POSE,referencePose},1)?.lockSpacing).toBe(false);
 });
 
 test('anchorMedianDepth reads the z-depth of the scene from camera 1',()=>{
