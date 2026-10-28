@@ -86,3 +86,16 @@ The v1 metric aligned on cameras only and absorbed the camera-height error, whic
   3. **Objects built from several instances were scored as several objects.** `scene_to_pred.ts` now merges the instances of one
      `observedBindings` landmark into a single object (union box). Precision is therefore per observed object, not per instance.
   Matching radius, label prior and alignment are unchanged; floors are unchanged (anchored 0, best-fit ~0.3).
+- 2026-10-27, after the ground-truth judge review found ai_044_003 reading 0.11–0.26 m camera position error with recall 0
+  (gt-scene-score-v4). When fewer than 3 objects matched, v3 kept the camera-initialised transform, which is fitted to the predicted
+  cameras themselves, and then measured camera position, height and direction against it. Those readings were near 0 exactly when
+  the room was wrong. It is the same failure the v1 note describes, surviving in the no-match case.
+  1. A transform fitted on at least 3 matched objects is now required for room-relative camera fields (position, height, forward,
+     orthographic framed height). Otherwise they are `None` and `roomFitted` is false. Pitch and vFoV never used the fit and stay.
+  2. Two alignment-free camera errors are added over each view pair: relative rotation, and baseline direction in the first view's
+     frame (perspective only). `pitchErrDeg` (mean absolute) is added to the summary. Pitch now normalises the predicted forward
+     vector as well (v3 read 0.3° on identical cameras with a non-unit forward).
+  3. Self-test added: 2 objects only and cameras +0.5 m must read room-fitted 0 of 18 and the room-relative fields `None` (v3 read
+     height 0). Relative rotation must read 10° when view 2 is yawed 10°, with baseline direction and pitch at 0.
+  Matching, alignment, thresholds and object metrics are unchanged. The baseline is re-scored from stored predictions
+  (`scripts/rescore.py`). Affected: camera fields of ai_016_004, ai_044_003 and ai_053_007.

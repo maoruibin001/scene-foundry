@@ -25,6 +25,25 @@ def align(pred_cams,gt_cams):
  R=yaw_rot(yaw);t=G.mean(0)-s*R@P.mean(0)
  return s,R,t,yaw
 def ang(a,b):a,b=np.asarray(a,float),np.asarray(b,float);return math.degrees(math.acos(np.clip(a@b/np.linalg.norm(a)/np.linalg.norm(b),-1,1)))
+def cam_rot(c):
+ """World-from-camera rotation, columns right/up/forward, from the stored forward and up vectors."""
+ f=np.asarray(c['forward'],float);f=f/np.linalg.norm(f);r=np.cross(f,np.asarray(c['up'],float));r=r/np.linalg.norm(r)
+ return np.column_stack([r,np.cross(r,f),f])
+def pitch_err(fp,fg):
+ """Pitch difference in degrees; both vectors normalised (v3 left the predicted one unnormalised, 0.3 deg off on a non-unit input)."""
+ el=lambda f:math.asin(np.clip(np.asarray(f,float)[2]/np.linalg.norm(f),-1,1));return math.degrees(el(fp)-el(fg))
+def rot_ang(R):return math.degrees(math.acos(np.clip((np.trace(R)-1)/2,-1,1)))
+def pair_errors(gt_cams,pred_cams):
+ """Alignment-free camera errors over every view pair: the relative rotation, and (perspective only) the direction of the baseline
+ in the first camera's frame. Neither depends on the similarity fit, so both stay valid when no objects match."""
+ by={c['view']:c for c in pred_cams};rel,base=[],[]
+ for a in range(len(gt_cams)):
+  for b in range(a+1,len(gt_cams)):
+   g1,g2=gt_cams[a],gt_cams[b];p1,p2=by[g1['view']],by[g2['view']];G1,P1=cam_rot(g1),cam_rot(p1)
+   rel.append(rot_ang((P1.T@cam_rot(p2)).T@(G1.T@cam_rot(g2))))
+   if 'orthographic' not in (g1.get('projection'),g2.get('projection')):
+    base.append(ang(P1.T@np.subtract(p2['position'],p1['position']),G1.T@np.subtract(g2['position'],g1['position'])))
+ return (float(np.mean(rel)) if rel else None),(float(np.mean(base)) if base else None)
 def iou3(c1,s1,c2,s2):
  """Axis-aligned 3D IoU after yaw is ignored: object yaw is scored separately, and furniture boxes are near-square in plan."""
  lo=np.maximum(np.subtract(c1,np.divide(s1,2)),np.subtract(c2,np.divide(s2,2)));hi=np.minimum(np.add(c1,np.divide(s1,2)),np.add(c2,np.divide(s2,2)))
@@ -70,10 +89,14 @@ def score(gt,pred,match_radius=1.0):
  a=results[0]['summary'];best['summary']['anchored']={k:a[k] for k in ('objectRecall','objectPrecision','centerErrM','sizeErr','meanIoU3d')}
  return best
 def _score(gt,pred,match_radius,s,R,t,yaw):
+ # fitted: the final transform was fitted on >=3 matched objects. Otherwise it is the initialisation; from the camera init that is a
+ # fit to the predicted cameras themselves, so camera position, height and direction relative to the room cannot be measured (v3
+ # read them near 0 exactly when nothing matched). Those fields are then None; pitch, vFoV and the pair errors do not use the fit.
+ fitted=False
  for _ in range(5):
   Q=[{**o,'center':(s*R@np.asarray(o['center'],float)+t).tolist()} for o in pred['objects']];pairs=match(gt['objects'],Q,2*match_radius)
   if len(pairs)<3:break
-  s2,R2,t2,y2=fit_sim([pred['objects'][j]['center'] for _,j in pairs],[gt['objects'][i]['center'] for i,_ in pairs])
+  s2,R2,t2,y2=fit_sim([pred['objects'][j]['center'] for _,j in pairs],[gt['objects'][i]['center'] for i,_ in pairs]);fitted=True
   done=abs(s2-s)<1e-6 and abs(y2-yaw)<1e-6 and np.allclose(t2,t,atol=1e-6)
   s,R,t,yaw=s2,R2,t2,y2
   if done:break
@@ -83,12 +106,12 @@ def _score(gt,pred,match_radius,s,R,t,yaw):
   p=next(c for c in pred['cameras'] if c['view']==g['view'])
   if g.get('projection')=='orthographic':
    # Position along the view axis and vFoV do not exist for an orthographic view; direction and framed height do.
-   cams.append({'view':g['view'],'orthographic':True,'forwardErrDeg':ang(R@np.asarray(p['forward']),g['forward']),
-    'pitchErrDeg':math.degrees(math.asin(np.clip((R@np.asarray(p['forward']))[2],-1,1))-math.asin(np.clip(np.asarray(g['forward'])[2]/np.linalg.norm(g['forward']),-1,1))),
-    'orthoHeightLogErr':abs(math.log(s*p['orthographicHeight']/g['orthographicHeight'])) if p.get('orthographicHeight') and g.get('orthographicHeight') else None});continue
-  cams.append({'view':g['view'],'positionErrM':float(np.linalg.norm(T(p['position'])-np.asarray(g['position']))),
-   'heightErrM':float(T(p['position'])[2]-g['position'][2]),'forwardErrDeg':ang(R@np.asarray(p['forward']),g['forward']),
-   'pitchErrDeg':math.degrees(math.asin(np.clip((R@np.asarray(p['forward']))[2],-1,1))-math.asin(np.clip(np.asarray(g['forward'])[2]/np.linalg.norm(g['forward']),-1,1))),
+   cams.append({'view':g['view'],'orthographic':True,'forwardErrDeg':ang(R@np.asarray(p['forward']),g['forward']) if fitted else None,
+    'pitchErrDeg':pitch_err(p['forward'],g['forward']),
+    'orthoHeightLogErr':abs(math.log(s*p['orthographicHeight']/g['orthographicHeight'])) if fitted and p.get('orthographicHeight') and g.get('orthographicHeight') else None});continue
+  cams.append({'view':g['view'],'positionErrM':float(np.linalg.norm(T(p['position'])-np.asarray(g['position']))) if fitted else None,
+   'heightErrM':float(T(p['position'])[2]-g['position'][2]) if fitted else None,'forwardErrDeg':ang(R@np.asarray(p['forward']),g['forward']) if fitted else None,
+   'pitchErrDeg':pitch_err(p['forward'],g['forward']),
    'vfovErrDeg':math.degrees(p['vfov']-g['vfov'])})
  G=gt['objects'];Q=[{**o,'center':T(o['center']).tolist(),'size':(np.abs(R)@np.asarray(o['size'])*s).tolist()} for o in pred['objects']]
  # Hungarian match on centre distance, label agreement as a soft prior (a wrong label costs 0.5 m); unmatched beyond the radius.
@@ -101,12 +124,14 @@ def _score(gt,pred,match_radius,s,R,t,yaw):
  n=len(G);matched=len(pairs)
  persp=[c for c in cams if not c.get('orthographic')];ortho=[c for c in cams if c.get('orthographic')]
  mean=lambda rows,k,f=lambda v:v:float(np.mean([f(c[k]) for c in rows])) if rows and all(c.get(k) is not None for c in rows) else None
- summary={'scale':s,'absScaleErr':abs(math.log(s)),'cameraPositionErrM':mean(persp,'positionErrM'),'cameraForwardErrDeg':mean(cams,'forwardErrDeg'),
+ relRot,baseDir=pair_errors(gt['cameras'],pred['cameras'])
+ summary={'roomFitted':fitted,'scale':s,'absScaleErr':abs(math.log(s)),'cameraPositionErrM':mean(persp,'positionErrM'),'cameraForwardErrDeg':mean(cams,'forwardErrDeg'),
   'cameraHeightErrM':mean(persp,'heightErrM',abs),'vfovErrDeg':mean(persp,'vfovErrDeg',abs),'orthoHeightLogErr':mean(ortho,'orthoHeightLogErr'),
+  'pitchErrDeg':mean(cams,'pitchErrDeg',abs),'relRotErrDeg':relRot,'baselineDirErrDeg':baseDir,
   'objectRecall':matched/n if n else None,'objectPrecision':matched/len(Q) if Q else None,
   'centerErrM':float(np.median([o['centerErrM'] for o in objs])) if objs else None,'sizeErr':float(np.median([o['logSizeRatio'] for o in objs])) if objs else None,
   'meanIoU3d':float(np.sum([o['iou3d'] for o in objs])/n) if n else None}
- return {'version':'gt-scene-score-v3','summary':summary,'cameras':cams,'objects':objs}
+ return {'version':'gt-scene-score-v4','summary':summary,'cameras':cams,'objects':objs}
 
 if __name__=='__main__':
  gt,pred=json.load(open(sys.argv[1])),json.load(open(sys.argv[2]));r=score(gt,pred)

@@ -1,6 +1,7 @@
 {
- "version": "gt-scene-score-v3",
+ "version": "gt-scene-score-v4",
  "summary": {
+  "roomFitted": true,
   "scale": 1.2611360710405068,
   "absScaleErr": 0.23201295840983177,
   "cameraPositionErrM": null,
@@ -8,6 +9,9 @@
   "cameraHeightErrM": null,
   "vfovErrDeg": null,
   "orthoHeightLogErr": 0.010212590642089714,
+  "pitchErrDeg": 4.4243350872283935,
+  "relRotErrDeg": 6.256177210927912,
+  "baselineDirErrDeg": null,
   "objectRecall": 1.0,
   "objectPrecision": 1.0,
   "centerErrM": 0.12888041998488428,
@@ -26,14 +30,14 @@
    "view": 1,
    "orthographic": true,
    "forwardErrDeg": 4.451777323807354,
-   "pitchErrDeg": 4.424335087228401,
+   "pitchErrDeg": 4.4243350872283935,
    "orthoHeightLogErr": 0.010212590642089714
   },
   {
    "view": 2,
    "orthographic": true,
    "forwardErrDeg": 4.451777323807354,
-   "pitchErrDeg": 4.424335087228401,
+   "pitchErrDeg": 4.4243350872283935,
    "orthoHeightLogErr": 0.010212590642089714
   }
  ],

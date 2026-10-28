@@ -4,7 +4,7 @@ sys.path.insert(0,os.path.dirname(os.path.abspath(__file__)));from score import 
 rng=np.random.default_rng(0);rows=[]
 def frame(gt,s,yaw,t):
  R=yaw_rot(yaw);P=copy.deepcopy(gt)
- for c in P['cameras']:c['position']=(s*R@np.array(c['position'])+t).tolist();c['forward']=(R@np.array(c['forward'])).tolist()
+ for c in P['cameras']:c['position']=(s*R@np.array(c['position'])+t).tolist();c['forward']=(R@np.array(c['forward'])).tolist();c['up']=(R@np.array(c['up'])).tolist()
  for o in P['objects']:o['center']=(s*R@np.array(o['center'])+t).tolist();o['size']=(np.array(o['size'])*s).tolist()
  return P
 for f in sorted(glob.glob(os.path.join(os.path.dirname(os.path.abspath(__file__)),'..','hypersim','ai_*.json'))):
@@ -35,3 +35,21 @@ for f in sorted(glob.glob(os.path.join(os.path.dirname(os.path.abspath(__file__)
  for o in P['objects']:s=o['size'];o['size']=[s[1],s[0],s[2]]
  rot.append(score(gt,P)['summary']['sizeErr'])
 print('%-48s median %.3f  min %.3f  max %.3f'%('rotated 90 deg: size err (want 0)',np.median(rot),min(rot),max(rot)))
+# Too few objects to fit the room: v3 fell back to the camera-only fit and read room-relative camera errors near 0 (a +0.5 m camera
+# height read 0). v4 must report them as unmeasurable, and the alignment-free camera errors must still read the injected error.
+few=[];pair=[]
+for f in sorted(glob.glob(os.path.join(os.path.dirname(os.path.abspath(__file__)),'..','hypersim','ai_*.json'))):
+ gt=json.load(open(f))
+ if len(gt['objects'])<3:continue
+ P=frame(gt,1/1.37,1.1,[5,-3,2]);P['objects']=P['objects'][:2]
+ for c in P['cameras']:c['position'][2]+=.5/1.37
+ r=score(gt,P)['summary'];few.append([r['roomFitted'],r['cameraHeightErrM'],r['cameraPositionErrM'],r['cameraForwardErrDeg']])
+ P=frame(gt,1/1.37,1.1,[5,-3,2]);r0=score(gt,P)['summary']
+ c=P['cameras'][1];Rz=yaw_rot(math.radians(10));c['forward']=(Rz@np.array(c['forward'])).tolist();c['up']=(Rz@np.array(c['up'])).tolist()
+ r1=score(gt,P)['summary'];pair.append([r0['relRotErrDeg'],r0['baselineDirErrDeg'],r0['pitchErrDeg'],r1['relRotErrDeg'],r1['baselineDirErrDeg'],r1['pitchErrDeg']])
+print('%-48s %d of %d'%('2 objects, cams +.5m: room-fitted (want 0)',sum(1 for x in few if x[0]),len(few)))
+print('%-48s %d of %d'%('2 objects: height/position/forward None (want all)',sum(1 for x in few if x[1] is None and x[2] is None and x[3] is None),len(few)))
+b=np.array(pair,float)
+for n,col in zip(['identity: relative rotation deg (want 0)','identity: baseline direction deg (want 0)','identity: pitch deg (want 0)',
+ 'view 2 yawed 10 deg: relative rotation (want 10)','view 2 yawed 10 deg: baseline dir (want 0)','view 2 yawed 10 deg: pitch (want 0)'],b.T):
+ print('%-48s median %.3f  min %.3f  max %.3f'%(n,np.median(col),col.min(),col.max()))

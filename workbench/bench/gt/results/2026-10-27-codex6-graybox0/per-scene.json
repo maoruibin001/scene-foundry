@@ -10,6 +10,11 @@
   "cameraHeightErrM": 0.058364736236305725,
   "vfovErrDeg": 4.739751263010174,
   "scale": 0.751796924330548,
+  "roomFitted": true,
+  "cameraPositionErrM": 0.9145140573126151,
+  "pitchErrDeg": 1.877038180944992,
+  "relRotErrDeg": 11.744555266685715,
+  "baselineDirErrDeg": 10.233675759856794,
   "anchoredRecall": 0.5454545454545454
  },
  "ai_005_010": {
@@ -23,6 +28,11 @@
   "cameraHeightErrM": 0.6152840677852627,
   "vfovErrDeg": 7.031582442674143,
   "scale": 1.1667360504220372,
+  "roomFitted": true,
+  "cameraPositionErrM": 1.8728511052199224,
+  "pitchErrDeg": 4.538172266227441,
+  "relRotErrDeg": 16.90758541068484,
+  "baselineDirErrDeg": 5.690156947686918,
   "anchoredRecall": 0.3333333333333333
  },
  "ai_007_001": {
@@ -36,6 +46,11 @@
   "cameraHeightErrM": 0.7194666233739605,
   "vfovErrDeg": 7.891019146499709,
   "scale": 0.967186485741652,
+  "roomFitted": true,
+  "cameraPositionErrM": 1.2881277407145122,
+  "pitchErrDeg": 3.444304263761405,
+  "relRotErrDeg": 17.591974083075282,
+  "baselineDirErrDeg": 10.874548185731784,
   "anchoredRecall": 0.4166666666666667
  },
  "ai_008_005": {
@@ -49,6 +64,11 @@
   "cameraHeightErrM": 0.07440768875819498,
   "vfovErrDeg": 13.907075985103347,
   "scale": 0.6451173578565362,
+  "roomFitted": true,
+  "cameraPositionErrM": 2.768613360558968,
+  "pitchErrDeg": 4.068746706067454,
+  "relRotErrDeg": 21.352662779456764,
+  "baselineDirErrDeg": 115.4977936219096,
   "anchoredRecall": 0.0
  },
  "ai_010_007": {
@@ -62,6 +82,11 @@
   "cameraHeightErrM": 0.9717356032622975,
   "vfovErrDeg": 6.172145750837229,
   "scale": 1.0754591016005772,
+  "roomFitted": true,
+  "cameraPositionErrM": 1.5409592314672944,
+  "pitchErrDeg": 4.44029121757613,
+  "relRotErrDeg": 10.808630392723508,
+  "baselineDirErrDeg": 18.000501575613193,
   "anchoredRecall": 0.6428571428571429
  },
  "ai_015_001": {
@@ -75,6 +100,11 @@
   "cameraHeightErrM": 0.4638369918435718,
   "vfovErrDeg": 15.339463355660643,
   "scale": 0.9676758336755679,
+  "roomFitted": true,
+  "cameraPositionErrM": 1.0457898489061646,
+  "pitchErrDeg": 1.9159067717323244,
+  "relRotErrDeg": 26.521075023232278,
+  "baselineDirErrDeg": 5.747907297989965,
   "anchoredRecall": 0.6666666666666666
  },
  "ai_015_010": {
@@ -88,6 +118,11 @@
   "cameraHeightErrM": 0.7803340145980451,
   "vfovErrDeg": 13.907075998292644,
   "scale": 1.5932811099016266,
+  "roomFitted": true,
+  "cameraPositionErrM": 6.67998285251186,
+  "pitchErrDeg": 0.6539908769175917,
+  "relRotErrDeg": 16.795787554079304,
+  "baselineDirErrDeg": 7.832819382560461,
   "anchoredRecall": 0.0
  },
  "ai_016_004": {
@@ -97,10 +132,15 @@
   "centerErrM": null,
   "sizeErr": null,
   "meanIoU3d": 0.0,
-  "cameraForwardErrDeg": 4.977346487047463,
-  "cameraHeightErrM": 0.18634913401025488,
+  "cameraForwardErrDeg": null,
+  "cameraHeightErrM": null,
   "vfovErrDeg": 27.658063068868167,
   "scale": 1.0378830375729877,
+  "roomFitted": false,
+  "cameraPositionErrM": null,
+  "pitchErrDeg": 1.2065589310329443,
+  "relRotErrDeg": 7.022155780059874,
+  "baselineDirErrDeg": 19.189766695909277,
   "anchoredRecall": 0.0
  },
  "ai_030_001": {
@@ -114,6 +154,11 @@
   "cameraHeightErrM": 0.13438676066817878,
   "vfovErrDeg": 13.599705737160196,
   "scale": 0.9867637983052082,
+  "roomFitted": true,
+  "cameraPositionErrM": 1.2410759663268225,
+  "pitchErrDeg": 2.7693722690864684,
+  "relRotErrDeg": 16.92305032524645,
+  "baselineDirErrDeg": 100.78503785085232,
   "anchoredRecall": 0.7692307692307693
  },
  "ai_033_002": {
@@ -127,6 +172,11 @@
   "cameraHeightErrM": 0.5268852723201192,
   "vfovErrDeg": 15.052991588554297,
   "scale": 0.942721373908291,
+  "roomFitted": true,
+  "cameraPositionErrM": 1.9473381143656792,
+  "pitchErrDeg": 3.2312449964115264,
+  "relRotErrDeg": 10.017228506553053,
+  "baselineDirErrDeg": 82.04803569636672,
   "anchoredRecall": 0.0
  },
  "ai_034_002": {
@@ -140,6 +190,11 @@
   "cameraHeightErrM": 0.32058720935973417,
   "vfovErrDeg": 24.506795198466023,
   "scale": 0.9227242079508067,
+  "roomFitted": true,
+  "cameraPositionErrM": 1.8377125775836305,
+  "pitchErrDeg": 0.7222320864748838,
+  "relRotErrDeg": 9.973776670860918,
+  "baselineDirErrDeg": 3.5841605874407905,
   "anchoredRecall": 0.38461538461538464
  },
  "ai_035_001": {
@@ -153,6 +208,11 @@
   "cameraHeightErrM": 1.1172452041766725,
   "vfovErrDeg": 2.0053522829578796,
   "scale": 0.8818173647539003,
+  "roomFitted": true,
+  "cameraPositionErrM": 8.609370879450106,
+  "pitchErrDeg": 5.104866091965169,
+  "relRotErrDeg": 66.68771024136095,
+  "baselineDirErrDeg": 176.67130347760283,
   "anchoredRecall": 0.0
  },
  "ai_035_004": {
@@ -166,6 +226,11 @@
   "cameraHeightErrM": 0.12806816453709402,
   "vfovErrDeg": 16.658167535311115,
   "scale": 0.7917568335415713,
+  "roomFitted": true,
+  "cameraPositionErrM": 2.43533501517856,
+  "pitchErrDeg": 1.4311963928697486,
+  "relRotErrDeg": 17.0505330572324,
+  "baselineDirErrDeg": 11.897106730780452,
   "anchoredRecall": 0.6
  },
  "ai_039_002": {
@@ -179,6 +244,11 @@
   "cameraHeightErrM": 0.1426307279481625,
   "vfovErrDeg": 4.1087675585913495,
   "scale": 0.864589834983765,
+  "roomFitted": true,
+  "cameraPositionErrM": 0.7525241399886542,
+  "pitchErrDeg": 3.371086896872165,
+  "relRotErrDeg": 8.74766783950081,
+  "baselineDirErrDeg": 4.812233506468415,
   "anchoredRecall": 0.21428571428571427
  },
  "ai_041_002": {
@@ -192,6 +262,11 @@
   "cameraHeightErrM": 1.6157710032448254,
   "vfovErrDeg": 11.042287008282084,
   "scale": 0.6003648293165942,
+  "roomFitted": true,
+  "cameraPositionErrM": 2.9276088826256172,
+  "pitchErrDeg": 3.9884048025669143,
+  "relRotErrDeg": 6.340358422515611,
+  "baselineDirErrDeg": 15.656148821926942,
   "anchoredRecall": 0.4
  },
  "ai_044_003": {
@@ -201,10 +276,15 @@
   "centerErrM": null,
   "sizeErr": null,
   "meanIoU3d": 0.0,
-  "cameraForwardErrDeg": 22.844041244393757,
-  "cameraHeightErrM": 0.11619499302059166,
+  "cameraForwardErrDeg": null,
+  "cameraHeightErrM": null,
   "vfovErrDeg": 17.917780551019106,
   "scale": 1.1646767779580975,
+  "roomFitted": false,
+  "cameraPositionErrM": null,
+  "pitchErrDeg": 5.217141857733423,
+  "relRotErrDeg": 9.948143881249521,
+  "baselineDirErrDeg": 29.961626782505753,
   "anchoredRecall": 0.0
  },
  "ai_048_008": {
@@ -218,6 +298,11 @@
   "cameraHeightErrM": 0.33269418956307373,
   "vfovErrDeg": 12.548378971853387,
   "scale": 1.1972392028510115,
+  "roomFitted": true,
+  "cameraPositionErrM": 1.4110079237922533,
+  "pitchErrDeg": 1.6628655569803912,
+  "relRotErrDeg": 3.437595411925828,
+  "baselineDirErrDeg": 22.4968137743653,
   "anchoredRecall": 0.5
  },
  "ai_052_009": {
@@ -231,6 +316,11 @@
   "cameraHeightErrM": 0.5522449028840409,
   "vfovErrDeg": 11.328742884369204,
   "scale": 0.7780076154884805,
+  "roomFitted": true,
+  "cameraPositionErrM": 2.1139652222386123,
+  "pitchErrDeg": 2.0787052724575394,
+  "relRotErrDeg": 17.58777421073357,
+  "baselineDirErrDeg": 21.00428366511508,
   "anchoredRecall": 0.1875
  },
  "ai_053_007": {
@@ -240,10 +330,15 @@
   "centerErrM": null,
   "sizeErr": null,
   "meanIoU3d": 0.0,
-  "cameraForwardErrDeg": 139.39945070475602,
-  "cameraHeightErrM": 0.2679837775897502,
+  "cameraForwardErrDeg": null,
+  "cameraHeightErrM": null,
   "vfovErrDeg": 12.473997072763456,
   "scale": 0.8459048667026199,
+  "roomFitted": false,
+  "cameraPositionErrM": null,
+  "pitchErrDeg": 2.807915445414188,
+  "relRotErrDeg": 79.8740059968976,
+  "baselineDirErrDeg": 121.64362590460995,
   "anchoredRecall": 0.0
  },
  "vox_1101_00": {
@@ -257,6 +352,11 @@
   "cameraHeightErrM": null,
   "vfovErrDeg": null,
   "scale": 1.2019579615261728,
+  "roomFitted": true,
+  "cameraPositionErrM": null,
+  "pitchErrDeg": 0.3644346502137359,
+  "relRotErrDeg": 0.5153879905300197,
+  "baselineDirErrDeg": null,
   "anchoredRecall": 0.7058823529411765
  },
  "vox_1101_01": {
@@ -270,6 +370,11 @@
   "cameraHeightErrM": null,
   "vfovErrDeg": null,
   "scale": 0.9936903279744147,
+  "roomFitted": true,
+  "cameraPositionErrM": null,
+  "pitchErrDeg": 0.4162336806835245,
+  "relRotErrDeg": 0.5886426691349093,
+  "baselineDirErrDeg": null,
   "anchoredRecall": 1.0
  },
  "vox_1101_02": {
@@ -283,6 +388,11 @@
   "cameraHeightErrM": null,
   "vfovErrDeg": null,
   "scale": 0.988004905694356,
+  "roomFitted": true,
+  "cameraPositionErrM": null,
+  "pitchErrDeg": 0.21688115353492957,
+  "relRotErrDeg": 0.3067161771917379,
+  "baselineDirErrDeg": null,
   "anchoredRecall": 1.0
  },
  "vox_1101_03": {
@@ -296,6 +406,11 @@
   "cameraHeightErrM": null,
   "vfovErrDeg": null,
   "scale": 0.7441295638779368,
+  "roomFitted": true,
+  "cameraPositionErrM": null,
+  "pitchErrDeg": 0.26064459158169345,
+  "relRotErrDeg": 0.3686069574606456,
+  "baselineDirErrDeg": null,
   "anchoredRecall": 1.0
  },
  "vox_1101_04": {
@@ -309,6 +424,11 @@
   "cameraHeightErrM": null,
   "vfovErrDeg": null,
   "scale": 0.8737185381544417,
+  "roomFitted": true,
+  "cameraPositionErrM": null,
+  "pitchErrDeg": 0.6276970569739777,
+  "relRotErrDeg": 0.8876954714004577,
+  "baselineDirErrDeg": null,
   "anchoredRecall": 0.9333333333333333
  },
  "vox_1101_05": {
@@ -322,6 +442,11 @@
   "cameraHeightErrM": null,
   "vfovErrDeg": null,
   "scale": 0.8770164627130879,
+  "roomFitted": true,
+  "cameraPositionErrM": null,
+  "pitchErrDeg": 0.5938637371588151,
+  "relRotErrDeg": 0.839848271580574,
+  "baselineDirErrDeg": null,
   "anchoredRecall": 1.0
  },
  "vox_1101_06": {
@@ -335,6 +460,11 @@
   "cameraHeightErrM": null,
   "vfovErrDeg": null,
   "scale": 0.8381373637496231,
+  "roomFitted": true,
+  "cameraPositionErrM": null,
+  "pitchErrDeg": 0.33635675219381345,
+  "relRotErrDeg": 0.4756799392178893,
+  "baselineDirErrDeg": null,
   "anchoredRecall": 1.0
  },
  "vox_1101_07": {
@@ -348,6 +478,11 @@
   "cameraHeightErrM": null,
   "vfovErrDeg": null,
   "scale": 0.7567888173489322,
+  "roomFitted": true,
+  "cameraPositionErrM": null,
+  "pitchErrDeg": 0.4488150723568049,
+  "relRotErrDeg": 0.6347195509315603,
+  "baselineDirErrDeg": null,
   "anchoredRecall": 1.0
  },
  "vox_1101_08": {
@@ -361,6 +496,11 @@
   "cameraHeightErrM": null,
   "vfovErrDeg": null,
   "scale": 0.7591787796778295,
+  "roomFitted": true,
+  "cameraPositionErrM": null,
+  "pitchErrDeg": 0.3782539802258299,
+  "relRotErrDeg": 0.5349314231448238,
+  "baselineDirErrDeg": null,
   "anchoredRecall": 1.0
  },
  "vox_1101_09": {
@@ -374,6 +514,11 @@
   "cameraHeightErrM": null,
   "vfovErrDeg": null,
   "scale": 1.1904274776628274,
+  "roomFitted": true,
+  "cameraPositionErrM": null,
+  "pitchErrDeg": 0.20287275302942565,
+  "relRotErrDeg": 0.2869053238300761,
+  "baselineDirErrDeg": null,
   "anchoredRecall": 1.0
  },
  "vox_1101_10": {
@@ -387,6 +532,11 @@
   "cameraHeightErrM": null,
   "vfovErrDeg": null,
   "scale": 1.2611360710405068,
+  "roomFitted": true,
+  "cameraPositionErrM": null,
+  "pitchErrDeg": 4.4243350872283935,
+  "relRotErrDeg": 6.256177210927912,
+  "baselineDirErrDeg": null,
   "anchoredRecall": 1.0
  },
  "vox_1101_11": {
@@ -400,6 +550,11 @@
   "cameraHeightErrM": null,
   "vfovErrDeg": null,
   "scale": 0.8693166317323512,
+  "roomFitted": true,
+  "cameraPositionErrM": null,
+  "pitchErrDeg": 0.27675796345963183,
+  "relRotErrDeg": 0.39139467516285614,
+  "baselineDirErrDeg": null,
   "anchoredRecall": 1.0
  },
  "vox_1101_12": {
@@ -413,6 +568,11 @@
   "cameraHeightErrM": null,
   "vfovErrDeg": null,
   "scale": 0.8256127483042873,
+  "roomFitted": true,
+  "cameraPositionErrM": null,
+  "pitchErrDeg": 0.3388422605870807,
+  "relRotErrDeg": 0.4791949712645402,
+  "baselineDirErrDeg": null,
   "anchoredRecall": 1.0
  },
  "vox_1101_13": {
@@ -426,6 +586,11 @@
   "cameraHeightErrM": null,
   "vfovErrDeg": null,
   "scale": 0.9966352507005537,
+  "roomFitted": true,
+  "cameraPositionErrM": null,
+  "pitchErrDeg": 0.5149416189237995,
+  "relRotErrDeg": 0.7282361958355281,
+  "baselineDirErrDeg": null,
   "anchoredRecall": 1.0
  },
  "vox_1101_14": {
@@ -439,6 +604,11 @@
   "cameraHeightErrM": null,
   "vfovErrDeg": null,
   "scale": 1.0111338675014023,
+  "roomFitted": true,
+  "cameraPositionErrM": null,
+  "pitchErrDeg": 0.26338375083305576,
+  "relRotErrDeg": 0.37248070855037807,
+  "baselineDirErrDeg": null,
   "anchoredRecall": 0.7857142857142857
  },
  "vox_1101_15": {
@@ -452,6 +622,11 @@
   "cameraHeightErrM": null,
   "vfovErrDeg": null,
   "scale": 0.6259275038181559,
+  "roomFitted": true,
+  "cameraPositionErrM": null,
+  "pitchErrDeg": 0.2726781806931699,
+  "relRotErrDeg": 0.38562499933684363,
+  "baselineDirErrDeg": null,
   "anchoredRecall": 1.0
  },
  "vox_1101_16": {
@@ -465,6 +640,11 @@
   "cameraHeightErrM": null,
   "vfovErrDeg": null,
   "scale": 1.000132008648133,
+  "roomFitted": true,
+  "cameraPositionErrM": null,
+  "pitchErrDeg": 0.39897444489719325,
+  "relRotErrDeg": 0.5642345010268632,
+  "baselineDirErrDeg": null,
   "anchoredRecall": 1.0
  },
  "vox_1101_17": {
@@ -478,6 +658,11 @@
   "cameraHeightErrM": null,
   "vfovErrDeg": null,
   "scale": 1.1771872687463445,
+  "roomFitted": true,
+  "cameraPositionErrM": null,
+  "pitchErrDeg": 0.29284028236412624,
+  "relRotErrDeg": 0.4141384735417194,
+  "baselineDirErrDeg": null,
   "anchoredRecall": 0.8333333333333334
  },
  "vox_1101_18": {
@@ -491,6 +676,11 @@
   "cameraHeightErrM": null,
   "vfovErrDeg": null,
   "scale": 1.0021716998968675,
+  "roomFitted": true,
+  "cameraPositionErrM": null,
+  "pitchErrDeg": 0.4104813917090104,
+  "relRotErrDeg": 0.5805077305165911,
+  "baselineDirErrDeg": null,
   "anchoredRecall": 1.0
  },
  "vox_1101_19": {
@@ -504,6 +694,11 @@
   "cameraHeightErrM": null,
   "vfovErrDeg": null,
   "scale": 0.8668012318922118,
+  "roomFitted": true,
+  "cameraPositionErrM": null,
+  "pitchErrDeg": 0.22847388161751694,
+  "relRotErrDeg": 0.32311075499019953,
+  "baselineDirErrDeg": null,
   "anchoredRecall": 0.8235294117647058
  }
 }

@@ -1,6 +1,7 @@
 {
- "version": "gt-scene-score-v3",
+ "version": "gt-scene-score-v4",
  "summary": {
+  "roomFitted": true,
   "scale": 0.8693166317323512,
   "absScaleErr": 0.14004785675257528,
   "cameraPositionErrM": null,
@@ -8,6 +9,9 @@
   "cameraHeightErrM": null,
   "vfovErrDeg": null,
   "orthoHeightLogErr": 0.005173280581585038,
+  "pitchErrDeg": 0.27675796345963183,
+  "relRotErrDeg": 0.39139467516285614,
+  "baselineDirErrDeg": null,
   "objectRecall": 1.0,
   "objectPrecision": 0.8888888888888888,
   "centerErrM": 0.08838497271046031,
