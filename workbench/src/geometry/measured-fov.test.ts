@@ -36,3 +36,12 @@ test('binding an already bound scene returns it unchanged',()=>{
  const once=bindReferenceFrames({cameras:[{name:'c',referenceIndex:1,position:[0,0,1],target:[0,1,1],fov:1.08,projection:'perspective'}]},[{path,vfov:.82}]);
  expect(bindReferenceFrames(once,[{path,vfov:.9}])).toBe(once);
 });
+
+test('a copy of a locked scene keeps its pose; a moved camera is locked again',()=>{
+ const root=mkdtempSync(join(tmpdir(),'bind-stamp-')),path=join(root,'ref.png');
+ expect(Bun.spawnSync([reconstructionPython(),'-c','from PIL import Image; import sys; Image.new("RGB",(1024,768)).save(sys.argv[1])',path]).exitCode).toBe(0);
+ const once=bindReferenceFrames({cameras:[{name:'c',referenceIndex:1,position:[0,0,1],target:[0,1,1],fov:1.08,projection:'perspective'}]},[{path,vfov:.82}]);
+ const copy=JSON.parse(JSON.stringify(once));
+ expect(bindReferenceFrames(copy,[{path,vfov:.82}])).toBe(copy);
+ const moved=JSON.parse(JSON.stringify(once));moved.cameras[0].fov=1.2;expect(bindReferenceFrames(moved,[{path,vfov:.82}]).cameras[0].fov).toBe(.82);
+});

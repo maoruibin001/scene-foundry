@@ -10,10 +10,20 @@ import {lockAnchorCamera,type AnchorCamera} from './measured-camera';
 // Scenes this function returned. The graybox preview binds a candidate and hands that object to the repair renderer, which binds again;
 // the measured locks are not idempotent (camera 1's locked height depends on the depth seen from where it already stands, and the
 // derived pose drifts by ~1e-15), so the second pass changed the scene hash and every repair preview failed (v27, 2026-10-29).
+// The visual repair derives each candidate from the bound source and the renderer binds that copy again (v31, 2026-10-29: every
+// candidate preview failed "实际预览回执与候选不一致"), so the identity check is not enough: a locked camera carries `measuredLock`, the
+// digest of the pose it was locked to, and a scene whose reference cameras all still match their stamps is returned unchanged. A camera a
+// patch moved no longer matches and is locked again.
 const BOUND=new WeakSet<object>();
+const lockStamp=(c:any)=>digest(JSON.stringify([c.position,c.target,c.fov]));
+const locks=(images:{vfov?:number;pose?:ViewPose;camera?:AnchorCamera}[])=>images.some(i=>Number.isFinite(i.vfov)||i.pose||i.camera);
 export function bindReferenceFrames<T extends {cameras:any[]}>(scene:T,images:{path:string;vfov?:number;pose?:ViewPose;camera?:AnchorCamera}[]):T{
  if(BOUND.has(scene))return scene;
- const bound=bindOnce(scene,images);BOUND.add(bound);return bound;
+ const reference=scene.cameras.filter(c=>c.referenceIndex!==null&&c.projection!=='orthographic');
+ if(locks(images)&&reference.length&&reference.every(c=>c.frame&&c.measuredLock===lockStamp(c))){BOUND.add(scene);return scene;}
+ const bound=bindOnce(scene,images);
+ if(locks(images))bound.cameras=bound.cameras.map(c=>c.referenceIndex!==null&&c.projection!=='orthographic'?{...c,measuredLock:lockStamp(c)}:c);
+ BOUND.add(bound);return bound;
 }
 function bindOnce<T extends {cameras:any[]}>(scene:T,images:{path:string;vfov?:number;pose?:ViewPose;camera?:AnchorCamera}[]):T{
  if(!images.length)return {...scene,cameras:scene.cameras.map(({frame,...c})=>c)};
@@ -27,7 +37,7 @@ function bindOnce<T extends {cameras:any[]}>(scene:T,images:{path:string;vfov?:n
  // measured-pose-v2：机位间距 = 测得比例 × 场景从参考机位 1 看到的中位深度，只在需要时计算一次
  const depth=anchor&&images.some(i=>i.pose?.lockSpacing)?probe?.depth(anchor):undefined;
  const frames=sizes.map(([w,h]:number[],i:number)=>({...referenceFrame(w,h),referenceSha256:digest(readFileSync(images[i].path))}));
- return {...scene,cameras:scene.cameras.map(({frame,...camera})=>{
+ return {...scene,cameras:scene.cameras.map(({frame,measuredLock,...camera})=>{
   if(camera.referenceIndex===null)return camera;
   const actual=frames[camera.referenceIndex-1];if(!actual)throw Error('参考机位没有对应原图');
   const vfov=images[camera.referenceIndex-1].vfov;
