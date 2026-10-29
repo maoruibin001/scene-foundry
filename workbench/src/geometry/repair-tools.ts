@@ -9,6 +9,7 @@ import type {CodexToolKit,ToolContent} from '../codex-tools';
 import {sceneVisibility,visibilityContext} from './visibility';
 import {cameraPreflight} from './camera-preflight';
 import {renderRepairPreview} from './repair-engine-preview';
+import {bindReferenceFrames,hasMeasuredLocks} from './reference-framing';
 import {reviewedCandidates,REVIEWED_SELECTION_SCHEMA} from './reviewed-candidates';
 import {previewPerformance} from './preview-performance';
 import {NoActionableChange} from '../contracts';
@@ -21,7 +22,11 @@ const text=(value:any):ToolContent=>({type:'text',text:JSON.stringify(value)});
 export function createRepairTools(options:{source:any;textures:any;observation?:any;folder:string;signal:AbortSignal;images:{path:string;mime:string}[];refs:string[];validate:(patch:any)=>any;apply:(patch:any)=>any;render?:typeof renderRepairPreview;sourceFrames?:{referenceIndex:number;path:string}[];inspectRegion?:typeof inspectVisualRegion;onEvent?:(message:string)=>void;validationIdentity?:string}){
  const {source,textures,folder,signal}=options;mkdirSync(folder,{recursive:true});
  const counts={inspect_visual_region:0,inspect_scene_parts:0,check_scene_patch:0,render_scene_patch:0,enginePreviews:0},limits={inspect_visual_region:6,inspect_scene_parts:8,check_scene_patch:6,render_scene_patch:8};
- const audited:any[]=[],reviewed=reviewedCandidates({folder,validate:options.validate,apply:options.apply});let busy=false;let latestFrames:{referenceIndex:number;path:string}[]=[];
+ // Candidates are bound to the reference frames here, once, with the images the renderer uses. The renderer then receives a scene whose
+ // measured locks it leaves alone, so its receipt hash is the candidate's (v31 ai_003_010: a patch that touched camera 2 was re-locked in
+ // the renderer and every preview failed "实际预览回执与候选不一致").
+ const apply=(patch:any)=>hasMeasuredLocks(options.images)?bindReferenceFrames(options.apply(patch),options.images):options.apply(patch);
+ const audited:any[]=[],reviewed=reviewedCandidates({folder,validate:options.validate,apply});let busy=false;let latestFrames:{referenceIndex:number;path:string}[]=[];
  const auditFile=join(folder,'tool-audit.json');
  if(existsSync(auditFile)){
   const prior=JSON.parse(readFileSync(auditFile,'utf8'));
@@ -106,7 +111,7 @@ export function createRepairTools(options:{source:any;textures:any;observation?:
    }
    if(typeof patchJson!=='string'||patchJson.length>1500000)throw Error('补丁必须为有限大小的完整JSON字符串');
    const patch=JSON.parse(patchJson);row.patchSha256=digest(stable(patch));save(join(dir,'patch.json'),patch);
-   options.validate(patch);const next=options.apply(patch);row.sceneSha256=digest(stable(next));save(join(dir,'scene.json'),next);
+   options.validate(patch);const next=apply(patch);row.sceneSha256=digest(stable(next));save(join(dir,'scene.json'),next);
    let content:ToolContent[];
    if(name==='check_scene_patch'){
     const report=sceneVisibility(next,textures);save(join(dir,'visibility.json'),report);

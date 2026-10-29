@@ -16,7 +16,9 @@ import {lockAnchorCamera,type AnchorCamera} from './measured-camera';
 // patch moved no longer matches and is locked again.
 const BOUND=new WeakSet<object>();
 const lockStamp=(c:any)=>digest(JSON.stringify([c.position,c.target,c.fov]));
-const locks=(images:{vfov?:number;pose?:ViewPose;camera?:AnchorCamera}[])=>images.some(i=>Number.isFinite(i.vfov)||i.pose||i.camera);
+/** Whether any reference image carries a measured lock (FoV, relative pose or camera-1 pose); without one, binding is idempotent. */
+export const hasMeasuredLocks=(images:{vfov?:number;pose?:ViewPose;camera?:AnchorCamera}[])=>images.some(i=>Number.isFinite(i.vfov)||i.pose||i.camera);
+const locks=hasMeasuredLocks;
 export function bindReferenceFrames<T extends {cameras:any[]}>(scene:T,images:{path:string;vfov?:number;pose?:ViewPose;camera?:AnchorCamera}[]):T{
  if(BOUND.has(scene))return scene;
  const reference=scene.cameras.filter(c=>c.referenceIndex!==null&&c.projection!=='orthographic');
