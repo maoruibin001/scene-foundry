@@ -25,6 +25,20 @@ export function savedStage(ctx:any,role:string,validate:(value:any)=>any,allowRe
    const sceneFile=join(folder,'scene.json'),scene=read(sceneFile),value=validate({templates:scene.program.templates}),gate=read(join(folder,'gate.json'));
    if(gate.runtimeDigest&&gate.frames?.length){const text=JSON.stringify(value),receipt={kind:'saved-graybox-artifact',requestedModel:source.modelSettings?.model,sourceJobId:id,sourceVersion:source.pipelineVersion,sceneSha256:digest(readFileSync(sceneFile)),qualityAccepted:gate.passed};return {value,text,receipt,proof:{sourceJobId:id,sourceVersion:source.pipelineVersion,sourceFolder:folder.slice(generation.length+1),sourceResponse:'scene.json',responseSha256:digest(text),receipt,chain:[...seen],validatedAt:Date.now()}};}
   }
+  // A graybox repair folder's scene-space response is the repair tool's selection summary, not a space plan; validating it threw
+  // "空间规划输出版本无效" and failed every recovery of a job that had run a repair round (v27, 2026-10-29). A completed repair saved the
+  // space it applied with its receipt; reuse that, and skip a repair that did not complete so the previous folder is used instead.
+  if(role==='scene-space'&&/^space-repair-\d+$/.test(folder.split('/').at(-1)!)){
+   const file=join(folder,'applied-space.json'),receiptFile=join(folder,'repair-receipt.json'),modelReceipt=join(folder,role+'-receipt.json');
+   // Older repair contracts answered with the space itself; those folders keep the plain response path below.
+   const summary=existsSync(modelReceipt)&&/^graybox-space-preview-/.test(read(modelReceipt).toolsContract??'');
+   if(!existsSync(file)||!existsSync(receiptFile)){if(summary)continue;}
+   else{const text=readFileSync(file,'utf8'),space=JSON.parse(text),repair=read(receiptFile);
+   if(digest(JSON.stringify(space))!==repair.spaceSha256)throw Error('恢复的已修正空间与修正回执不一致');
+   const receipt={...repair.modelReceipt,kind:'reused-repaired-space',repairContract:repair.contract,spaceSha256:repair.spaceSha256};
+   if(receipt.requestedModel!==ctx.job.modelSettings?.model)throw Error('恢复输出的模型来源不一致');
+   return {value:validate(space),text,receipt,proof:{sourceJobId:id,sourceVersion:source.pipelineVersion,sourceResponse:'applied-space.json',sourceFolder:folder.slice(generation.length+1),responseSha256:digest(text),receipt,chain:[...seen],validatedAt:Date.now()}};}
+  }
   for(const prefix of [role+'-',...(allowRejected?[role+'-invalid-']:[])]){const file=join(folder,prefix+'response.txt'),receiptFile=join(folder,prefix+'receipt.json');if(!existsSync(file)||!existsSync(receiptFile))continue;
    const receipt=read(receiptFile);let prompt:any;
    if(request){
