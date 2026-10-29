@@ -2,15 +2,17 @@
 # Re-score stored predictions (<scenes_dir>/<id>/pred-0.json) with the current score.py, rewrite each score-0.json, and, when given,
 # refresh the per-scene table and its statistics. A stats entry is recomputed only if its per-scene values changed or it is new, so
 # entries the metric change does not touch keep their published numbers. Medians: percentile bootstrap over scenes; rho: Spearman
-# between judge and metric, same bootstrap (10000 resamples, seed 0). Set A excludes ai_016_004 (2 ground-truth objects).
+# between judge and metric, same bootstrap (10000 resamples, seed 0). Object metrics (recall, precision, centre, size, IoU) only count scenes with objectMetricsValid (>= 8 scored ground-truth objects);
+# camera and pair metrics count every scene but ai_016_004 (2 objects, excluded from set A since v1).
 import os,sys,json,glob,numpy as np
 from scipy.stats import spearmanr
 H=os.path.dirname(os.path.abspath(__file__));sys.path.insert(0,H);from score import score
 FIELDS=('objectRecall','objectPrecision','centerErrM','sizeErr','meanIoU3d','cameraForwardErrDeg','cameraHeightErrM','vfovErrDeg','scale',
- 'roomFitted','cameraPositionErrM','pitchErrDeg','relRotErrDeg','baselineDirErrDeg')
+ 'objectMetricsValid','roomFitted','cameraPositionErrM','pitchErrDeg','relRotErrDeg','baselineDirErrDeg')
 STATS={'A':('objectRecall','anchoredRecall','objectPrecision','centerErrM','sizeErr','meanIoU3d','cameraForwardErrDeg','vfovErrDeg','cameraHeightErrM',
  'scale','cameraPositionErrM','pitchErrDeg','relRotErrDeg','baselineDirErrDeg'),
  'B':('objectRecall','anchoredRecall','objectPrecision','centerErrM','sizeErr','meanIoU3d','cameraForwardErrDeg','scale','pitchErrDeg','relRotErrDeg')}
+OBJECT={'objectRecall','anchoredRecall','objectPrecision','centerErrM','sizeErr','meanIoU3d'}
 RHO=('anchoredRecall','objectRecall','objectPrecision','sizeErr','centerErrM','cameraForwardErrDeg','cameraHeightErrM','cameraPositionErrM','relRotErrDeg','baselineDirErrDeg')
 def boot(f,cols,B=10000):
  rng=np.random.default_rng(0);n=len(cols[0]);v=[f(*[c[i] for c in cols]) for i in (rng.integers(0,n,n) for _ in range(B))]
@@ -29,7 +31,7 @@ def main(d,per=None,st=None):
  S=json.load(open(st))
  for g,keys in STATS.items():
   ids=[k for k in new if (k.startswith('ai_') if g=='A' else k.startswith('vox_')) and k!='ai_016_004']
-  def vec(m,src):return [(src[k]['judge'],src[k].get(m)) for k in ids if src[k].get(m) is not None]
+  def vec(m,src):return [(src[k]['judge'],src[k].get(m)) for k in ids if src[k].get(m) is not None and (m not in OBJECT or src[k].get('objectMetricsValid',True))]
   for m in keys:
    if f'{g}.{m}' not in S or vec(m,new)!=vec(m,old):
     v=vec(m,new);S[f'{g}.{m}']=boot(np.median,[np.array([x for _,x in v],float)]) if v else None

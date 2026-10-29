@@ -49,6 +49,9 @@ for f in sorted(glob.glob(os.path.join(os.path.dirname(os.path.abspath(__file__)
  r1=score(gt,P)['summary'];pair.append([r0['relRotErrDeg'],r0['baselineDirErrDeg'],r0['pitchErrDeg'],r1['relRotErrDeg'],r1['baselineDirErrDeg'],r1['pitchErrDeg']])
 print('%-48s %d of %d'%('2 objects, cams +.5m: room-fitted (want 0)',sum(1 for x in few if x[0]),len(few)))
 print('%-48s %d of %d'%('2 objects: height/position/forward None (want all)',sum(1 for x in few if x[1] is None and x[2] is None and x[3] is None),len(few)))
+# v5: a scene with fewer than 8 scored objects is flagged; object metrics from it do not enter set statistics.
+ok=lambda sid:(lambda g:score(g,frame(g,1,0,[0,0,0]))['summary']['objectMetricsValid'])(json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)),'..','hypersim',sid+'.json'))))
+print('%-48s %s'%('objectMetricsValid ai_052_009 32 objs (want True)',ok('ai_052_009')));print('%-48s %s'%('objectMetricsValid ai_053_007 4 objs (want False)',ok('ai_053_007')))
 b=np.array(pair,float)
 for n,col in zip(['identity: relative rotation deg (want 0)','identity: baseline direction deg (want 0)','identity: pitch deg (want 0)',
  'view 2 yawed 10 deg: relative rotation (want 10)','view 2 yawed 10 deg: baseline dir (want 0)','view 2 yawed 10 deg: pitch (want 0)'],b.T):

@@ -56,6 +56,9 @@ def fit_sim(P,G):
  s=float(np.sum((A@R2.T)*B)/max(np.sum(A*A),1e-9)) if len(P)>1 else 1.0
  R=yaw_rot(yaw);t=np.zeros(3);t[:2]=mg-s*R2@mp;t[2]=float(np.median(G[:,2]-s*P[:,2]))
  return s,R,t,yaw
+# Below 8 scored objects, recall moves in steps of 1/7 or more and the room fit (>=3 matches) is often out of reach whatever is built:
+# ai_053_007 has 4 (a door and three structural pieces) and read recall 0 in every run, including one the label-free check put at 0.23.
+MIN_GT_OBJECTS=8
 def match(G,Q,radius):
  if not G or not Q:return []
  C=np.array([[np.linalg.norm(np.subtract(g['center'],q['center']))+(0 if g['label']==q['label'] else .5) for q in Q] for g in G])
@@ -125,13 +128,13 @@ def _score(gt,pred,match_radius,s,R,t,yaw):
  persp=[c for c in cams if not c.get('orthographic')];ortho=[c for c in cams if c.get('orthographic')]
  mean=lambda rows,k,f=lambda v:v:float(np.mean([f(c[k]) for c in rows])) if rows and all(c.get(k) is not None for c in rows) else None
  relRot,baseDir=pair_errors(gt['cameras'],pred['cameras'])
- summary={'roomFitted':fitted,'scale':s,'absScaleErr':abs(math.log(s)),'cameraPositionErrM':mean(persp,'positionErrM'),'cameraForwardErrDeg':mean(cams,'forwardErrDeg'),
+ summary={'objectMetricsValid':n>=MIN_GT_OBJECTS,'roomFitted':fitted,'scale':s,'absScaleErr':abs(math.log(s)),'cameraPositionErrM':mean(persp,'positionErrM'),'cameraForwardErrDeg':mean(cams,'forwardErrDeg'),
   'cameraHeightErrM':mean(persp,'heightErrM',abs),'vfovErrDeg':mean(persp,'vfovErrDeg',abs),'orthoHeightLogErr':mean(ortho,'orthoHeightLogErr'),
   'pitchErrDeg':mean(cams,'pitchErrDeg',abs),'relRotErrDeg':relRot,'baselineDirErrDeg':baseDir,
   'objectRecall':matched/n if n else None,'objectPrecision':matched/len(Q) if Q else None,
   'centerErrM':float(np.median([o['centerErrM'] for o in objs])) if objs else None,'sizeErr':float(np.median([o['logSizeRatio'] for o in objs])) if objs else None,
   'meanIoU3d':float(np.sum([o['iou3d'] for o in objs])/n) if n else None}
- return {'version':'gt-scene-score-v4','summary':summary,'cameras':cams,'objects':objs}
+ return {'version':'gt-scene-score-v5','summary':summary,'cameras':cams,'objects':objs}
 
 if __name__=='__main__':
  gt,pred=json.load(open(sys.argv[1])),json.load(open(sys.argv[2]));r=score(gt,pred)

@@ -1,6 +1,7 @@
 {
- "version": "gt-scene-score-v4",
+ "version": "gt-scene-score-v5",
  "summary": {
+  "objectMetricsValid": true,
   "roomFitted": true,
   "scale": 1.1904274776628274,
   "absScaleErr": 0.17431246754435736,

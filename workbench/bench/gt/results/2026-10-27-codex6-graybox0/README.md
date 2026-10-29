@@ -4,9 +4,11 @@
 - **Code:** main at e5a10bc (retry v2, worker contract in the prompt, 2 scenes per kind).
 - **Model:** `gpt-6-astra-aihub-azure` through the codex6 relay.
 - **Rounds scored:** every scene's first graybox round. The job was cancelled after that round's judge score.
-- **Metric:** `score.py` gt-scene-score-v4 (see PROTOCOL.md change log). First published with v3; re-scored from the stored
+- **Metric:** `score.py` gt-scene-score-v5 (see PROTOCOL.md change log). First published with v3; re-scored from the stored
   predictions with `scripts/rescore.py`. Only the camera fields of ai_016_004, ai_044_003 and ai_053_007 changed (now unmeasurable);
-  object metrics are identical.
+  object metrics are identical. v5 (2026-10-29) leaves every per-scene number unchanged and takes object metrics into set
+  statistics only from the 13 scenes with at least 8 scored objects (flagged: ai_008_005, ai_035_004, ai_041_002, ai_044_003,
+  ai_053_007).
 - **Ordinary set:** ai_016_004 is excluded. Its ground truth has only 2 objects (staircase), so any method gets recall 0.
 - **Statistics:** medians with bootstrap 95% CIs over scenes. ρ is Spearman correlation between the graybox judge score and each metric.
 - **Files:**
@@ -18,12 +20,12 @@ Judge score ranged from 2.3 to 3.2, median 2.8.
 
 | metric | median [95% CI] |
 |---|---|
-| object recall (best-fit) | 0.41 [0.34, 0.60]; floor ≈ 0.30 |
-| object recall (anchored, as seen from the reference cameras) | 0.36 [0.00, 0.52]; 6 of 18 scenes score 0 |
-| object precision | 0.51 [0.40, 0.67] |
-| centre error | 0.42 m [0.29, 0.49] |
-| size error (\|log ratio\|) | 0.62 [0.35, 0.82] |
-| mean 3D IoU | 0.06 [0.02, 0.10] |
+| object recall (best-fit) | 0.42 [0.39, 0.64]; floor ≈ 0.30; object rows: n = 13 (v4, all 18: 0.41) |
+| object recall (anchored, as seen from the reference cameras) | 0.38 [0.19, 0.55]; 3 of 13 scenes score 0 (v4, all 18: 0.36, 6 at 0) |
+| object precision | 0.53 [0.50, 0.69] |
+| centre error | 0.42 m [0.31, 0.50] |
+| size error (\|log ratio\|) | 0.57 [0.35, 0.82] |
+| mean 3D IoU | 0.07 [0.02, 0.11] |
 | camera forward error | 12.3° [8.1, 17.4]; n = 16, room not fitted in ai_044_003 and ai_053_007 |
 | camera position error | 1.86 m [1.29, 2.44]; n = 16 |
 | camera height error | 0.50 m [0.14, 0.72]; n = 16 (v3 read 0.40 m with the two unfitted scenes near 0) |
@@ -33,14 +35,15 @@ Judge score ranged from 2.3 to 3.2, median 2.8.
 | baseline direction in view 1's frame | 16.8° [9.0, 56.0] |
 | absolute scale | 0.93 [0.82, 1.03] |
 
-ρ(judge, metric): every interval includes 0.
+ρ(judge, metric): every interval includes 0 except centre error, +0.62 [+0.06, +0.90] on the 13 scenes with valid object metrics:
+a higher judge score goes with a larger centre error.
 
 | metric | ρ [95% CI] |
 |---|---|
-| anchored recall | −0.31 [−0.69, +0.27] |
-| recall | −0.21 [−0.67, +0.38] |
-| precision | −0.16 [−0.61, +0.37] |
-| size error | +0.34 [−0.06, +0.71] |
+| anchored recall | −0.49 [−0.89, +0.16]; n = 13 (v4, all 18: −0.31) |
+| recall | −0.48 [−0.93, +0.24]; n = 13 |
+| precision | −0.23 [−0.82, +0.36]; n = 13 |
+| size error | +0.37 [−0.23, +0.78]; n = 13 |
 | camera forward error | +0.34 [−0.22, +0.79]; n = 16 |
 | relative rotation | −0.16 [−0.64, +0.38] |
 

@@ -99,3 +99,13 @@ The v1 metric aligned on cameras only and absorbed the camera-height error, whic
      height 0). Relative rotation must read 10° when view 2 is yawed 10°, with baseline direction and pitch at 0.
   Matching, alignment, thresholds and object metrics are unchanged. The baseline is re-scored from stored predictions
   (`scripts/rescore.py`). Affected: camera fields of ai_016_004, ai_044_003 and ai_053_007.
+- 2026-10-29, after ai_053_007 read recall 0 in every run, including a graybox the label-free object3d truth put at 0.23
+  (gt-scene-score-v5). That scene has 4 scored objects (a door and three structural pieces), and recall needs 3 matches before the
+  room can be fitted at all; with fewer than 8 objects recall moves in steps of 1/7 or more. The cause was the object count, not the
+  label mapping (a label mismatch only adds 0.5 m to the matching cost).
+  1. `objectMetricsValid` is false for a scene with fewer than 8 scored ground-truth objects. Its object metrics (recall,
+     precision, centre, size, IoU) are still reported per scene but do not enter set statistics. Camera and pair metrics still do.
+  2. Set A object statistics now cover 13 scenes. ai_008_005, ai_035_004, ai_041_002, ai_044_003 and ai_053_007 are flagged, as
+     well as ai_016_004 (already excluded). Self-test: ai_052_009 (32 objects) valid, ai_053_007 (4) not.
+  Matching, alignment, thresholds and the selection rule for scored objects are unchanged. The baseline is re-scored from stored
+  predictions (`scripts/rescore.py`).
