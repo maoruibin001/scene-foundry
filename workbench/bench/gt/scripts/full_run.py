@@ -69,7 +69,9 @@ def one(sid):
         if UNTIL in('graybox','delivery'):log(sid,'RETAINED',json.dumps({k:r['retained'].get(k) for k in ('round','object3d','passed','anchoredRecall','objectRecall')}))
         log(sid,'SCORE judge',r['judge'],'recall %.2f prec %.2f anchored %.2f'%(r['objectRecall'] or 0,r['objectPrecision'] or 0,r['anchoredRecall'] or 0));return
       # A quality stop (graybox plateau, delivery not reached) is the job's answer, not a fault to resume.
-      if UNTIL=='delivery' and rounds and j['status'] in('blocked','failed') and any(m in str(j.get('error')) for m in ('SPATIAL_GATE_FAILED','QUALITY','DELIVERY')):
+      # A job that ends at the delivery gate with a failed assessment and no error has used its repairs: that is its delivery result.
+      quality_end=j['status']=='failed' and j.get('stage')=='gate' and not j.get('error') and ((j.get('deliveryAssessment') or {}).get('status')=='failed')
+      if UNTIL=='delivery' and rounds and j['status'] in('blocked','failed') and (quality_end or any(m in str(j.get('error')) for m in ('SPATIAL_GATE_FAILED','QUALITY','DELIVERY'))):
         st['result']=finish(sid,x,job,j);save();r=st['result'];log(sid,'STOPPED',str(j.get('error'))[:160]);log(sid,'RETAINED',json.dumps({k:r['retained'].get(k) for k in ('round','object3d','passed','anchoredRecall','objectRecall')}));return
       if j['status'] in('blocked','failed','cancelled'):
         err=str(j.get('error'))[:160]
