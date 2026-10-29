@@ -12,6 +12,9 @@ sys.path.insert(0,B+'/scripts');from score import score
 OUT=sys.argv[1];os.makedirs(OUT,exist_ok=True)
 INPUTS={x['id']:{**x,'images':[os.path.join(B,i) for i in x['images']]} for x in json.load(open(B+'/inputs.json'))};IDS=sys.argv[2:] or list(INPUTS)
 MAX_RESUMES,BACKOFF,POLL=4,90,30
+# GT_UNTIL=graybox: let the graybox repair loop run until it passes, stops, or reaches GT_MAX_ROUNDS rounds; then score round 0 and the
+# round the job retained (blockout.repairBasis). Default: cancel after round 0.
+UNTIL=os.environ.get('GT_UNTIL','round0');MAX_ROUNDS=int(os.environ.get('GT_MAX_ROUNDS','4'))
 lock=threading.Lock();statePath=OUT+'/state.json'
 state=json.load(open(statePath)) if os.path.exists(statePath) else {}
 def log(*a):
@@ -32,13 +35,18 @@ def create(x):
       if line.startswith('HASH #job/'):return line.split('/')[-1].strip()
     raise RuntimeError('create failed: '+(r.stdout+r.stderr)[-300:])
 def run_dir(kind,job):return glob.glob(f'{V}/{"voxel" if kind=="voxel" else "ordinary"}/data/runs/{job}')[0]
-def finish(sid,x,job):
-  d=run_dir(x['kind'],job);o=f'{OUT}/{sid}';os.makedirs(o,exist_ok=True)
+def score_round(sid,x,d,n):
+  o=f'{OUT}/{sid}';os.makedirs(o,exist_ok=True)
   gtp=f'{B}/hypersim/{sid}.json' if x['set']=='A' else f'{B}/voxel/{sid}.json'
-  subprocess.run(['bun',B+'/scripts/scene_to_pred.ts',d+'/generation/blockout/0/render-scene.json',o+'/pred-0.json'],check=True,capture_output=True,env={**os.environ,'SF_REPO':REPO})
-  r=score(json.load(open(gtp)),json.load(open(o+'/pred-0.json')));json.dump(r,open(o+'/score-0.json','w'),indent=1,default=float)
-  judge=json.load(open(d+'/generation/blockout/0/gate.json'))['review']['score'];s=r['summary']
-  return {'judge':judge,**{k:s[k] for k in ('objectRecall','objectPrecision','centerErrM','sizeErr','meanIoU3d','cameraForwardErrDeg','cameraHeightErrM','vfovErrDeg','orthoHeightLogErr','scale')},'anchoredRecall':s['anchored']['objectRecall']}
+  subprocess.run(['bun',B+'/scripts/scene_to_pred.ts',f'{d}/generation/blockout/{n}/render-scene.json',f'{o}/pred-{n}.json'],check=True,capture_output=True,env={**os.environ,'SF_REPO':REPO})
+  r=score(json.load(open(gtp)),json.load(open(f'{o}/pred-{n}.json')));json.dump(r,open(f'{o}/score-{n}.json','w'),indent=1,default=float)
+  gate=json.load(open(f'{d}/generation/blockout/{n}/gate.json'));s=r['summary']
+  return {'round':n,'judge':gate['review']['score'],'passed':gate.get('passed'),'object3d':(gate.get('object3d') or {}).get('score'),**{k:s.get(k) for k in ('objectRecall','objectPrecision','centerErrM','sizeErr','meanIoU3d','cameraForwardErrDeg','cameraHeightErrM','vfovErrDeg','orthoHeightLogErr','scale')},'anchoredRecall':s['anchored']['objectRecall']}
+def finish(sid,x,job,j=None):
+  d=run_dir(x['kind'],job);r=score_round(sid,x,d,0)
+  best=((j or {}).get('blockout') or {}).get('repairBasis') or {}
+  if UNTIL=='graybox':r={**r,'rounds':len((j.get('blockout') or {}).get('rounds',[])),'blockoutStatus':(j.get('blockout') or {}).get('status'),'retained':score_round(sid,x,d,best['round']) if best.get('round') else r}
+  return r
 def one(sid):
   x=INPUTS[sid];p=port(x['kind']);st=state.setdefault(sid,{'jobs':[],'resumes':0,'recreated':0})
   if st.get('result') or st.get('failed'):return
@@ -47,10 +55,13 @@ def one(sid):
     if not job:job=create(x);st['jobs'].append(job);save();log(sid,'created',job)
     while True:
       j=api(p,f'/api/jobs/{job}');rounds=[r for r in (j.get('blockout') or {}).get('rounds',[]) if (r.get('review') or {}).get('score') is not None]
-      if rounds and j['status'] in('running','queued'):
-        api(p,f'/api/jobs/{job}/cancel','POST');log(sid,'graybox round 0 judge',rounds[0]['review']['score'],'-> cancelled');time.sleep(5);continue
-      if j['status']=='cancelled' and rounds:
-        st['result']=finish(sid,x,job);save();r=st['result']
+      b=j.get('blockout') or {}
+      done=bool(rounds) if UNTIL!='graybox' else bool(rounds) and (b.get('status') in('passed','stopped') or len(rounds)>=MAX_ROUNDS)
+      if done and j['status'] in('running','queued'):
+        api(p,f'/api/jobs/{job}/cancel','POST');log(sid,'graybox',len(rounds),'rounds, status',b.get('status'),'object3d',[(r.get('object3d') or {}).get('score') for r in rounds],'-> cancelled');time.sleep(5);continue
+      if rounds and (j['status']=='cancelled' or (done and j['status'] not in('running','queued'))):
+        st['result']=finish(sid,x,job,j);save();r=st['result']
+        if UNTIL=='graybox':log(sid,'RETAINED',json.dumps({k:r['retained'].get(k) for k in ('round','object3d','passed','anchoredRecall','objectRecall')}))
         log(sid,'SCORE judge',r['judge'],'recall %.2f prec %.2f anchored %.2f'%(r['objectRecall'] or 0,r['objectPrecision'] or 0,r['anchoredRecall'] or 0));return
       if j['status'] in('blocked','failed','cancelled'):
         err=str(j.get('error'))[:160]
