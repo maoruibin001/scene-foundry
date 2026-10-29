@@ -7,7 +7,15 @@ import {lockAnchorCamera,type AnchorCamera} from './measured-camera';
 
 /** 从可信输入读尺寸；覆盖模型或历史任务携带的画幅，不修改来源场景。带测量视场（measured-fov-v1）的参考图同样固定透视参考机位的 fov；
  * 带测量相对位姿（measured-pose-v1）的参考图，以参考图 1 的机位为锚点推出其余透视参考机位的位置与朝向。 */
+// Scenes this function returned. The graybox preview binds a candidate and hands that object to the repair renderer, which binds again;
+// the measured locks are not idempotent (camera 1's locked height depends on the depth seen from where it already stands, and the
+// derived pose drifts by ~1e-15), so the second pass changed the scene hash and every repair preview failed (v27, 2026-10-29).
+const BOUND=new WeakSet<object>();
 export function bindReferenceFrames<T extends {cameras:any[]}>(scene:T,images:{path:string;vfov?:number;pose?:ViewPose;camera?:AnchorCamera}[]):T{
+ if(BOUND.has(scene))return scene;
+ const bound=bindOnce(scene,images);BOUND.add(bound);return bound;
+}
+function bindOnce<T extends {cameras:any[]}>(scene:T,images:{path:string;vfov?:number;pose?:ViewPose;camera?:AnchorCamera}[]):T{
  if(!images.length)return {...scene,cameras:scene.cameras.map(({frame,...c})=>c)};
  const p=Bun.spawnSync([reconstructionPython(),'-c','import json,sys; from PIL import Image; print(json.dumps([list(Image.open(p).size) for p in sys.argv[1:]]))',...images.map(i=>i.path)],{stdout:'pipe',stderr:'pipe'});
  if(p.exitCode)throw Error('无法读取原始参考图尺寸：'+new TextDecoder().decode(p.stderr).slice(-600));

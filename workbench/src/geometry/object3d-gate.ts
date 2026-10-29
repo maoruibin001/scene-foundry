@@ -16,14 +16,14 @@
  * truth puts mostly right and mostly wrong (truth error per landmark: median .21).
  */
 import {join} from 'node:path';
-import {existsSync,readFileSync,writeFileSync} from 'node:fs';
+import {existsSync,readFileSync} from 'node:fs';
 import {digest,save} from '../store';
 import {compileGeometryProgram} from './program';
 import {basis,cameraRay,rayScene} from './camera-fit';
 
 export const OBJECT3D_GATE={version:'object3d-gate-v1',judge:'object3d-v1',tool:'moge-2'} as const;
 export const OBJECT3D_LIMITS={score:.35,gridWidth:64,gridHeight:48,feedbackRows:8,feedbackError:.35};
-const MEASURE=join(import.meta.dir,'measure-points.py'),JUDGE=join(import.meta.dir,'object3d-judge.py');
+const MEASURE=join(import.meta.dir,'measure-points.py'),JUDGE=join(import.meta.dir,'object3d-judge.py'),GRID=join(import.meta.dir,'object3d-grid-cli.ts');
 const DEFAULT_MODEL='Ruicheng/moge-2-vitl-normal';
 /** Checks that stay with object3d; the judge-row checks (evidence, critical-present, critical-floor) and the 2D residual checks do not. */
 const KEPT=['critical-visible','not-mirrored','camera-clear'];
@@ -63,9 +63,11 @@ export function object3dGrid(scene:any,W=OBJECT3D_LIMITS.gridWidth,H=OBJECT3D_LI
 
 /** Judge one rendered round (folder holds render-scene.json); writes object3d.json beside it. */
 export async function judgeObject3d(folder:string,runDir:string,signal?:AbortSignal){
- const scene=JSON.parse(readFileSync(join(folder,'render-scene.json'),'utf8')),observation=join(runDir,'generation/reference-observations.json');
+ const observation=join(runDir,'generation/reference-observations.json');
  if(!existsSync(observation))throw Error('object3d 评审缺少原图观察记录');
- writeFileSync(join(folder,'object3d-grid.json'),JSON.stringify(object3dGrid(scene)));
+ // Ray-casting two 64×48 grids takes tens of seconds on a full graybox; a child process keeps the server's API answering meanwhile.
+ const g=Bun.spawn([process.execPath,GRID,join(folder,'render-scene.json'),join(folder,'object3d-grid.json')],{stdout:'pipe',stderr:'pipe',signal});
+ const [gerr,gcode]=await Promise.all([new Response(g.stderr).text(),g.exited]);if(gcode)throw Error('object3d 射线网格失败：'+gerr.slice(-600));
  let result:any;try{result=await python([JUDGE,join(folder,'object3d-grid.json'),observation,join(runDir,'generation/reference-points')],signal);}catch(e){throw Error('object3d 评审失败：'+String(e));}
  if(!Number.isFinite(result.score))throw Error('object3d 评审没有可测地标');
  save(join(folder,'object3d.json'),result);return result;

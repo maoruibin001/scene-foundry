@@ -24,7 +24,7 @@ def save():
 def port(kind):return PORTS['voxel' if kind=='voxel' else 'ordinary']
 def api(p,path,method='GET'):
   r=urllib.request.Request(f'http://127.0.0.1:{p}{path}',method=method,data=b'{}' if method=='POST' else None,headers={'content-type':'application/json'})
-  return json.loads(urllib.request.urlopen(r,timeout=60).read())
+  return json.loads(urllib.request.urlopen(r,timeout=300).read())
 create_slots=threading.Semaphore(3)
 def create(x):
   with create_slots:
