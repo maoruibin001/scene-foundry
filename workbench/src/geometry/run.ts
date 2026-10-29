@@ -16,6 +16,7 @@ import {bindReferenceFrames} from './reference-framing';
 import {measuredFovRule,measuredVfov,measureReferenceFov} from './measured-fov';
 import {measuredPose,measuredPoseRule,measureReferencePose} from './measured-pose';
 import {measuredCamera,measuredCameraRule,measureReferenceCamera} from './measured-camera';
+import {measureReferencePoints,object3dRule} from './object3d-gate';
 import {crossTaskReuse} from '../reuse-mode';
 import {fitAssemblyBudget} from './triangle-budget';
 import {preserveOutput,saveDelivery,failureDisposition} from '../output-delivery';
@@ -83,6 +84,7 @@ export async function runGeneralScene({job,plan,dir,signal,stage,command,preview
  if(measuredFovRule(job)&&!job.referenceIntrinsics){job.referenceIntrinsics=await measureReferenceFov(job,images,dir,signal);event(job,'measured-fov','参考图垂直视场已测量：'+job.referenceIntrinsics.views.map((v:any)=>(v.vfov*180/Math.PI).toFixed(1)+'°').join('、'));}
  if(measuredPoseRule(job)&&!job.referencePose&&images.length>1){job.referencePose=await measureReferencePose(job,images,dir,signal);event(job,'measured-pose','参考图相对位姿已测量：'+job.referencePose.views.slice(1).map((v:any)=>'图'+v.referenceIndex+(v.baselineRatio<.03?' 仅转向':' 平移')).join('、'));}
  if(measuredCameraRule(job)&&!job.referenceCamera&&images.length){job.referenceCamera=await measureReferenceCamera(job,images,dir,signal);const c=job.referenceCamera.view;event(job,'measured-camera','参考机位 1 已测量：高度/中位深度 '+(c.heightRatio===null?'未测得':c.heightRatio.toFixed(2))+'，俯仰 '+(c.pitch===null?'未测得':c.pitch.toFixed(1)+'°'));}
+ if(object3dRule(job)&&!job.referencePoints&&images.length){job.referencePoints=await measureReferencePoints(job,images,dir,signal);event(job,'object3d-points','参考图三维点云已测量，用于灰模地标三维核对');}
  images.forEach((im,k)=>{const v=measuredVfov(job,k);if(v!==undefined)im.vfov=v;const pose=measuredPose(job,k);if(pose)im.pose=pose;const camera=measuredCamera(job,k);if(camera)im.camera=camera;});
  if(job.sceneKind==='voxel'&&!job.voxelConstructionVersion&&!['reuseSceneFrom','reusePlanFrom','reuseCheckpoint','reuseFrom','spatialRepairSource','executionRecoveryFrom','initialSpaceRecoverySource'].some(k=>job[k]))job.voxelConstructionVersion='voxel-lattice-v1';
  const legacyVoxel=job.sceneKind==='voxel'&&job.reuseSceneFrom&&!existsSync(join(runDir(job.reuseSceneFrom),'voxel-source-scene.json'));

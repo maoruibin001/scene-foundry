@@ -1,4 +1,5 @@
 import {compareObjectiveBlockers,objectiveBlockers} from './voxel-acceptance';
+import {compareObject3d,OBJECT3D_GATE} from './object3d-gate';
 export const SPATIAL_SELECTION_V1='net-closure-v1';
 export const SPATIAL_SELECTION='net-closure-v2';
 export const SPATIAL_NET_CLOSURE_MARGIN=.5;
@@ -15,6 +16,9 @@ export function selectSpatialCandidate(previous:SpatialCandidate|null,current:Sp
  if(!Number.isFinite(g.review?.score)||!Number.isFinite(g.review?.confidence))throw Error('空间候选缺少完整独立评估');
  if(!previous)return {candidate:current,eligible:true,changed:true,reason:'首个完整评估候选'};
  const old=previous.gate;
+ // Under object3d-gate-v1 the measured gate alone orders rounds; the review's confidence and rows are repair feedback only.
+ if(g.object3d&&old.object3d){const order=compareObject3d(g,old);
+  return order<0?{candidate:current,eligible:true,changed:true,reason:OBJECT3D_GATE.version+' 三维误差 '+old.object3d.score+' → '+g.object3d.score}:{candidate:previous,eligible:true,changed:false,reason:OBJECT3D_GATE.version+' 未优于来源：'+old.object3d.score+' → '+g.object3d.score};}
  if(g.protocol!==old.protocol||JSON.stringify(g.threshold)!==JSON.stringify(old.threshold)||JSON.stringify(current.space.spatialRelations)!==JSON.stringify(previous.space.spatialRelations))throw Error('空间候选的冻结关系或评审契约改变，不能跨契约选优');
  if(g.review.confidence<g.threshold.confidence)return {candidate:previous,eligible:false,changed:false,reason:'候选证据置信度未达门槛，保留原来源'};
  // An objectively accepted voxel round can still carry judge rows below 3; it is the accepted graybox, not a regression.
