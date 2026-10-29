@@ -39,6 +39,7 @@ import {prepareVisibilityEvidence} from './visibility-evidence';
 import {ensureProjectionEvidence} from './projection-evidence';
 import {VISIBILITY_PROMPT} from './visibility';
 import {cameraChangeHistory} from './camera-change-history';
+import {bindReferenceFrames,hasMeasuredLocks} from './reference-framing';
 import {CAMERA_CHANGE_PROMPT} from './camera-change';
 
 const obj=(properties:any)=>({type:'object',properties,required:Object.keys(properties),additionalProperties:false});
@@ -246,7 +247,9 @@ export async function refineScene(job:any,plan:any,images:{path:string;mime:stri
  const merged=applyRefinement(source,result.value,plan,images.length,job.complexity);assertDetail(merged);assertPlannedRepair(source,merged,plannedGoals);save(join(folder,'camera-preflight.json'),assertCameraPreflight(merged));
 
  signal.throwIfAborted();require(digest(JSON.stringify(read(sourceSceneFile(job,sourceDir))))===sourceDigest,'修正期间原场景发生变化');
- const scene=applyRefinement(source,result.value,plan,images.length,job.complexity),unchanged=source.program.templates.filter(t=>JSON.stringify(t)===JSON.stringify(scene.program.templates.find(x=>x.id===t.id))).length;
+ // Under measured locks the repaired scene is bound here, before its receipt: prepareScene binds again, and an unbound scene changed
+ // there, so the next repair round's camera history never matched the receipt (v31 ai_003_010, 2026-10-29).
+ const applied=applyRefinement(source,result.value,plan,images.length,job.complexity),scene=hasMeasuredLocks(images)?bindReferenceFrames(applied,images):applied,unchanged=source.program.templates.filter(t=>JSON.stringify(t)===JSON.stringify(scene.program.templates.find(x=>x.id===t.id))).length;
  if(detailBasis)save(join(folder,'voxel-detail-validation.json'),assertDetail(scene));
  if(focus)save(join(folder,'focus-result.json'),{focus,after:assertRefinementFocus(source,scene,focus),quality:'not-assessed'});
  save(join(folder,'repair-goals-result.json'),assertPlannedRepair(source,scene,plannedGoals));

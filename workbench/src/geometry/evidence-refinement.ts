@@ -4,7 +4,7 @@ import {sourceSceneFile} from './source-scene';
 import {referenceComposition,COMPOSITION_PROMPT} from './reference-composition';
 import {sceneVisibility} from './visibility';
 import {repairPartContext} from './repair-part-context';
-import {bindReferenceFrames} from './reference-framing';
+import {bindReferenceFrames,hasMeasuredLocks} from './reference-framing';
 import {renderRepairPreview} from './repair-engine-preview';
 import {compactSurfaceAudit,supportDiagnostics} from './repair-diagnostics';
 import {repairHistory} from './repair-history';
@@ -81,7 +81,9 @@ export async function refineWithEvidence(job:any,plan:any,images:any[],dir:strin
  event(job,'refinement','合并诊断、选目标和修改：直接对照参考图与完整当前场景，在同次模型执行中通过工具看实际预览并选择候选');
  const system=(REFINEMENT_PROMPT+(source.voxelLattice?'\n'+voxelGeometryGuidance(source.voxelLattice):'')).replace('不删除或缩小sourceScene.spatialOpenings约束。','保留开口身份；推断尺寸可按本轮openingUpdates协议纠正。').replace('必须绑定到repairGoals已选materialIds或已获准新增几何的新材质。共享纹理的所有引用材质都必须在范围内，否则给已选材质建立独立声明，不改变其他表面；','必须绑定到本轮实际修改的材质。共享纹理的引用表面须一起核对，不适配时建立独立声明；')+(detail?VOXEL_DETAIL_REFINE_GUIDANCE:'')+'\n'+OPENING_REFINEMENT_PROMPT+'\n本轮采用证据驱动整体修正，不存在另一个模型预先锁定的repairGoals范围。你必须自行从画面与本轮假设选择最有价值的关联缺陷并实施可见改变；可以调整所有必要的已有模板与材质，但遵守相同最终场景预算。避免泛泛改色、缩放或堆小物体。采集、投影和预览现已沿用参考图画幅。先核对画面主结构占比、透视和垂直支承；不要把旧横图的占比照搬到竖图。surfaceAudit列出真实材质绑定和UV异常：颜色、alpha、roughness和metallic已进入Engine，不能假定未导出；结合纹理证据检查不合适的照片裁切、拉伸、透明表面后方遮挡及支承阴影。几何拼接需修改实际端点、交接面与轮廓，不能用改色掩盖缝隙。第一版先完成一个有明显视觉差异的完整候选，尽早真实预览；第二次仅纠正从预览确认的问题，不要求用完。不能把已经用过的失败策略重新包装。若本轮假设被原图否定，明确说明并选择有证据的替代改动。最终reason列明：问题归因、实际改动、预览观察及仍未解决项。如果关键需求缺少背侧或遮挡区域的观察证据，区分真实缺失和未取证；保留参考机位对齐，针对缺证据补充检查机位或调整已有检查机位，保持已覆盖区域的证据，在真实预览中核对，不再次只写暂缓。不要预测得分。\n'+REPAIR_TOOL_PROMPT;
  const result=await callValidated({role:'scene-refine',schemaContext:{repairComplexity:job.complexity,voxelLattice:source.voxelLattice},modelSettings:job.modelSettings,signal,maxTokens:16000,reservedCalls:2,images:[...images,...currentFrames,...used.images,...reusable.images],system,text:JSON.stringify(text),tools:feedback.kit},folder,v=>{validate(v);feedback.assertReviewed(v);return v;});
- const scene=apply(result.value);
+ // Under measured locks the repaired scene is bound here, before its receipt: prepareScene binds again, and an unbound scene changed
+ // there, so the next repair round's camera history never matched the receipt (v31 ai_003_010, 2026-10-29).
+ const scene=hasMeasuredLocks(images)?bindReferenceFrames(apply(result.value),images):apply(result.value);
  if(detail)save(join(folder,'voxel-detail-validation.json'),detail.assert(scene));
  if(digest(JSON.stringify(read(sourceSceneFile(job,sourceDir))))!==sourceDigest)throw Error('来源场景在修改期间变化');
  const unchanged=source.program.templates.filter((t:any)=>stable(t)===stable(scene.program.templates.find((x:any)=>x.id===t.id))).length;
