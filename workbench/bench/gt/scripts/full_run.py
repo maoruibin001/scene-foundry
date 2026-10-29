@@ -13,7 +13,8 @@ OUT=sys.argv[1];os.makedirs(OUT,exist_ok=True)
 INPUTS={x['id']:{**x,'images':[os.path.join(B,i) for i in x['images']]} for x in json.load(open(B+'/inputs.json'))};IDS=sys.argv[2:] or list(INPUTS)
 MAX_RESUMES,BACKOFF,POLL=4,90,30
 # GT_UNTIL=graybox: let the graybox repair loop run until it passes, stops, or reaches GT_MAX_ROUNDS rounds; then score round 0 and the
-# round the job retained (blockout.repairBasis). Default: cancel after round 0.
+# round the job retained (blockout.repairBasis). GT_UNTIL=delivery: run the job to its end (completed or failed after resumes) and also
+# record its delivery assessment. Default: cancel after round 0.
 UNTIL=os.environ.get('GT_UNTIL','round0');MAX_ROUNDS=int(os.environ.get('GT_MAX_ROUNDS','4'))
 lock=threading.Lock();statePath=OUT+'/state.json'
 state=json.load(open(statePath)) if os.path.exists(statePath) else {}
@@ -45,7 +46,10 @@ def score_round(sid,x,d,n):
 def finish(sid,x,job,j=None):
   d=run_dir(x['kind'],job);r=score_round(sid,x,d,0)
   best=((j or {}).get('blockout') or {}).get('repairBasis') or {}
-  if UNTIL=='graybox':r={**r,'rounds':len((j.get('blockout') or {}).get('rounds',[])),'blockoutStatus':(j.get('blockout') or {}).get('status'),'retained':score_round(sid,x,d,best['round']) if best.get('round') else r}
+  if UNTIL in('graybox','delivery'):r={**r,'rounds':len((j.get('blockout') or {}).get('rounds',[])),'blockoutStatus':(j.get('blockout') or {}).get('status'),'retained':score_round(sid,x,d,best['round']) if best.get('round') else r}
+  if UNTIL=='delivery':
+    a=(j or {}).get('deliveryAssessment') or {}
+    r={**r,'jobStatus':(j or {}).get('status'),'delivery':{k:a.get(k) for k in ('standard','threshold','score','rawScore','status','reasons')},'error':str((j or {}).get('error'))[:300] if (j or {}).get('error') else None}
   return r
 def one(sid):
   x=INPUTS[sid];p=port(x['kind']);st=state.setdefault(sid,{'jobs':[],'resumes':0,'recreated':0})
@@ -56,13 +60,17 @@ def one(sid):
     while True:
       j=api(p,f'/api/jobs/{job}');rounds=[r for r in (j.get('blockout') or {}).get('rounds',[]) if (r.get('review') or {}).get('score') is not None]
       b=j.get('blockout') or {}
-      done=bool(rounds) if UNTIL!='graybox' else bool(rounds) and (b.get('status') in('passed','stopped') or len(rounds)>=MAX_ROUNDS)
+      done=bool(rounds) and j['status']=='completed' if UNTIL=='delivery' else bool(rounds) if UNTIL!='graybox' else bool(rounds) and (b.get('status') in('passed','stopped') or len(rounds)>=MAX_ROUNDS)
       if done and j['status'] in('running','queued'):
         api(p,f'/api/jobs/{job}/cancel','POST');log(sid,'graybox',len(rounds),'rounds, status',b.get('status'),'object3d',[(r.get('object3d') or {}).get('score') for r in rounds],'-> cancelled');time.sleep(5);continue
       if rounds and (j['status']=='cancelled' or (done and j['status'] not in('running','queued'))):
         st['result']=finish(sid,x,job,j);save();r=st['result']
-        if UNTIL=='graybox':log(sid,'RETAINED',json.dumps({k:r['retained'].get(k) for k in ('round','object3d','passed','anchoredRecall','objectRecall')}))
+        if UNTIL=='delivery':log(sid,'DELIVERY',json.dumps({'job':r.get('jobStatus'),**r['delivery']},ensure_ascii=False)[:300])
+        if UNTIL in('graybox','delivery'):log(sid,'RETAINED',json.dumps({k:r['retained'].get(k) for k in ('round','object3d','passed','anchoredRecall','objectRecall')}))
         log(sid,'SCORE judge',r['judge'],'recall %.2f prec %.2f anchored %.2f'%(r['objectRecall'] or 0,r['objectPrecision'] or 0,r['anchoredRecall'] or 0));return
+      # A quality stop (graybox plateau, delivery not reached) is the job's answer, not a fault to resume.
+      if UNTIL=='delivery' and rounds and j['status'] in('blocked','failed') and any(m in str(j.get('error')) for m in ('SPATIAL_GATE_FAILED','QUALITY','DELIVERY')):
+        st['result']=finish(sid,x,job,j);save();r=st['result'];log(sid,'STOPPED',str(j.get('error'))[:160]);log(sid,'RETAINED',json.dumps({k:r['retained'].get(k) for k in ('round','object3d','passed','anchoredRecall','objectRecall')}));return
       if j['status'] in('blocked','failed','cancelled'):
         err=str(j.get('error'))[:160]
         if st['resumes']<MAX_RESUMES:
