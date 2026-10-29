@@ -52,3 +52,10 @@ test('repair feedback names the worst landmarks and whether they sit too near or
  expect(f.landmarks[0].issue).toContain('过近');expect(f.landmarks[1].issue).toContain('不可见');expect(f.landmarks[2].issue).toContain('过远');
  expect(object3dRepairFeedback(judged(.3),folder)).toBeNull();
 });
+
+test('an invisible landmark says where its instances project and where the reference puts them',()=>{
+ const folder=mkdtempSync(join(tmpdir(),'object3d-'));
+ writeFileSync(join(folder,'object3d.json'),JSON.stringify({score:.5,landmarks:[{landmarkId:'cab',label:'柜',critical:true,referenceIndex:1,error:1,visible:false,depthRatio:null,projected:[-.505,.447,2.84],expected:[.094,.5]}]}));
+ const issue=object3dRepairFeedback(judged(.5),folder)!.landmarks[0].issue;
+ expect(issue).toContain('画面左侧外');expect(issue).toContain('u=-0.505');expect(issue).toContain('u=0.094');
+});

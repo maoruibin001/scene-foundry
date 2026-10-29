@@ -19,7 +19,7 @@ import {join} from 'node:path';
 import {existsSync,readFileSync} from 'node:fs';
 import {digest,save} from '../store';
 import {compileGeometryProgram} from './program';
-import {basis,cameraRay,rayScene} from './camera-fit';
+import {basis,cameraRay,project,rayScene} from './camera-fit';
 
 export const OBJECT3D_GATE={version:'object3d-gate-v1',judge:'object3d-v1',tool:'moge-2'} as const;
 export const OBJECT3D_LIMITS={score:.35,gridWidth:64,gridHeight:48,feedbackRows:8,feedbackError:.35};
@@ -61,6 +61,12 @@ export function object3dGrid(scene:any,W=OBJECT3D_LIMITS.gridWidth,H=OBJECT3D_LI
  return {bindings:Object.fromEntries((scene.observedBindings??[]).map((b:any)=>[b.landmarkId,b.instanceIds])),views};
 }
 
+function instanceCentre(scene:any,ids:string[]){
+ if(!ids.length)return null;const mn=[Infinity,Infinity,Infinity],mx=[-Infinity,-Infinity,-Infinity];
+ for(const m of compileGeometryProgram({...scene.program,materials:scene.program.materials.map((x:any)=>({...x,textureId:null,surfaceDetail:null}))}).meshes){
+  if(!ids.includes(m.entityId))continue;const p=m.geometry.positions;for(let i=0;i<p.length;i++){mn[i%3]=Math.min(mn[i%3],p[i]);mx[i%3]=Math.max(mx[i%3],p[i]);}}
+ return Number.isFinite(mn[0])?mn.map((v,k)=>(v+mx[k])/2):null;
+}
 /** Judge one rendered round (folder holds render-scene.json); writes object3d.json beside it. */
 export async function judgeObject3d(folder:string,runDir:string,signal?:AbortSignal){
  const observation=join(runDir,'generation/reference-observations.json');
@@ -70,6 +76,15 @@ export async function judgeObject3d(folder:string,runDir:string,signal?:AbortSig
  const [gerr,gcode]=await Promise.all([new Response(g.stderr).text(),g.exited]);if(gcode)throw Error('object3d 射线网格失败：'+gerr.slice(-600));
  let result:any;try{result=await python([JUDGE,join(folder,'object3d-grid.json'),observation,join(runDir,'generation/reference-points')],signal);}catch(e){throw Error('object3d 评审失败：'+String(e));}
  if(!Number.isFinite(result.score))throw Error('object3d 评审没有可测地标');
+ // An invisible landmark tells the repair nothing by itself (v28 ai_015_001: the critical cabinet sat half a frame left of view 1 for two
+ // rounds); give where its bound instances project now and where the reference box puts them.
+ const scene=JSON.parse(readFileSync(join(folder,'render-scene.json'),'utf8')),obs=JSON.parse(readFileSync(observation,'utf8'));
+ for(const r of result.landmarks.filter((x:any)=>!x.visible)){
+  const ids=scene.observedBindings?.find((b:any)=>b.landmarkId===r.landmarkId)?.instanceIds??[],cam=scene.cameras.find((c:any)=>c.referenceIndex===r.referenceIndex);
+  const box=obs.landmarks.find((l:any)=>l.id===r.landmarkId)?.views?.find((v:any)=>v.referenceIndex===r.referenceIndex)?.box;
+  const centre=instanceCentre(scene,ids);if(!cam||!centre||!Array.isArray(box))continue;
+  const [u,v,z]=project(cam,centre);r.projected=[u,v,z].map(x=>Math.round(x*1000)/1000);r.expected=[(box[0]+box[2])/2,(box[1]+box[3])/2].map((x:number)=>Math.round(x*1000)/1000);
+ }
  save(join(folder,'object3d.json'),result);return result;
 }
 
@@ -91,13 +106,18 @@ export const OBJECT3D_PROGRESS='object3d-progress-v1';
 /** Plateau score in its own ledger family: 25 per failed kept check plus 100 × (1 − object3d), so a .02 drop in error is the 2-point gain. */
 export function object3dProgressScore(gate:any){const kept=gate.objective.checks.filter((c:any)=>!c.passed&&c.id!=='object3d').length;return Math.round((100*(1-gate.object3d.score)-25*kept)*100)/100;}
 
+function invisibleIssue(x:any){
+ if(!x.projected||!x.expected)return '绑定实例在该参考机位不可见';
+ const [u,v,z]=x.projected,[eu,ev]=x.expected,where=z<=0?'在机位身后':u<0?'在画面左侧外':u>1?'在画面右侧外':v<0?'在画面上方外':v>1?'在画面下方外':'在画面内但被遮挡';
+ return '绑定实例在该参考机位不可见：中心'+where+'（当前投影 u='+u+'，v='+v+'，深度 '+z+'），原图框中心在 u='+eu+'，v='+ev+'；应移动该实例或修正周围布局使其落到该处，而不是改机位';
+}
 /** Repair input: the landmarks the gate measured furthest from the reference, with whether each sits too near or too far. */
 export function object3dRepairFeedback(gate:any,folder:string){
  if(!gate?.object3d||gate.passed||!existsSync(join(folder,'object3d.json')))return null;
  const r=JSON.parse(readFileSync(join(folder,'object3d.json'),'utf8'));
  const worst=r.landmarks.filter((x:any)=>x.error>=OBJECT3D_LIMITS.feedbackError).sort((a:any,b:any)=>(b.critical-a.critical)||(b.error-a.error)).slice(0,OBJECT3D_LIMITS.feedbackRows)
   .map((x:any)=>({landmarkId:x.landmarkId,label:x.label,referenceIndex:x.referenceIndex,error:x.error,
-   issue:!x.visible?'绑定实例在该参考机位不可见':x.depthRatio===null?'位置偏差':x.depthRatio<.85?'离相机过近（深度约为原图 '+Math.round(x.depthRatio*100)+'%）':x.depthRatio>1.15?'离相机过远（深度约为原图 '+Math.round(x.depthRatio*100)+'%）':'在画面平面内偏移'}));
+   issue:!x.visible?invisibleIssue(x):x.depthRatio===null?'位置偏差':x.depthRatio<.85?'离相机过近（深度约为原图 '+Math.round(x.depthRatio*100)+'%）':x.depthRatio>1.15?'离相机过远（深度约为原图 '+Math.round(x.depthRatio*100)+'%）':'在画面平面内偏移'}));
  return {version:OBJECT3D_GATE.version,score:r.score,limit:OBJECT3D_LIMITS.score,failed:gate.objective.checks.filter((c:any)=>!c.passed).map((c:any)=>({id:c.id,detail:c.detail})),
   note:'误差是地标灰模位置与原图单目三维测量的相对距离偏差；按 issue 调整实例前后位置与尺寸，不要只为对齐画面框放大或拉近物体',landmarks:worst};
 }
