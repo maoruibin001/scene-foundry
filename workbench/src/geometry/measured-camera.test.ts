@@ -5,7 +5,7 @@ import {join} from 'node:path';
 import {reconstructionPython} from '../runtime-paths.mjs';
 import {bindReferenceFrames} from './reference-framing';
 import {sceneProbe} from './measured-pose';
-import {MEASURED_CAMERA,lockAnchorCamera,measuredCamera,measuredCameraGuidance,measuredCameraPolicyFor} from './measured-camera';
+import {MEASURED_CAMERA,lockAnchorCamera,lockedCameraRepairGuidance,measuredCamera,measuredCameraGuidance,measuredCameraPolicyFor} from './measured-camera';
 
 const box=(id:string,position:number[],size:number[])=>({id,label:id,template:id,position,rotation:[0,0,0],scale:[1,1,1],requirementIds:[]});
 const tpl=(id:string,size:number[])=>({id,parts:[{id:'p',material:'m',position:[0,0,0],rotation:[0,0,0],scale:[1,1,1],shape:{type:'box',size,radius:0}}]});
@@ -45,4 +45,10 @@ test('bindReferenceFrames locks camera 1 first and derives camera 2 from the loc
  f1.forEach((v:number,k:number)=>expect(f2[k]/Math.hypot(...f2)).toBeCloseTo(v/Math.hypot(...f1),6));
  const plain=bindReferenceFrames({program:room,cameras:[cam(1,[0,0,2.5],[0,3,2.5])]},[{path}]);
  expect(plain.cameras[0].position).toEqual([0,0,2.5]);
+});
+
+test('repair guidance names the locked camera quantities and what stays editable',()=>{
+ expect(lockedCameraRepairGuidance({},{fov:false,pose:false,camera:false})).toBe('');
+ const g=lockedCameraRepairGuidance({},{fov:true,pose:true,camera:true});
+ expect(g).toContain('视场');expect(g).toContain('离地高度与俯仰');expect(g).toContain('水平位置与水平朝向');expect(g).toContain('不是改机位');
 });

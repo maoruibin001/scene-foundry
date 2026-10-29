@@ -56,3 +56,15 @@ export function measuredCameraGuidance(job:any){
  const height=v.heightRatio!==null?`图1相机离地高度约为画面中位深度的 ${f(v.heightRatio)} 倍，视线${v.pitch>=0?'抬高':'压低'}约 ${Math.abs(v.pitch).toFixed(1)}°；`:'';
  return `参考图1的机位与房间比例已由独立的单目几何测量得出（以图1画面中位深度为 1）：${height}画面中较远处（95% 分位）约 ${f(v.far)}，左侧可见范围约 ${f(v.left)}，右侧约 ${f(v.right)}。图1机位的高度和俯仰会按测量值固定；房间尺寸、机位在房间中的位置（离左右墙和后墙的距离）以及物体距离必须与这些比例一致，不要把机位贴近侧墙或把房间做得比画面所示更窄更浅。`;
 }
+
+/**
+ * What the repair model may still change on the reference cameras. The v28 repair (ai_053_007, 2026-10-29) spent its round moving camera 1
+ * up and back while height, pitch and every FoV were locked and camera 2 follows camera 1, so the render barely moved (object3d .810 → .811)
+ * and the mirrored layout and the wall in front of camera 2 stayed. Empty when no measured lock applies.
+ */
+export function lockedCameraRepairGuidance(job:any,locks:{fov:boolean;pose:boolean;camera:boolean}){
+ if(!locks.fov&&!locks.pose&&!locks.camera)return '';
+ const fixed=[locks.fov?'所有参考机位的视场（fov）':'',locks.camera?'参考机位 1 的离地高度与俯仰':'',locks.pose?'参考机位 2 及之后相对机位 1 的朝向与移动方向（它们随机位 1 一起移动）':''].filter(Boolean).join('、');
+ const free=locks.camera?'机位 1 的水平位置与水平朝向':locks.pose?'机位 1 的位置与朝向':'机位的位置与朝向';
+ return '参考机位已按原图独立测量锁定：'+fixed+'。这些量在渲染时会被测量值覆盖，修改无效；机位上仍可调整的只有'+free+'。原图与灰模的左右镜像、某机位被墙体挡住、物体远近不符，应通过移动、镜像或缩放实例与房间结构来修正，而不是改机位。';
+}
