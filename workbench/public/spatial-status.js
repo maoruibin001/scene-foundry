@@ -3,7 +3,7 @@ export function spatialProgress(job) {
   const rounds = job.blockout?.rounds ?? [];
   const last = rounds.at(-1);
   const nextRound = last ? last.round + 2 : 1;
-  const prior = last && !last.passed ? `第 ${last.round + 1} 轮未通过（${last.review?.score ?? '未评分'}/5）` : '';
+  const prior = last && !last.passed ? `第 ${last.round + 1} 轮未通过（${last.object3d ? '三维误差 ' + last.object3d.score.toFixed(2) + ' / 上限 0.35' : (last.review?.score ?? '未评分') + '/5'}）` : '';
   const running = job.status === 'running';
   // Surface preparation may run beside graybox; job.stage is only the last event.
   const active = ['graybox','space'].filter(id => {
