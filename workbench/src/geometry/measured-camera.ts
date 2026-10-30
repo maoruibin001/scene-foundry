@@ -62,9 +62,9 @@ export function measuredCameraGuidance(job:any){
  * up and back while height, pitch and every FoV were locked and camera 2 follows camera 1, so the render barely moved (object3d .810 → .811)
  * and the mirrored layout and the wall in front of camera 2 stayed. Empty when no measured lock applies.
  */
-export function lockedCameraRepairGuidance(job:any,locks:{fov:boolean;pose:boolean;camera:boolean}){
- if(!locks.fov&&!locks.pose&&!locks.camera)return '';
- const fixed=[locks.fov?'所有参考机位的视场（fov）':'',locks.camera?'参考机位 1 的离地高度与俯仰':'',locks.pose?'参考机位 2 及之后相对机位 1 的朝向与移动方向（它们随机位 1 一起移动）':''].filter(Boolean).join('、');
- const free=locks.camera?'机位 1 的水平位置与水平朝向':locks.pose?'机位 1 的位置与朝向':'机位的位置与朝向';
+export function lockedCameraRepairGuidance(job:any,locks:{fov:boolean;pose:boolean;camera:boolean;orientation?:boolean}){
+ if(!locks.fov&&!locks.pose&&!locks.camera&&!locks.orientation)return '';
+ const fixed=[locks.fov?'所有参考机位的视场（fov）':'',locks.camera?'参考机位 1 的离地高度与俯仰':'',locks.pose?'参考机位 2 及之后相对机位 1 的朝向与移动方向（它们随机位 1 一起移动）':'',locks.orientation?'各参考机位的侧倾与机位 1 相对墙面的水平朝向':''].filter(Boolean).join('、');
+ const free=locks.orientation?'机位 1 的水平位置':locks.camera?'机位 1 的水平位置与水平朝向':locks.pose?'机位 1 的位置与朝向':'机位的位置与朝向';
  return '参考机位已按原图独立测量锁定：'+fixed+'。这些量在渲染时会被测量值覆盖，修改无效；机位上仍可调整的只有'+free+'。原图与灰模的左右镜像、某机位被墙体挡住、物体远近不符，应通过移动、镜像或缩放实例与房间结构来修正，而不是改机位。';
 }

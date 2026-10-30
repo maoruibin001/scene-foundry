@@ -17,6 +17,7 @@ import {measuredFovRule,measuredVfov,measureReferenceFov} from './measured-fov';
 import {measuredPose,measuredPoseRule,measureReferencePose} from './measured-pose';
 import {measuredCamera,measuredCameraRule,measureReferenceCamera} from './measured-camera';
 import {measureReferencePoints,object3dRule} from './object3d-gate';
+import {measuredOrientation,measuredOrientationRule,measureReferenceOrientation} from './measured-orientation';
 import {crossTaskReuse} from '../reuse-mode';
 import {fitAssemblyBudget} from './triangle-budget';
 import {preserveOutput,saveDelivery,failureDisposition} from '../output-delivery';
@@ -66,7 +67,7 @@ export function sceneComplexity(scene:any,level:keyof typeof COMPLEXITIES,parts:
 
 function prepareScene(job:any,plan:any,dir:string,value:any,textures:any,provenance:any){
  assertStorageAvailable(undefined,2*1024**3);
- value=bindReferenceFrames(value,(job.images??[]).map((i:any,k:number)=>({path:join(UPLOADS,i.file),vfov:measuredVfov(job,k),pose:measuredPose(job,k),camera:measuredCamera(job,k)})));if(preJudgeRule(job)){const fixed=preJudgeScene(value,textures);value=fixed.scene;textures=fixed.textures;save(join(dir,'pre-judge.json'),fixed.report);}const result={value};save(join(dir,'generated-scene.json'),result.value);job.sceneProgram={version:result.value.version,file:'generated-scene.json'};
+ value=bindReferenceFrames(value,(job.images??[]).map((i:any,k:number)=>({path:join(UPLOADS,i.file),vfov:measuredVfov(job,k),pose:measuredPose(job,k),camera:measuredCamera(job,k),orientation:measuredOrientation(job,k)})));if(preJudgeRule(job)){const fixed=preJudgeScene(value,textures);value=fixed.scene;textures=fixed.textures;save(join(dir,'pre-judge.json'),fixed.report);}const result={value};save(join(dir,'generated-scene.json'),result.value);job.sceneProgram={version:result.value.version,file:'generated-scene.json'};
   const prepared=prepareGeometryProject(join(dir,'project'),result.value.program,textures,{id:'scene-'+job.id,summary:plan.summary,scene:result.value,provenance:{pipelineVersion:job.pipelineVersion,references:(job.images??[]).map((i:any)=>i.id),textures:provenance,modelSettings:job.modelSettings}});
   job.bounds=prepared.bounds;job.objectCount=prepared.meshes;job.entityCount=result.value.program.instances.length;job.complexityReport=sceneComplexity(result.value,job.complexity,prepared.meshes,job.sceneKind);
   job.structure={passed:true,semanticCounts:semanticCounts(result.value.entities),categoryRequirements:categoryRequirements(result.value),checks:[{id:'geometry-contract',passed:true},{id:'requirement-bindings',passed:true},{id:'texture-provenance',passed:true}],geometry:{triangles:prepared.triangles,suspects:[],scope:'仅证明网格契约、来源和需求绑定；空间接触、遮挡和穿插由实际画面验收，未冒充碰撞检测'},assumptions:result.value.assumptions};
@@ -85,7 +86,8 @@ export async function runGeneralScene({job,plan,dir,signal,stage,command,preview
  if(measuredPoseRule(job)&&!job.referencePose&&images.length>1){job.referencePose=await measureReferencePose(job,images,dir,signal);event(job,'measured-pose','参考图相对位姿已测量：'+job.referencePose.views.slice(1).map((v:any)=>'图'+v.referenceIndex+(v.baselineRatio<.03?' 仅转向':' 平移')).join('、'));}
  if(measuredCameraRule(job)&&!job.referenceCamera&&images.length){job.referenceCamera=await measureReferenceCamera(job,images,dir,signal);const c=job.referenceCamera.view;event(job,'measured-camera','参考机位 1 已测量：高度/中位深度 '+(c.heightRatio===null?'未测得':c.heightRatio.toFixed(2))+'，俯仰 '+(c.pitch===null?'未测得':c.pitch.toFixed(1)+'°'));}
  if(object3dRule(job)&&!job.referencePoints&&images.length){job.referencePoints=await measureReferencePoints(job,images,dir,signal);event(job,'object3d-points','参考图三维点云已测量，用于灰模地标三维核对');}
- images.forEach((im,k)=>{const v=measuredVfov(job,k);if(v!==undefined)im.vfov=v;const pose=measuredPose(job,k);if(pose)im.pose=pose;const camera=measuredCamera(job,k);if(camera)im.camera=camera;});
+ if(measuredOrientationRule(job)&&!job.referenceOrientation&&job.referencePoints){job.referenceOrientation=await measureReferenceOrientation(job,images.length,dir,signal);event(job,'measured-orientation','参考机位朝向已测量：'+job.referenceOrientation.views.map((v:any)=>'图'+v.referenceIndex+' 侧倾 '+v.roll.toFixed(1)+'°、对墙 '+v.wall.toFixed(1)+'°').join('；'));}
+ images.forEach((im,k)=>{const v=measuredVfov(job,k);if(v!==undefined)im.vfov=v;const pose=measuredPose(job,k);if(pose)im.pose=pose;const camera=measuredCamera(job,k);if(camera)im.camera=camera;const orientation=measuredOrientation(job,k);if(orientation)im.orientation=orientation;});
  if(job.sceneKind==='voxel'&&!job.voxelConstructionVersion&&!['reuseSceneFrom','reusePlanFrom','reuseCheckpoint','reuseFrom','spatialRepairSource','executionRecoveryFrom','initialSpaceRecoverySource'].some(k=>job[k]))job.voxelConstructionVersion='voxel-lattice-v1';
  const legacyVoxel=job.sceneKind==='voxel'&&job.reuseSceneFrom&&!existsSync(join(runDir(job.reuseSceneFrom),'voxel-source-scene.json'));
  job.generationMethod=job.sceneKind==='voxel'?(legacyVoxel?'voxel-scene-v1':job.voxelConstructionVersion==='voxel-lattice-v1'?'voxel-geometry-v4':'voxel-geometry-v3'):'general-geometry-v3';job.stageTrackingVersion='exclusive-stages-v1';job.iteration=0;

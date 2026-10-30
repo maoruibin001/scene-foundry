@@ -1,3 +1,4 @@
+import {basis} from './camera-fit';
 import {bindAreaLights,areaLightEntities} from './area-lights';
 import {bindPointShadows} from './point-shadows';
 import {voxelProjection} from '../voxel/projection';
@@ -45,7 +46,7 @@ export function prepareGeometryProject(root:string,program:GeometryProgram,textu
  if(!lstatSync(join(game,'node_modules/@forgeax/engine'),{throwIfNoEntry:false}))symlinkSync(join(ENGINE,'packages/engine'),join(game,'node_modules/@forgeax/engine'),'dir');
  let world=readFileSync(join(P,'game/assets/world.pack.ts'),'utf8').replace('const pos=[20,10,20] as const;',`const pos=${JSON.stringify([c[0]+r/Math.sqrt(2),c[1]+h,c[2]+r/Math.sqrt(2)])} as const;`).replace('[0,5,0]',JSON.stringify(c)).replace('Micro garden recording scene','通用几何场景').replace('Micro garden authored content','组合几何');
  const toEngine=(v:number[])=>[v[0],v[2],-v[1]],clear=options?cameraClearance(result.meshes):null,occlusion=options?tourOcclusion(result.meshes):undefined;
- const views=options?.scene.cameras.map(v=>{const tour=planCameraTour(v,clear!,16/9,.1,occlusion);return {...v,position:toEngine(v.position),target:toEngine(v.target),cruise:{...tour,origin:toEngine(tour.origin),displacement:toEngine(tour.displacement)}};});
+ const views=options?.scene.cameras.map(v=>{const tour=planCameraTour(v,clear!,16/9,.1,occlusion);return {...v,position:toEngine(v.position),target:toEngine(v.target),up:toEngine(basis(v).up),cruise:{...tour,origin:toEngine(tour.origin),displacement:toEngine(tour.displacement)}};});
  if(views)save(join(root,'camera-tours.json'),{version:'camera-tour-v1',views});
  if(options&&views){
   const v=views[0],light=options.scene.lighting;
@@ -72,7 +73,7 @@ export function prepareGeometryProject(root:string,program:GeometryProgram,textu
  copyFileSync(join(W,'src/camera-v3.txt'),join(assets,'camera.plugin.ts'));copyFileSync(join(W,'src/ui-v3.txt'),join(assets,'ui.plugin.ts'));
  if(views){
   // 自由相机的运动算法无场景初值；所有机位来自本次生成数据。
-  const controller=readFileSync(join(W,'src/native/camera.txt'),'utf8').replace("[0,1].includes(e.data.index)","Number.isInteger(e.data.index)&&e.data.index>=0&&e.data.index<audit.views.length").replace("if(input.keyboard.justPressedCode('Digit1'))view(0);if(input.keyboard.justPressedCode('Digit2'))view(1);","for(let n=0;n<audit.views.length;n++)if(input.keyboard.justPressedCode('Digit'+(n+1)))view(n);").replace("cameraControls:'free-inspection-v2'","fov:audit.views[selected].fov,cameraProjection:(()=>{const p=ctx.world.get(camera,Camera).unwrap();return {projection:p.projection,fov:p.fov,aspect:p.aspect,left:p.left,right:p.right,bottom:p.bottom,top:p.top,near:p.near,far:p.far};})(),motionBlockReason:motion.blockReason??null,cameraControls:'free-inspection-v2'");
+  const controller=readFileSync(join(W,'src/native/camera.txt'),'utf8').replace('quat.fromLookAt(quat.create(),pos,target,[0,1,0])','quat.fromLookAt(quat.create(),pos,target,audit.views[selected].up??[0,1,0])').replace("[0,1].includes(e.data.index)","Number.isInteger(e.data.index)&&e.data.index>=0&&e.data.index<audit.views.length").replace("if(input.keyboard.justPressedCode('Digit1'))view(0);if(input.keyboard.justPressedCode('Digit2'))view(1);","for(let n=0;n<audit.views.length;n++)if(input.keyboard.justPressedCode('Digit'+(n+1)))view(n);").replace("cameraControls:'free-inspection-v2'","fov:audit.views[selected].fov,cameraProjection:(()=>{const p=ctx.world.get(camera,Camera).unwrap();return {projection:p.projection,fov:p.fov,aspect:p.aspect,left:p.left,right:p.right,bottom:p.bottom,top:p.top,near:p.near,far:p.far};})(),motionBlockReason:motion.blockReason??null,cameraControls:'free-inspection-v2'");
   const projection=voxelProjection(world,controller,views);world=projection.world;
   if(views.some(v=>v.projection==='orthographic')){world=bindVoxelAmbientOcclusion(world);save(join(root,'ambient-occlusion-export.json'),{...VOXEL_AMBIENT_OCCLUSION,scope:'固定 Engine 屏幕空间环境光遮蔽，只压暗凹缝与开口内侧；不新增几何、光源或材质，不表示质量通过'});}
   writeFileSync(join(assets,'world.pack.ts'),world);

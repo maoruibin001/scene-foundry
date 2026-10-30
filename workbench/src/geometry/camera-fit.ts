@@ -8,7 +8,11 @@ const add=(a:number[],b:number[],s=1)=>a.map((v,i)=>v+b[i]*s);
 const cross=(a:number[],b:number[])=>[a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]];
 const unit=(a:number[])=>a.map(v=>v/Math.hypot(...a));
 const clamp=(v:number,a:number,b:number)=>Math.max(a,Math.min(b,v));
-export function basis(c:Camera){const forward=unit(sub(c.target,c.position)),right=unit(cross(forward,[0,0,1])),up=cross(right,forward);return {forward,right,up};}
+/** Camera frame. `roll` (radians, measured-orientation-v1) turns the frame about the view direction: up = cosφ·up₀ + sinφ·right₀, the
+ * convention of the benchmark's ground-truth roll; cameras without it stay level. */
+export function basis(c:Camera){const forward=unit(sub(c.target,c.position)),right0=unit(cross(forward,[0,0,1])),up0=cross(right0,forward),r=(c as any).roll;
+ if(!Number.isFinite(r)||!r)return {forward,right:right0,up:up0};
+ const cs=Math.cos(r),sn=Math.sin(r);return {forward,right:right0.map((v,k)=>cs*v-sn*up0[k]),up:up0.map((v,k)=>cs*v+sn*right0[k])};}
 export function orthographicHeight(c:Camera){if(c.projection!=='orthographic')return null;const h=c.orthographicHeight;if(typeof h!=='number'||!Number.isFinite(h)||h<=0)throw Error('正交投影需要有效覆盖高度');return h!;}
 export function project(c:Camera,p:number[],aspect=cameraAspect(c)){const {forward,right,up}=basis(c),d=sub(p,c.position),z=dot(d,forward),height=orthographicHeight(c),span=height??z*Math.tan(c.fov/2)*2;return [.5+dot(d,right)/(span*aspect),.5-dot(d,up)/span,z];}
 export function ray(c:Camera,uv:number[],aspect=cameraAspect(c)){const b=basis(c);if(orthographicHeight(c)!==null)return b.forward;const t=Math.tan(c.fov/2);return unit(add(add(b.forward,b.right,(uv[0]-.5)*2*t*aspect),b.up,(.5-uv[1])*2*t));}
