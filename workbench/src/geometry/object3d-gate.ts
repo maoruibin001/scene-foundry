@@ -111,13 +111,24 @@ function invisibleIssue(x:any){
  const [u,v,z]=x.projected,[eu,ev]=x.expected,where=z<=0?'在机位身后':u<0?'在画面左侧外':u>1?'在画面右侧外':v<0?'在画面上方外':v>1?'在画面下方外':'在画面内但被遮挡';
  return '绑定实例在该参考机位不可见：中心'+where+'（当前投影 u='+u+'，v='+v+'，深度 '+z+'），原图框中心在 u='+eu+'，v='+ev+'；应移动该实例或修正周围布局使其落到该处，而不是改机位';
 }
-/** Repair input: the landmarks the gate measured furthest from the reference, with whether each sits too near or too far. */
-export function object3dRepairFeedback(gate:any,folder:string){
+/** `offset` = pm/s − pg in reference-camera axes [right, down, forward], scene metres. With a locked camera these axes are trustworthy, so
+ * the measured move becomes a concrete directional target (components under 10 cm are noise and dropped). Without a lock the direction is
+ * contaminated by camera error, so we say nothing beyond the near/far ratio. */
+function moveTarget(offset:any){
+ if(!Array.isArray(offset)||offset.length!==3)return '';
+ const [right,down,fwd]=offset,leg=(v:number,pos:string,neg:string)=>Math.abs(v)>=.1?(v>0?pos:neg)+' '+Math.abs(v).toFixed(2)+'m':'';
+ const parts=[leg(fwd,'沿视线后移','沿视线前移'),leg(right,'向右','向左'),leg(-down,'向上','向下')].filter(Boolean);
+ return parts.length?'；单目深度测得应把该实例'+parts.join('、'):'';
+}
+/** Repair input: the landmarks the gate measured furthest from the reference, with whether each sits too near or too far, and — when the
+ * reference camera is locked to measurement — the metric move that would take each to its measured position. */
+export function object3dRepairFeedback(gate:any,folder:string,cameraLocked=false){
  if(!gate?.object3d||gate.passed||!existsSync(join(folder,'object3d.json')))return null;
  const r=JSON.parse(readFileSync(join(folder,'object3d.json'),'utf8'));
  const worst=r.landmarks.filter((x:any)=>x.error>=OBJECT3D_LIMITS.feedbackError).sort((a:any,b:any)=>(b.critical-a.critical)||(b.error-a.error)).slice(0,OBJECT3D_LIMITS.feedbackRows)
   .map((x:any)=>({landmarkId:x.landmarkId,label:x.label,referenceIndex:x.referenceIndex,error:x.error,
-   issue:!x.visible?invisibleIssue(x):x.depthRatio===null?'位置偏差':x.depthRatio<.85?'离相机过近（深度约为原图 '+Math.round(x.depthRatio*100)+'%）':x.depthRatio>1.15?'离相机过远（深度约为原图 '+Math.round(x.depthRatio*100)+'%）':'在画面平面内偏移'}));
+   issue:(!x.visible?invisibleIssue(x):x.depthRatio===null?'位置偏差':x.depthRatio<.85?'离相机过近（深度约为原图 '+Math.round(x.depthRatio*100)+'%）':x.depthRatio>1.15?'离相机过远（深度约为原图 '+Math.round(x.depthRatio*100)+'%）':'在画面平面内偏移')
+    +(x.visible&&cameraLocked?moveTarget(x.offset):'')}));
  return {version:OBJECT3D_GATE.version,score:r.score,limit:OBJECT3D_LIMITS.score,failed:gate.objective.checks.filter((c:any)=>!c.passed).map((c:any)=>({id:c.id,detail:c.detail})),
-  note:'误差是地标灰模位置与原图单目三维测量的相对距离偏差；按 issue 调整实例前后位置与尺寸，不要只为对齐画面框放大或拉近物体',landmarks:worst};
+  note:'误差是地标灰模位置与原图单目三维测量的相对距离偏差；按 issue 调整实例前后位置与尺寸，不要只为对齐画面框放大或拉近物体'+(cameraLocked?'。附带的方向量是按锁定机位把实例移到单目深度测得位置的建议位移，应结合原图判断后采用，不要只为对齐画面框缩放物体':''),landmarks:worst};
 }

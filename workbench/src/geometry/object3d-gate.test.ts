@@ -53,6 +53,32 @@ test('repair feedback names the worst landmarks and whether they sit too near or
  expect(object3dRepairFeedback(judged(.3),folder)).toBeNull();
 });
 
+test('a locked camera turns the measured offset into a metric move; without the lock only the near/far ratio shows',()=>{
+ const folder=mkdtempSync(join(tmpdir(),'object3d-'));
+ // offset is [right, down, forward] in metres: too near (depthRatio .6) → move back along the view; +right, −down (→ up).
+ writeFileSync(join(folder,'object3d.json'),JSON.stringify({score:.5,landmarks:[
+  {landmarkId:'sofa',label:'沙发',critical:true,referenceIndex:1,error:.6,visible:true,depthRatio:.6,offset:[.15,-.12,.42]}]}));
+ const locked=object3dRepairFeedback(judged(.5),folder,true)!;
+ expect(locked.landmarks[0].issue).toContain('过近');
+ expect(locked.landmarks[0].issue).toContain('沿视线后移 0.42m');
+ expect(locked.landmarks[0].issue).toContain('向右 0.15m');
+ expect(locked.landmarks[0].issue).toContain('向上 0.12m');
+ expect(locked.note).toContain('方向量');
+ const unlocked=object3dRepairFeedback(judged(.5),folder)!;
+ expect(unlocked.landmarks[0].issue).toContain('过近');
+ expect(unlocked.landmarks[0].issue).not.toContain('后移');
+ expect(unlocked.note).not.toContain('方向量');
+});
+
+test('a sub-10cm offset component is dropped as noise',()=>{
+ const folder=mkdtempSync(join(tmpdir(),'object3d-'));
+ writeFileSync(join(folder,'object3d.json'),JSON.stringify({score:.5,landmarks:[
+  {landmarkId:'desk',label:'桌',critical:false,referenceIndex:2,error:.5,visible:true,depthRatio:1.4,offset:[.03,-.02,-.55]}]}));
+ const issue=object3dRepairFeedback(judged(.5),folder,true)!.landmarks[0].issue;
+ expect(issue).toContain('过远');expect(issue).toContain('沿视线前移 0.55m');
+ expect(issue).not.toContain('向右');expect(issue).not.toContain('向左');expect(issue).not.toContain('向上');expect(issue).not.toContain('向下');
+});
+
 test('an invisible landmark says where its instances project and where the reference puts them',()=>{
  const folder=mkdtempSync(join(tmpdir(),'object3d-'));
  writeFileSync(join(folder,'object3d.json'),JSON.stringify({score:.5,landmarks:[{landmarkId:'cab',label:'柜',critical:true,referenceIndex:1,error:1,visible:false,depthRatio:null,projected:[-.505,.447,2.84],expected:[.094,.5]}]}));

@@ -18,6 +18,7 @@ import {bindReferenceFrames} from './reference-framing';
 import {measuredFovRule} from './measured-fov';
 import {measuredPoseRule} from './measured-pose';
 import {measuredCameraRule} from './measured-camera';
+import {measuredOrientationRule} from './measured-orientation';
 import {judgeObject3d,object3dProgressScore,object3dRepairFeedback,object3dRule,withObject3dAcceptance,OBJECT3D_PROGRESS} from './object3d-gate';
 import {preserveOutput,saveDelivery,sealSpatialAssessment} from '../output-delivery';
 import {VOXEL_GEOMETRY_GUIDANCE} from '../voxel/construction-guidance';
@@ -54,8 +55,8 @@ export async function renderBlockout(scene:any,folder:string,ctx:any,command:any
  const port=await new Promise<number>((res,rej)=>{const s=createServer();s.once('error',rej);s.listen(0,'::1',()=>{const p=(s.address() as any).port;s.close(()=>res(p));});});const game=join(project,'game'),p=Bun.spawn(['node',join(ROOT,'../engine/packages/engine/dist/bin/forgeax.mjs'),'project','preview','--root',game,'--port',String(port),'--json'],{cwd:game,stdout:'pipe',stderr:'pipe'});let logs='';const pump=async(s:any)=>{for await(const b of s){logs+=new TextDecoder().decode(b);writeFileSync(join(folder,'preview.log'),logs)}};void pump(p.stdout);void pump(p.stderr);const url='http://localhost:'+port+'/';try{let ready=false;for(let n=0;n<80;n++){ctx.signal.throwIfAborted();if(p.exitCode!==null)throw Error('灰模 Engine 预览启动失败：'+logs.slice(-500));try{const r=await fetch(url,{signal:AbortSignal.timeout(500)});await r.body?.cancel();if(r.ok){ready=true;break;}}catch{}await Bun.sleep(250);}if(!ready)throw Error('灰模 Engine 预览启动超时');// The failed attempt's error and timings stay as evidence before the one fresh capture.
  await captureWithRetry(()=>command(['node',join(ROOT,'src/geometry/capture.mjs'),game,url,out],capturePlan(scene.cameras.length).stageTimeoutMs,project),ctx.signal,first=>{const timing=join(out,'capture-timing.json');save(join(folder,'capture-retry.json'),{version:'capture-retry-v1',error:String(first).slice(-4000),timing:existsSync(timing)?read(timing):null});rmSync(out,{recursive:true,force:true});mkdirSync(out,{recursive:true});event(ctx.job,'capture-retry','本地画面采集失败，已保留失败记录，在同一灰模预览重新采集一次；空间几何尚未被评分');});const runtime=read(join(out,'runtime.json'));if(runtime.distManifestDigest!==read(join(project,'evidence/run-report.json')).distManifestDigest)throw Error('灰模画面与构建产物不一致');if(!runtime.hard.runtime||!runtime.hard.noErrors||!runtime.hard.multipleViews)throw Error('灰模运行或多视角证据未通过');return runtime;}finally{p.kill();await p.exited;}}
 /** The judge review, plus the measured blockers when the objective checks decided the round. */
-function acceptanceFeedback(best:any){
- if(best.gate.object3d){const o=object3dRepairFeedback(best.gate,best.folder);return o?{...best.gate.review,acceptanceBlockers:o}:best.gate.review;}
+function acceptanceFeedback(best:any,cameraLocked=false){
+ if(best.gate.object3d){const o=object3dRepairFeedback(best.gate,best.folder,cameraLocked);return o?{...best.gate.review,acceptanceBlockers:o}:best.gate.review;}
  const blockers=objectiveRepairFeedback(best.gate,existsSync(join(best.folder,'reference-composition.json'))?read(join(best.folder,'reference-composition.json')):null);
  return blockers?{...best.gate.review,acceptanceBlockers:blockers}:best.gate.review;
 }
@@ -77,7 +78,7 @@ export async function acceptSpatialLayout(initial:any,ctx:any,command:any,stage:
   const selected=selectSpatialCandidate(best,{jobId:job.id,round,folder,space,gate:value},{netClosure:spatialSelectionRule(job),swap:spatialSwapRule(job),objective:objectiveGateRule(job,space)});best=selected.candidate;const row={presentationVersion:BLOCKOUT_PRESENTATION,round,startedAt,endedAt:Date.now(),...value,path:'generation/blockout/'+round,selection:{eligible:selected.eligible,changed:selected.changed,reason:selected.reason,retained:spatialCandidateProof(best)}};save(join(folder,'gate.json'),row);recordCompositionShadow(folder,row);job.blockout.repairBasis=spatialCandidateProof(best);job.blockout.rounds.push(row);job.blockout.status=value.passed?'passed':'failed';if(!value.passed&&job.stages?.graybox)job.stages.graybox.status='failed';job.blockout.spaceSha256=digest(JSON.stringify(space));saveJob(job);improvement.result(job.improvementId,{kind:'space',comparison:value.protocol,jobId:job.id,round,...spaceProgress(value,space),status:value.passed?'passed':'failed',requiresDiagnosis:!selected.eligible});
   sealSpatialAssessment(job,join(ctx.dir,'..'),'generation/blockout/'+round);preserveOutput(job,join(ctx.dir,'..'),'generation/blockout/'+round,'graybox');saveDelivery(job,join(ctx.dir,'..'));
   if(value.passed){job.blockout.space=space;saveJob(job);save(join(ctx.dir,'space.json'),space);return space;}
-  feedback=acceptanceFeedback(best);if(ctx.existingScene)throw Error('SPATIAL_GATE_FAILED：恢复候选空间未通过，保留证据；请先调整空间规划，不继续细化资产');const decision=qualityDecision(improvement.get(job.improvementId));if(decision.action==='diagnose'){job.blockout.status='stopped';job.blockout.stopReason=decision;saveJob(job);throw Error('SPATIAL_GATE_FAILED：'+decision.reason+'；转入原因分析与优化方案，详细资产尚未放行');}
+  feedback=acceptanceFeedback(best,measuredOrientationRule(job)||measuredCameraRule(job));if(ctx.existingScene)throw Error('SPATIAL_GATE_FAILED：恢复候选空间未通过，保留证据；请先调整空间规划，不继续细化资产');const decision=qualityDecision(improvement.get(job.improvementId));if(decision.action==='diagnose'){job.blockout.status='stopped';job.blockout.stopReason=decision;saveJob(job);throw Error('SPATIAL_GATE_FAILED：'+decision.reason+'；转入原因分析与优化方案，详细资产尚未放行');}
   let next:any=null;
   while(!next){
    improvement.reserveRepair(job.improvementId,'graybox',feedback.summary);job.blockout.status='repairing';job.blockout.currentRound=round+1;event(job,'spatial-repair','灰模未通过，先依据实际画面修正空间规划；资产尚未开始');round++;const repairDir=join(ctx.dir,'space-repair-'+round);mkdirSync(repairDir,{recursive:true});
@@ -87,7 +88,7 @@ export async function acceptSpatialLayout(initial:any,ctx:any,command:any,stage:
     if(!jointFitRule(job)||signal.aborted||!String(error).includes('GRAYBOX_JOINT_FIT_REGRESSION'))throw error;
     const blocked=jointFitBlockedRound(repairDir,round,error);(job.blockout.blockedRepairs??=[]).push(blocked);saveJob(job);event(job,'spatial-repair-blocked','本轮真实预览候选均未通过跨机位门槛；保留较好来源，记为无增益并带拒绝原因继续');
     improvement.result(job.improvementId,{kind:'space',comparison:best.gate.protocol,jobId:job.id,round,...spaceProgress(best.gate,best.space),status:'failed',requiresDiagnosis:true,blocked:JOINT_FIT_NET});
-    feedback={...acceptanceFeedback(best),jointFitBlocked:job.blockout.blockedRepairs.slice(-2)};
+    feedback={...acceptanceFeedback(best,measuredOrientationRule(job)||measuredCameraRule(job)),jointFitBlocked:job.blockout.blockedRepairs.slice(-2)};
     const stop=qualityDecision(improvement.get(job.improvementId));if(stop.action==='diagnose'){job.blockout.status='stopped';job.blockout.stopReason=stop;saveJob(job);throw Error('SPATIAL_GATE_FAILED：'+stop.reason+'；转入原因分析与优化方案，详细资产尚未放行');}
    }
   }

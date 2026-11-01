@@ -2,7 +2,9 @@
 # Per observed landmark-view: pg = median graybox ray hit on the landmark's bound instances (camera frame), pm = median MoGe point inside
 # the inner half of its observation box; one scale per view (median |pm|/|pg|); error |s·pg − pm| / |pm| capped at 1; a bound landmark
 # invisible in that view scores 1. Score = mean over landmark-views (lower is better). Rows carry the depth ratio (graybox z / reference z
-# after the scale) so a repair knows whether the object sits too near or too far.
+# after the scale) so a repair knows whether the object sits too near or too far, and `offset` = pm/s − pg in the reference camera axes
+# [right, down, forward] in scene metres: the move that would take the instance from its graybox position to the measured one. The offset is
+# trustworthy only when the reference camera is locked to measurement; the gate decides whether to surface it (see object3d-gate.ts).
 import json, sys
 import numpy as np
 
@@ -34,7 +36,8 @@ for vk, v in grid['views'].items():
             r.update(error=1.0, visible=False, depthRatio=None)
         else:
             r.update(error=min(1.0, float(np.linalg.norm(s * pg - pm) / np.linalg.norm(pm))), visible=True,
-                     depthRatio=round(float(s * pg[2] / pm[2]), 3) if pm[2] > 1e-6 else None)
+                     depthRatio=round(float(s * pg[2] / pm[2]), 3) if pm[2] > 1e-6 else None,
+                     offset=[round(float(x), 3) for x in (pm / s - pg)])
         r['error'] = round(r['error'], 4); rows.append(r)
 n = len(rows)
 print(json.dumps({'version': 'object3d-v1', 'score': round(sum(r['error'] for r in rows) / n, 4) if n else None, 'rows': n,
