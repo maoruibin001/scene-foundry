@@ -64,7 +64,7 @@ export const renderPool=new PermitPool(limits.renders,()=>legacyActive().length?
 export const sceneQueue=new SceneQueue(limits.scenes,()=>legacyJobs().length,(id,e)=>console.error('SCENE_SCHEDULER_ERROR',id,String(e)),()=>legacyJobs().map(j=>j.key));
 const circuitPath=join(DATA,'scheduler-pause.json');
 if(existsSync(circuitPath))sceneQueue.paused=read(circuitPath).reason;
-export function pauseProvider(error:unknown){const s=String(error);if(!/MODEL_BUDGET_EXHAUSTED|MODEL_ROUTE_UNVERIFIED|CODEX_ROUTE_UNVERIFIED|PROVIDER_NOT_CONFIGURED|PROVIDER_HTTP_(?:401|402|403)|insufficient[_ ]quota|余额不足|额度耗尽|quota exceeded|usage limit/i.test(s))return;sceneQueue.paused=s;save(circuitPath,{reason:s,at:Date.now()});}
+export function pauseProvider(error:unknown){const s=String(error);if(!/MODEL_BUDGET_EXHAUSTED|MODEL_ROUTE_UNVERIFIED|CODEX_ROUTE_UNVERIFIED|CLAUDE_ROUTE_CHANGED|PROVIDER_NOT_CONFIGURED|PROVIDER_HTTP_(?:401|402|403)|insufficient[_ ]quota|余额不足|额度耗尽|quota exceeded|usage limit/i.test(s))return;sceneQueue.paused=s;save(circuitPath,{reason:s,at:Date.now()});}
 export function assertProviderOpen(){if(sceneQueue.paused)throw Error('PROVIDER_PAUSED：'+sceneQueue.paused);}
 export function resumeScheduler(){sceneQueue.paused=null;if(existsSync(circuitPath))unlinkSync(circuitPath);sceneQueue.drain();}
 export function updateConcurrency(value:any){limits=validateLimits(value);save(settingsPath,limits);modelPool.setLimit(limits.models);renderPool.setLimit(limits.renders);sceneQueue.setLimit(limits.scenes);return schedulerSnapshot();}

@@ -21,7 +21,7 @@ export function providerFault(error:unknown){
  // 2026-10-19 voxel judge: the gateway rejected one valid 1600×1200 PNG every time and accepted its pixel-identical re-encode.
  if(IMAGE_ENCODING_REJECTED.test(s))return {kind:'image-encoding',recoverable:true,reason:'接口网关拒收一张已校验图片的编码；以像素完全相同的无损重编码图片重发一次'};
  if(externalProviderBlock(error))return {kind:'hard',recoverable:false,reason:'供应商额度或授权不可用，需要外部恢复后才能继续；不重试同一请求'};
- if(/IMPROVEMENT_STOPPED|MODEL_BUDGET_EXHAUSTED|MODEL_ROUTE_UNVERIFIED|CODEX_ROUTE_UNVERIFIED|NOT_CONFIGURED|PROVIDER_PAUSED|PROVIDER_INPUT_INVALID|PROVIDER_HTTP_(?:400|404|413|422)/i.test(s))return {kind:'hard',recoverable:false,reason:'预算、认证、输入或模型路由需要修复后才能继续'};
+ if(/IMPROVEMENT_STOPPED|MODEL_BUDGET_EXHAUSTED|MODEL_ROUTE_UNVERIFIED|CODEX_ROUTE_UNVERIFIED|CLAUDE_ROUTE_CHANGED|NOT_CONFIGURED|PROVIDER_PAUSED|PROVIDER_INPUT_INVALID|PROVIDER_HTTP_(?:400|404|413|422)/i.test(s))return {kind:'hard',recoverable:false,reason:'预算、认证、输入或模型路由需要修复后才能继续'};
  if(rateLimitDelay(error)!==null)return {kind:'transient',recoverable:true,reason:'供应商限流；等待请求窗口恢复并统一降低并发'};
  if(/PROVIDER_TIMEOUT|^TimeoutError:/.test(s))return {kind:'timeout',recoverable:true,reason:'模型调用超时；保留已完成步骤，使用延长后的时限恢复当前调用'};
  if(/PROVIDER_HTTP_(?:408|429|500|502|503|504)|fetch failed|ECONNRESET|ETIMEDOUT|EAI_AGAIN|connection (?:reset|closed)|network|stream (?:disconnected|closed|terminated)|stream.*before completion|unexpected (?:eof|end of (?:file|stream))|socket hang up|connection (?:aborted|terminated)|PROVIDER_EMPTY_OUTPUT|PROVIDER_STALLED|reconnecting|temporarily unavailable|rate limit|overloaded|high demand|try again later/i.test(s))return {kind:'transient',recoverable:true,reason:'临时网络、限流或服务异常；退避后恢复当前调用'};
