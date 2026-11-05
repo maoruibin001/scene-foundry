@@ -18,7 +18,7 @@ export async function composeHost(game: string, engineRoot: string) {
   const [{ AssetGuid }, { definePackageId }] = await Promise.all([facade('guid'), facade('source')]);
   const guid = (key: string) => AssetGuid.format(AssetGuid.derive(definePackageId(HOST_PACKAGE_ID), key));
   const assets = join(game, 'assets'), entries: Record<string, any> = {}, children: string[] = [];
-  let frontend: string | null = null, camera: string | null = null;
+  let frontend: string | null = null, camera: string | null = null, build: string | null = null;
   for (const p of cfg.plugins) {
     const file = join(game, p.name), name = camel(p.id);
     let source = readFileSync(file, 'utf8');
@@ -31,6 +31,8 @@ export async function composeHost(game: string, engineRoot: string) {
     writeFileSync(file, source);
     entries['plugin/' + p.id] = { kind: 'plugin', module: { specifier: './' + relative(assets, file), export: name } };
     if (p.realm === 'frontend') frontend = guid('plugin/' + p.id);
+    // Build-realm plugins (renderer profile, cookers) run in the isolated build process and become roots.build.
+    else if (p.realm === 'build') { if (build) throw new Error('compose-host: only one build-realm plugin'); build = guid('plugin/' + p.id); }
     else if (p.id === 'camera') camera = guid('plugin/' + p.id);
     else children.push(guid('plugin/' + p.id));
   }
@@ -59,7 +61,7 @@ export const scene:Plugin.Object<{readonly scene:string;readonly children:readon
 import {ok} from '@forgeax/engine/types';
 export default definePack({schemaVersion:'2.0.0',plugins:true,packageId:definePackageId('${HOST_PACKAGE_ID}'),build:()=>ok(${JSON.stringify(entries)})});
 `);
-  const roots = { engine: guid('plugin/engine'), ...(frontend ? { frontend } : {}) };
+  const roots = { engine: guid('plugin/engine'), ...(frontend ? { frontend } : {}), ...(build ? { build } : {}) };
   writeFileSync(configPath, JSON.stringify({ id: cfg.id, name: cfg.name, schemaVersion: '3.0.0', assetRoots: ['assets'], roots }, null, 2) + '\n');
   return roots;
 }
