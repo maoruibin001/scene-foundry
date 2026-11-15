@@ -22,7 +22,7 @@ export function opticsQuality(width=1600,height=900){
  if(!Number.isSafeInteger(width)||!Number.isSafeInteger(height)||width<64||height<64||width>8192||height>8192)throw Error('OPTICS_OUTPUT_SIZE_INVALID');
  const scale=Math.min(.8,1280/width,720/height);
  return {planar:{width:Math.max(32,Math.round(width*scale)),height:Math.max(32,Math.round(height*scale)),sampleCount:1,mipLevels:1},
-  volumetricFog:{quality:'medium' as const,depth:64,tileSize:8},scope:'bounded quality policy; does not establish GPU readiness'};
+  volumetricFog:{quality:'high' as const,depth:64 as const,tileSize:16 as const},scope:'bounded quality policy; does not establish GPU readiness'};
 }
 
 /** One density owner, one extinction term. Fixed Engine admits one light or Point+Spot.

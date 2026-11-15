@@ -6,7 +6,7 @@
 - `optics-audit.json` 保留光学编译选项、贴图乘数范围、生成法线的最大坡度和默认强度调整。最终shader还有mip、导数抗锯齿和粗糙度下界，输入审计不能冒充GPU测量。
 - 对未指定normalStrength的程序化纹理，默认强度按原始法线最大坡度约束：光滑材质8度、其余30度。显式强度和外部PBR贴图保留；不修改输入的roughness或clearcoat。编译出的材质及`surface-optics.json`记录实际派生值。
 - 水体可显式声明attenuationColor与attenuationDistance，必须同时提供且启用透射，不为旧水材质捏造吸收参数。
-- 平面反射目标由输出尺寸和1280×720上限推导；雾使用有界medium/64/8档。反射仍是单mip；此候选不声称实现了新的反射算法或性能优化。
+- 平面反射目标由输出尺寸和1280×720上限推导；雾使用固定Engine接受的有界high/64/16档，并调用实际validateRenderProfile验证。反射仍是单mip；此候选不声称实现了新的反射算法或性能优化。
 - volumetric.lights可选择一盏灯，或固定Engine支持的Point+Spot组合。保持一个密度owner与一次消光；Direction+Point等不支持组合明确拒绝，不复制重叠雾冒充多光源。未声明时保持原fog.light。
 
 采集先保留原60个真实完成帧预热，再从正常frontend插件借用实际App的只读inspectRenderer接口。每机位核对真实pose、探针发布状态、SSR稳定历史、volume accepted状态、资源版本与完成owner。Browser/Source帧号与Renderer帧号是两个命名空间，禁止直接比较。Renderer待完成列表截断、观测缺失、设备/世界变更、资源变更、未就绪或超时均不能通过，不以固定sleep替代。

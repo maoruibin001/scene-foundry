@@ -3,6 +3,7 @@ import {compileNormalScale,opticsQuality,volumeLightSelection,mirrorProjection,i
 import {sampleSpec} from './fixtures';
 import {materialOptions} from './export-pack';
 import {sceneSpecErrors} from './schema';
+import {DEFAULT_STANDARD_PROFILE,validateRenderProfile} from '@forgeax/engine/render';
 import {emitSpecWorld,volumetricFogPlugin,planarReflectionPlugin} from './world-emitter';
 
 test('generated near-horizontal normals are bounded, explicit strength and input bytes preserved',()=>{
@@ -13,6 +14,7 @@ test('generated near-horizontal normals are bounded, explicit strength and input
 });
 test('output quality is bounded and follows aspect; no scene IDs or fixed 640 image',()=>{
  expect(opticsQuality().planar).toMatchObject({width:1280,height:720});
+ expect(validateRenderProfile({...DEFAULT_STANDARD_PROFILE,volumetricFog:opticsQuality().volumetricFog})).toBeNull();
  expect(opticsQuality(800,800).planar).toMatchObject({width:640,height:640});
  expect(opticsQuality(8000,8000).planar.width).toBeLessThanOrEqual(1280);
  expect(()=>opticsQuality(NaN,900)).toThrow();expect(()=>opticsQuality(0,900)).toThrow();
