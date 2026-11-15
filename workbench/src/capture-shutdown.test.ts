@@ -27,10 +27,15 @@ test('会话关闭不返回时明确失败，不吞掉超时或伪造关闭成�
  const steps:string[]=[];await expect(closeCaptureResources({close:()=>new Promise(()=>{})},null,s=>steps.push(s),{timeoutMs:10})).rejects.toThrow('CAPTURE_CLEANUP_TIMEOUT');expect(steps).not.toContain('采集资源已关闭');
 });
 
-test('私有采集页面先卸载GPU场景，借用页面不被导航；关闭失败仍上报',async()=>{
+test('Engine owns private and borrowed teardown; pipeline never navigates before official close',async()=>{
  const order:string[]=[];
- await closeCaptureResources({report:()=>({carrier:'private-browser'}),page:{goto:async(url:string)=>{expect(url).toBe('about:blank');order.push('unload');}},close:async()=>{order.push('close');}},null);
- expect(order).toEqual(['unload','close']);
+ await closeCaptureResources({report:()=>({carrier:'private-browser'}),page:{goto:()=>{throw Error('must not navigate a closing GPU owner');}},close:async()=>{order.push('close');}},null);
+ expect(order).toEqual(['close']);
  await closeCaptureResources({report:()=>({carrier:'borrowed'}),page:{goto:async()=>{throw Error('不能触碰借用页面');}},close:async()=>{}},null);
  await expect(closeCaptureResources({report:()=>({carrier:'private-browser'}),page:{goto:async()=>{}},close:async()=>{throw Error('close failed');}},null)).rejects.toThrow('close failed');
+});
+test('an authoritative Engine close requires its actual closedAt receipt',async()=>{
+ const report:any={schemaVersion:'3.0.0',carrier:'private-browser'};
+ await expect(closeCaptureResources({report:()=>report,close:async()=>{}},null)).rejects.toThrow('CAPTURE_CLOSE_UNCONFIRMED');
+ await closeCaptureResources({report:()=>report,close:async()=>{report.closedAt=new Date().toISOString();}},null);
 });
