@@ -1,3 +1,4 @@
+import {photometricContinuity} from './spec/photometric-continuity';
 import {lightingSemantics} from './spec/lighting-semantics';
 import {continueSpec} from './spec/continuation';
 import {startSpecReview} from './spec-review';
@@ -143,6 +144,8 @@ if(!FOLLOWER){claimCoordinator();if(!executionHeld()){references.recover();recov
   const stored=storeSpec(result.spec),job=createSpecJob({specId:stored.id,nodeModels:source.nodeModels,sourceJobId:source.id,continuation:result.receipt});
   return json(job,201);
  }
+ const photometry=u.pathname.match(/^\/api\/spec-jobs\/([a-f0-9-]{36})\/photometric$/);
+ if(req.method==='POST'&&photometry){assertCurrentVersion(activeVersion.id);const source=getJob(photometry[1]);if(!source.specJob||!source.specId||source.status!=='needs_review'||!source.appearanceSourceJobId||source.styleReview?.evidence?.status!=='visible')throw Error('需要已结束的灯型修订和真实评审');const root=source.executionRecoveryRoot??source.id;if(listJobs().some(j=>(j.executionRecoveryRoot??j.id)===root&&(j.appearanceKind==='photometric'||['queued','running'].includes(j.status))))throw Error('本根已有单位换算或在途任务');photometricContinuity(loadSpec(getJob(source.appearanceSourceJobId).specId).spec,loadSpec(source.specId).spec);return json(createSpecJob({specId:source.specId,nodeModels:source.nodeModels,sourceJobId:source.id,appearanceSourceJobId:source.id,appearanceKind:'photometric'}),201);}
  const physics=u.pathname.match(/^\/api\/spec-jobs\/([a-f0-9-]{36})\/resolve-lighting$/);
  if(req.method==='POST'&&physics){assertCurrentVersion(activeVersion.id);const source=getJob(physics[1]);if(!source.specJob||!source.specId||!['failed','needs_review'].includes(source.status)||source.styleReview?.evidence?.status!=='visible')throw Error('需要真实失败评审');const root=source.executionRecoveryRoot??source.id;if(listJobs().some(j=>(j.executionRecoveryRoot??j.id)===root&&(j.appearanceKind==='physics'||['queued','running'].includes(j.status))))throw Error('本场景已有灯光参数解析或在途任务');if(!lightingSemantics(loadSpec(source.specId).spec).issues.length)throw Error('没有新的可验证灯光参数问题');return json(createSpecJob({specId:source.specId,nodeModels:source.nodeModels,sourceJobId:source.id,appearanceSourceJobId:source.id,appearanceKind:'physics'}),201);}
  const appearance=u.pathname.match(/^\/api\/spec-jobs\/([a-f0-9-]{36})\/appearance$/);

@@ -1,3 +1,4 @@
+import {resolvePhotometricContinuity} from './spec/photometric-continuity';
 import {getJob,runDir} from './store';
 import {repairAppearance,resolveLightingSemantics} from './spec/appearance-continuation';
 import {repairSpecParameters} from './spec/parameter-repair';
@@ -87,7 +88,7 @@ export async function runSpec({job,dir,stage,command,preview,signal}:any){
  if(job.appearanceSourceJobId){
   const previous=getJob(job.appearanceSourceJobId),sourceDir=runDir(previous.id),shots=(previous.runtime?.images??[]).filter((f:string)=>/^inspection-[^/]+\.png$/.test(f));
   const images=[...visualReferences(styleImages).map((im:any)=>({path:join(UPLOADS,im.file),mime:im.mime})),...shots.map((f:string)=>({path:join(sourceDir,'runtime',f),mime:'image/png'}))];
-  const revised=await stage('appearance',()=>job.appearanceKind==='physics'?resolveLightingSemantics(sourceSpec,previous.styleReview,join(dir,'appearance'),nodeModels.parameterRepair,signal):repairAppearance(sourceSpec,previous.styleReview,images,join(dir,'appearance'),nodeModels.parameterRepair,signal));
+  const revised=await stage('appearance',()=>job.appearanceKind==='photometric'?resolvePhotometricContinuity(loadSpec(getJob(previous.appearanceSourceJobId).specId).spec,sourceSpec,join(dir,'appearance')):job.appearanceKind==='physics'?resolveLightingSemantics(sourceSpec,previous.styleReview,join(dir,'appearance'),nodeModels.parameterRepair,signal):repairAppearance(sourceSpec,previous.styleReview,images,join(dir,'appearance'),nodeModels.parameterRepair,signal));
   spec=revised.spec;job.specContinuation=revised.receipt;job.appearanceRevision={sourceJobId:previous.id,before:previous.styleReview.overall,mechanism:'source-appearance-continuation-v1'};
   job.specId=storeSpec(spec).id;saveJob(job);
  }
