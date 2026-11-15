@@ -233,3 +233,36 @@ test('离线二进制网格预烘焙:重网格生成 cooked/*.bin 与缓存戳,�
   if(prevMin===undefined)delete process.env.SPEC_PRECOOK_MIN_TRIANGLES;else process.env.SPEC_PRECOOK_MIN_TRIANGLES=prevMin;
  }
 });
+
+test('光学管线契约:不透明清漆材质保留 deferred G-Buffer 通道与 occlusionTexture，透射液膜保留双层 clearcoat 法线，探针数写入 scene-audit',async()=>{
+ const s=sampleSpec(),src=s.materials[0]!.sources;
+ s.lighting.states[0]!.post.ssr={maxDistance:28,thickness:0.35,maxRoughness:0.25};
+ s.lighting.states[0]!.post.reflectionProbe={intensity:0.7,resolution:128};
+ s.materials=[
+  {id:'wet_deck',label:'湿甲板',baseColor:[0.06,0.07,0.09,1],metallic:0.58,roughness:0.08,emissive:null,emissiveIntensity:0,transmission:0,ior:1.5,thickness:0,clearcoat:0.9,clearcoatRoughness:0.04,surface:{pattern:'deck',tilesPerMeter:0.5,normalStrength:0.2},sources:src},
+  {id:'puddle_film',label:'积水薄层',baseColor:[0.05,0.08,0.12,1],metallic:0.1,roughness:0.05,emissive:null,emissiveIntensity:0,transmission:0.3,ior:1.333,thickness:0.02,clearcoat:1,clearcoatRoughness:0.02,surface:{pattern:'puddle',tilesPerMeter:1,normalStrength:0.2},sources:src},
+ ];
+ s.families[0]!.materialSlots={shell:'wet_deck'};
+ const projDir=mkdtempSync(join(tmpdir(),'spec-proj-optics-'));
+ const {plan}=await prepareSpecProject(projDir,s,{id:'spec-optics-test'});
+ const audit=JSON.parse(readFileSync(join(projDir,'game/assets/scene-audit.json'),'utf8'));
+ expect(audit.reflectionProbeCount).toBe(1);
+
+ const packDir=join(projDir,'game/assets/generated');
+ writeSpecPack(s,plan,packDir,{packageId:'019fb7ce-6100-7000-8000-000000000044',sourceKey:'scene/spec',name:'光学测试'});
+ const mod=(await import(pathToFileURL(join(packDir,'spec.pack.ts')).href)).default;
+ const built=await buildPack(mod);
+ expect(built.ok).toBe(true);
+ const assets=((built as any).value.assets??(built as any).value) as Record<string,any>;
+ const wetMat=assets['material/wet_deck'];
+ expect(wetMat.passes.map((p:any)=>p.name)).toContain('deferred');
+ expect(wetMat.values.occlusionTexture).toBeDefined();
+ expect(wetMat.values.roughness).toBeLessThan(0.08);
+ expect(wetMat.values.ior).toBeGreaterThan(1.5);
+
+ const puddleMat=assets['material/puddle_film'];
+ expect(puddleMat.passes.map((p:any)=>p.name)).not.toContain('deferred');
+ expect(puddleMat.values.clearcoat).toBe(1);
+ expect(puddleMat.values.clearcoatNormalTexture).toBeDefined();
+ expect(puddleMat.values.occlusionTexture).toBeDefined();
+});

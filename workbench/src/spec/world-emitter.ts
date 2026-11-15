@@ -35,7 +35,7 @@ function lightEntity(l:SpecLight,shadowDistance=70){
   case 'directional':return {component:'DirectionalLight',value:{Name:{value:l.id},DirectionalLight:{direction:norm(dir(l.direction!)),color:l.color,intensity:l.intensity,castShadow:l.castShadow,...(l.castShadow?{shadowDistance,mapSize:2048,cascadeCount:2,shadowFilter:2,staggerCascades:true}:{})}}};
   case 'point':return {component:'PointLight',value:{Name:{value:l.id},Transform:{pos},PointLight:{color:l.color,intensity:l.intensity,range:l.range??10}}};
   case 'spot':return {component:'SpotLight',value:{Name:{value:l.id},Transform:{pos},SpotLight:{direction:norm(dir(l.direction!)),color:l.color,intensity:l.intensity,range:l.range??20,innerConeDeg:l.innerConeDeg??20,outerConeDeg:l.outerConeDeg??30,castShadow:l.castShadow,
-   ...(l.castShadow?{mapSize:512,nearPlane:.1,farPlane:l.range??20,pcfKernelSize:3}:{})}}};
+   ...(l.castShadow?{mapSize:1024,nearPlane:.25,farPlane:l.range??20,pcfKernelSize:3}:{})}}};
   case 'area':{
    // 引擎矩形面光沿局部 +Z 发光;up 取世界上方,发光方向接近竖直时改取 +X。
    const d=norm(dir(l.direction!)),up=Math.abs(d[1])>.95?[1,0,0]:[0,1,0];
@@ -85,9 +85,14 @@ export function emitSpecWorld(spec:SceneSpec,opts:{worldPackageId:string;stateId
  // SPEC_GI_KEEP_AREA=1:验收用,保留面光进 GI 场景(sf.1 起引擎把面光排除出 GI 而不是整帧失败)。
  const lights=post.gi&&process.env.SPEC_GI_KEEP_AREA!=='1'?state.lights.map(l=>{if(l.kind!=='area')return l;deferred.push({feature:'RectAreaLight:'+l.id,reason:'GI 不接受面光,已换成宽角聚光灯'});return {...l,kind:'spot' as const,intensity:l.intensity*(l.width??1)*(l.height??1)*4,innerConeDeg:50,outerConeDeg:80,castShadow:false};}):state.lights;
  // 自适应大空间光照预算:随场景跨度 span 扩展射程上限(24m..90m)与方向光阴影距离(70m..180m),
- // 允许方向光与最多 2 盏聚光投影(兼顾顶部核心光柱与远端背光门);超出部分截断并记入 deferred。SPEC_LIGHT_BUDGET=0 关闭。
- const budget=process.env.SPEC_LIGHT_BUDGET!=='0';let spotShadows=0;
+ // 允许方向光与最多 2 盏聚光投影(兼顾顶部核心光柱与远端背光门);若预算尚有空余槽位,为高强度远射聚光灯自动补开投影,
+ // 防止无阴影聚光灯穿墙直轰光滑地面/水池造成异常镜面亮斑;超出部分截断并记入 deferred。SPEC_LIGHT_BUDGET=0 关闭。
+ const budget=process.env.SPEC_LIGHT_BUDGET!=='0';
+ const authoredSpotShadows=lights.filter(l=>l.kind==='spot'&&l.castShadow).length;
+ let autoSpotShadows=Math.max(0,2-authoredSpotShadows);
+ let spotShadows=0;
  const budgeted=budget?lights.map(l=>{let o=l;if(o.kind!=='directional'&&(o.range??0)>maxRange){deferred.push({feature:'LightRange:'+o.id,reason:`射程 ${o.range}m 截到 ${maxRange}m(光照预算)`});o={...o,range:maxRange};}
+  if(!o.castShadow&&o.kind==='spot'&&autoSpotShadows>0&&o.intensity>=800&&(o.range??20)>=20){autoSpotShadows--;spotShadows++;return {...o,castShadow:true};}
   if(o.castShadow&&o.kind!=='directional'){if(o.kind==='spot'&&spotShadows++<2)return o;deferred.push({feature:'LightShadow:'+o.id,reason:'只保留方向光与最多 2 盏聚光投影(光照预算)'});o={...o,castShadow:false};}return o;}):lights;
  budgeted.forEach(l=>{const e=lightEntity(l,shadowDistance);components.add(e.component);entities['light_'+l.id.replace(/[^A-Za-z0-9_]/g,'_')]={components:e.value};});
  const views=shots.map(s=>({id:s.id,name:s.label.split(/[：:]/)[0].slice(0,12),position:toEnginePosition(s.position),target:toEnginePosition(s.target),up:[0,1,0],fov:s.fovDeg*Math.PI/180,frame:{width:1600,height:900}}));

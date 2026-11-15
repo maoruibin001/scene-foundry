@@ -294,14 +294,30 @@ function buildSurfaceSync(pattern:string,safeKey:string,size:number):CachedSurfa
 }
 
 export const PROXY_MATERIAL='spec-proxy';
-export function materialOptions(m:SpecMaterial){
- // 只传非默认的物理层:引擎按传入字段启用清漆/透射层,透射材质自动关闭深度写入。
- return {baseColor:m.baseColor,metallic:m.metallic,roughness:m.roughness,
+export function materialOptions(m:SpecMaterial,opts:{deferredCompatible?:boolean;planarReflection?:boolean}={}){
+ const alphaBlend=m.opacity!=null&&m.opacity<1;
+ const transmissive=!alphaBlend&&m.transmission>0;
+ const forwardOnly=alphaBlend||transmissive||opts.planarReflection===true;
+ const foldClearcoat=!forwardOnly&&opts.deferredCompatible!==false&&m.clearcoat>0;
+ const coat=Math.max(0,Math.min(1,m.clearcoat));
+ const coatRough=Math.max(0.04,m.clearcoatRoughness||0.04);
+ const roughness=foldClearcoat&&coatRough<m.roughness
+  ?Number((m.roughness*(1-coat*0.65)+coatRough*(coat*0.65)).toFixed(4))
+  :m.roughness;
+ const foldedIor=foldClearcoat
+  ?Math.min(1.68,Number(((m.ior||1.5)+coat*0.14*(1-m.metallic*0.5)).toFixed(3)))
+  :undefined;
+ // 只传非默认的物理层:引擎中开启 clearcoat staticSwitch 会将材质归入 physical 层并剥离 deferred G-Buffer pass,
+ // 导致不透明地面/墙体/核心丧失 GTAO 接触阴影、SSR 屏幕空间反射与 ProjectedDecal 贴花;
+ // 对进入延迟通道的不透明材质将其清漆光泽与菲涅尔折算入单层 G-Buffer PBR,仅对本就走前向的透射/半透明/平面反射保留双层 clearcoat。
+ return {baseColor:m.baseColor,metallic:m.metallic,roughness,
+  ...(foldedIor&&foldedIor>1.5?{ior:foldedIor}:{}),
   ...(m.emissive&&m.emissiveIntensity>0?{emissive:m.emissive,emissiveIntensity:m.emissiveIntensity}:{}),
   // 清透玻璃:alpha 混合 + 不写深度 + 双面;透射关闭(两者互斥,透射会把后方发光体模糊成乳白)。
-  ...(m.opacity!=null&&m.opacity<1?{baseColor:[m.baseColor[0],m.baseColor[1],m.baseColor[2],m.opacity],renderState:{blend:{color:{srcFactor:'src-alpha',dstFactor:'one-minus-src-alpha',operation:'add'},alpha:{srcFactor:'one',dstFactor:'one-minus-src-alpha',operation:'add'}},depthWriteEnabled:false,cullMode:'none'}}
-   :m.transmission>0?{transmission:m.transmission,ior:m.ior,thickness:m.thickness}:{}),
-  ...(m.clearcoat>0?{clearcoat:m.clearcoat,clearcoatRoughness:m.clearcoatRoughness,staticSwitches:{clearcoat:true}}:{})};
+  ...(alphaBlend?{baseColor:[m.baseColor[0],m.baseColor[1],m.baseColor[2],m.opacity],renderState:{blend:{color:{srcFactor:'src-alpha',dstFactor:'one-minus-src-alpha',operation:'add'},alpha:{srcFactor:'one',dstFactor:'one-minus-src-alpha',operation:'add'}},depthWriteEnabled:false,cullMode:'none'}}
+   :transmissive?{transmission:m.transmission,ior:m.ior,thickness:m.thickness}:{}),
+  ...(forwardOnly&&m.clearcoat>0?{clearcoat:m.clearcoat,clearcoatRoughness:m.clearcoatRoughness,staticSwitches:{clearcoat:true}}:{}),
+  ...(opts.planarReflection?{planarReflection:true}:{})};
 }
 
 type PendingPlacement=
@@ -311,16 +327,23 @@ type PendingPlacement=
 type UniqueMeshJob={key:string;generatorId:string;params:Record<string,ParamValue>;family:string};
 type BuiltMeshOutcome={ok:true;record:CachedMeshRecord}|{ok:false;error:string};
 
+function defaultSurfaceNormalStrength(m:SpecMaterial,pattern:string):number{
+ if(pattern.startsWith('polyhaven:'))return Number((1-Math.min(0.45,Math.max(0,m.clearcoat)*0.45)).toFixed(3));
+ const base=pattern==='trim'?Math.min(0.16,Math.max(0.08,m.roughness*0.45)):Math.max(0.12,Math.min(0.6,m.roughness));
+ return Number((base*(1-Math.min(0.5,Math.max(0,m.clearcoat)*0.5))).toFixed(3));
+}
+
 function prepareExportPlacements(spec:SceneSpec){
  const report:ExportReport={unresolved:[],expanded:[],slotFallbacks:[],covered:[],proxies:[],dropped:[],derived:[],errors:[]};
  // 平面反射只作用于反射对象所属族里的光滑材质(roughness≤0.15,如池水);引擎要求材质在 pack 里烘焙该开关。
  const state=spec.lighting.states.find(s=>s.id===spec.lighting.defaultState),planar=state?.post.planarReflections[0];
+ const deferredCompatible=Boolean(state?.post.gtao||state?.post.ssr||state?.post.gi||(spec.decals?.length??0)>0||process.env.SPEC_RENDER_PATH==='deferred');
  const planarFamily=planar?spec.families.find(f=>f.id===spec.objects.find(o=>o.id===planar.object)?.family):undefined;
  const mirrored=new Set(Object.values(planarFamily?.materialSlots??{}).filter(id=>(spec.materials.find(m=>m.id===id)?.roughness??1)<=0.15));
  // 质感默认:没有指定表面纹样、不发光、不透光的材质自动套"使用痕迹"纹样(粗糙度/底色变化,去塑料感);
  // 规格写 surface:null 以外的值或 SPEC_DEFAULT_WEAR=0 时不套。
  const wear=(m:SceneSpec['materials'][number])=>process.env.SPEC_DEFAULT_WEAR!=='0'&&m.surface===undefined&&!(m.emissiveIntensity>0)&&!((m.transmission??0)>0.3)&&!((m as any).opacity<1)?{pattern:'worn',tilesPerMeter:0.8}:null;
- const materials=spec.materials.map(m=>{const surface=m.surface??wear(m);return {key:sourceSegment(m.id),options:{...materialOptions(m),...(mirrored.has(m.id)?{planarReflection:true}:{})},...(surface?{surface:{...surface,normalStrength:surface.normalStrength??(surface.pattern.startsWith('polyhaven:')?1:Math.max(.12,Math.min(.6,m.roughness)))}}:{})};});
+ const materials=spec.materials.map(m=>{const surface=m.surface??wear(m),isPlanar=mirrored.has(m.id);return {key:sourceSegment(m.id),options:materialOptions(m,{deferredCompatible,planarReflection:isPlanar}),...(surface?{surface:{...surface,normalStrength:surface.normalStrength??defaultSurfaceNormalStrength(m,surface.pattern)}}:{})};});
  // 灰模代理压成暗色:它只占位,不应在画面里抢眼(仍保留可见,如实标示缺生成器)。
  materials.push({key:PROXY_MATERIAL,options:{baseColor:[0.06,0.065,0.07,1],metallic:0.3,roughness:0.6}});
 
@@ -788,7 +811,15 @@ export default definePack({
   const channel=(p:string,ch:string,tiles:number)=>({texture:ref('texture/'+p.replace(':','-')+'-'+ch),sampler:ref('sampler/surface-repeat'),coordinates:{transform:{scale:[tiles*2,tiles*2]}}});
   const nonShadowMatKeys=new Set(data.meshes.flatMap((mesh:any)=>Object.entries(mesh.slots??{}).filter(([slot])=>/^(skylight|sky|tubeGlass|glass|pane|window|constraintField|holoGlow)$/i.test(slot)).map(([,mk])=>String(mk))));
   for(const m of data.materials as any[]){
-   const std=Materials.standard({...m.options,...(m.surface?{normalTexture:channel(m.surface.pattern,'normal',m.surface.tilesPerMeter),normalScale:[m.surface.normalStrength??1,m.surface.normalStrength??1],metallicRoughnessTexture:channel(m.surface.pattern,'mr',m.surface.tilesPerMeter),baseColorTexture:channel(m.surface.pattern,'color',m.surface.tilesPerMeter)}:{})} as any);
+   const ns=m.surface?.normalStrength??1;
+   const std=Materials.standard({...m.options,...(m.surface?{
+    normalTexture:channel(m.surface.pattern,'normal',m.surface.tilesPerMeter),
+    normalScale:[ns,ns],
+    metallicRoughnessTexture:channel(m.surface.pattern,'mr',m.surface.tilesPerMeter),
+    occlusionTexture:channel(m.surface.pattern,'mr',m.surface.tilesPerMeter),
+    baseColorTexture:channel(m.surface.pattern,'color',m.surface.tilesPerMeter),
+    ...((m.options?.clearcoat??0)>0?{clearcoatNormalTexture:channel(m.surface.pattern,'normal',m.surface.tilesPerMeter),clearcoatNormalScale:Math.min(1,Number((ns*0.35).toFixed(4)))}:{}),
+   }:{})} as any);
    const noShadow=nonShadowMatKeys.has(m.key)||(m.options?.transmission??0)>0||Boolean(m.options?.renderState?.blend);
    out['material/'+m.key]=noShadow?{...std,passes:std.passes.filter((p:any)=>p.name!=='shadow-caster'&&p.renderState?.tags?.LightMode!=='ShadowCaster')}:std;
   }

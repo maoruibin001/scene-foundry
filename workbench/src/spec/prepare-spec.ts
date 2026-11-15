@@ -24,7 +24,7 @@ export async function prepareSpecProject(root:string,spec:SceneSpec,options:{id?
  validateSceneSpec(spec);
  const plan=await planSpecExportParallel(spec,{cacheDir:join(root,'.mesh-cache'),concurrency:options.concurrency});
  const exportStats=getExportPlanTelemetry(plan)??{parallelWorkers:0,durationMs:0,uniqueMeshes:plan.meshes.length,workerMeshBuilds:0,meshCacheHits:0,surfaceBuilds:0};
- const visibility=plan.report.proxies.length?null:resolveCameraVisibility(spec,plan);
+ const visibility=plan.report.errors.length?null:resolveCameraVisibility(spec,plan);
  if(visibility)spec=visibility.spec;
  const game=join(root,'game'),source=join(root,'source'),assets=join(game,'assets');
  for(const p of [source,assets,join(game,'node_modules/@forgeax')])mkdirSync(p,{recursive:true});
@@ -86,8 +86,9 @@ export async function prepareSpecProject(root:string,spec:SceneSpec,options:{id?
  // 地标取实际生成网格的包围盒(局部 AABB 经实例缩放后近似为轴对齐尺寸,旋转只影响取景估计,不影响几何)。
  const landmarks=plan.entities.map(e=>{const a=plan.meshes.find(x=>x.key===e.mesh)!.aabb,size=[0,1,2].map(k=>Math.max(.01,(a[k+3]-a[k])*Math.abs(e.scale[k]))),center=[0,1,2].map(k=>e.pos[k]+(a[k]+a[k+3])/2*e.scale[k]);
   return {id:e.id,role:'subject',position:center,size};});
+ const reflectionProbeCount=Object.values(world.entities).filter((e:any)=>e?.components?.ReflectionProbe).length;
  const b=spec.bounds,center=toEnginePosition(b.min.map((v,k)=>(v+b.max[k])/2) as any),radius=Math.hypot(...b.max.map((v,k)=>v-b.min[k]))/2;
- save(join(assets,'scene-audit.json'),{name:spec.name,channelId:brief.packageId,specSha256:sha(JSON.stringify(spec)),camera:{center,radius,height:radius*.4},views:world.views,
+ save(join(assets,'scene-audit.json'),{name:spec.name,channelId:brief.packageId,specSha256:sha(JSON.stringify(spec)),camera:{center,radius,height:radius*.4},...(reflectionProbeCount?{reflectionProbeCount}:{}),views:world.views,
   parts:plan.entities.map(e=>({id:e.id,entityId:e.id,bindingKey:e.bindingKey})),entities:[],landmarks,geometry:{nonFlat:true},
   provenance:{kind:'spec-scene-generation',validationKind:'generation',specId:spec.id,engineSha:pin.engineSha,qualityAssessment:'not-run'}});
  return {brief,plan,world,exportStats,effectiveSpec:spec,cameraVisibility:visibility?.receipt??null};

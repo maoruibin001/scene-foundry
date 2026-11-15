@@ -227,6 +227,12 @@ describe('Showcase Generators & Upgraded Core / Ring',()=>{
   const m=model();
   GEN_CORE.build(m,resolveParams(GEN_CORE,{panelFrequency:2,coreScale:0.82,innerLattice:true}).params);
   expect(validateGeneratorAsset(GEN_CORE.id,m).pass).toBe(true);
+
+  // bandLatitude=0 且 bands=2 时自动去重为单赤道环,杜绝南北双环在 y=0 完全重合闪烁
+  const eqSingle=runGenerator(GEN_CORE,{panelFrequency:2,bandLatitude:0,bands:1},'eq1');
+  const eqDedup=runGenerator(GEN_CORE,{panelFrequency:2,bandLatitude:0,bands:2},'eq1');
+  expect(eqDedup.vertices).toEqual(eqSingle.vertices);
+  expect(eqDedup.indices).toEqual(eqSingle.indices);
  });
 
  test('GEN-RING-01 装配真实六角螺栓与内缘能量导管肋并通过网格内核校验',()=>{
