@@ -1,12 +1,13 @@
 from pathlib import Path
 import sys, zipfile, hashlib, json
+sys.dont_write_bytecode=True
+from package_evidence import write_spec_evidence
 root=Path(sys.argv[1]).resolve()
 job=json.loads((root/'job.json').read_text())
 if job.get('stages',{}).get('build',{}).get('status')!='passed': raise SystemExit('build not passed')
 output=root/'scene-project.zip'
 with zipfile.ZipFile(output,'w',zipfile.ZIP_DEFLATED,compresslevel=6) as archive:
     archive.writestr('input/prompt.json',json.dumps({'prompt':job.get('prompt'),'image':job.get('image'),'images':job.get('images'),'generationMethod':job.get('generationMethod'),'generationModel':job.get('generationModel'),'complexity':job.get('complexity'),'modelSettings':job.get('modelSettings'),'pipelineProfile':job.get('profile'),'pipelineVersion':job.get('pipelineVersion'),'assessmentVersion':job.get('assessmentVersion'),'generationBrief':job.get('generationBrief'),'voxelDetailPolicy':job.get('voxelDetailPolicy'),'reusePlanFrom':job.get('reusePlanFrom'),'reuseSceneFrom':job.get('reuseSceneFrom')},ensure_ascii=False,indent=2))
-    archive.writestr('packaging.json',json.dumps({'version':'spec-evidence-v1','packagerSha256':hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),'producerVersion':job.get('pipelineVersion'),'distManifestDigest':job.get('runtime',{}).get('distManifestDigest')},indent=2))
     version=job.get('pipelineVersion')
     if version:
         folder=root.parent.parent/'versions'/version['id']
@@ -17,32 +18,11 @@ with zipfile.ZipFile(output,'w',zipfile.ZIP_DEFLATED,compresslevel=6) as archive
         for name in ['job.json','plan.json','scene-ir.json','generate-response.txt','generate-receipt.json','post-review.json']:
             f=previous/name
             if f.is_file(): archive.write(f,'lineage/'+name)
-    references=(job.get('images') or ([job['image']] if job.get('image') else []))+(job.get('styleImages') or [])
-    archive.writestr('input/style-references.json',json.dumps(job.get('styleImages',[]),ensure_ascii=False,indent=2))
-    seen=set()
-    for image in references:
-        reference=root.parent.parent/'uploads'/image['file']
-        if not reference.is_file() or reference.is_symlink(): raise SystemExit('reference image missing')
-        reference.resolve().relative_to((root.parent.parent/'uploads').resolve())
-        if reference.name in seen: continue
-        seen.add(reference.name)
-        archive.write(reference,'input/'+reference.name)
-    for relative in ['parameter-repair','visual-reviews']:
-        for file in sorted((root/relative).rglob('*.json')):
-            if file.is_file() and not file.is_symlink(): archive.write(file,file.relative_to(root))
-    provenance=root/'parameter-repair/parameter-resolution.json'
-    if provenance.is_file():
-        source=json.loads(provenance.read_text()).get('sourceCallDir')
-        if source:
-            prior=Path(source).resolve()
-            prior.relative_to(root.parent.resolve())
-            if prior!=provenance.parent.resolve():
-                for file in sorted(prior.glob('*.json')):
-                    if file.is_file() and not file.is_symlink(): archive.write(file,'lineage/parameter-call/'+file.name)
+    write_spec_evidence(archive,root,root,Path(__file__))
     for relative in ['project/game/assets','project/game/dist','project/source','project/evidence','runtime','iterations','assessments','materials','generation']:
         for file in sorted((root/relative).rglob('*')):
             if file.is_file() and not file.is_symlink(): archive.write(file,file.relative_to(root))
-    for relative in ['scene-spec.json','source-scene-spec.json','spec-export.json','spec-gate.json','style-review.json','spec-owner-approval.json','voxel-detail-basis.json','voxel-detail-validation.json','voxel-program.json','voxel-metrics.json','scene.vox','project/game/forge.json','project/game/package.json','project/brief.json','job.json','generation-brief.json','complexity.json','plan.json','generated-scene.json','scene-generation-prompt.json','scene-generation-receipt.json','scene-generation-response.txt','recipe.json','review.json','quality.json','delivery-assessment.json','assessment-evidence.json','reconstruction-goal.json','image-reconstruction.json','manual-audit.json','scene-ir.json','structure.json','spec-report.json','spec-snapshot.json','repair.json','structural-repair.json','structure-before-repair.json','scene-ir-before-repair.json','post-review.json','ui-acceptance.json','native-provenance.json','reference-layout.json','layout-fit.json','reference-observations.json','reference-observations-prompt.json','reference-observations-receipt.json','reference-observations-response.txt','project/reference-layout.json','judge-receipt.json','judge-prompt.json','spec.json','pipeline-plan.json','common-delivery-assessment.json','goal-assessment.json','default-benchmark-assessment.json']:
+    for relative in ['voxel-detail-basis.json','voxel-detail-validation.json','voxel-program.json','voxel-metrics.json','scene.vox','project/game/forge.json','project/game/package.json','project/brief.json','job.json','generation-brief.json','complexity.json','plan.json','generated-scene.json','scene-generation-prompt.json','scene-generation-receipt.json','scene-generation-response.txt','recipe.json','review.json','quality.json','delivery-assessment.json','assessment-evidence.json','reconstruction-goal.json','image-reconstruction.json','manual-audit.json','scene-ir.json','structure.json','spec-report.json','spec-snapshot.json','repair.json','structural-repair.json','structure-before-repair.json','scene-ir-before-repair.json','post-review.json','ui-acceptance.json','native-provenance.json','reference-layout.json','layout-fit.json','reference-observations.json','reference-observations-prompt.json','reference-observations-receipt.json','reference-observations-response.txt','project/reference-layout.json','judge-receipt.json','judge-prompt.json','spec.json','pipeline-plan.json','common-delivery-assessment.json','goal-assessment.json','default-benchmark-assessment.json']:
         file=root/relative
         if file.is_file(): archive.write(file,relative)
     archive.writestr('READ-ME.txt','ForgeaX runnable project and validation evidence.\nQuality status: '+job['status']+'\nA runnable build is not a passed quality result. See job.json and quality.json.\nInstall the Engine release named in project/brief.json into project/game, then run its CLI: project preview --root project/game.\n')
