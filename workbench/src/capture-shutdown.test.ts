@@ -26,3 +26,11 @@ test('实际终止信号等待清理完成',async()=>{
 test('会话关闭不返回时明确失败，不吞掉超时或伪造关闭成功',async()=>{
  const steps:string[]=[];await expect(closeCaptureResources({close:()=>new Promise(()=>{})},null,s=>steps.push(s),{timeoutMs:10})).rejects.toThrow('CAPTURE_CLEANUP_TIMEOUT');expect(steps).not.toContain('采集资源已关闭');
 });
+
+test('私有采集页面先卸载GPU场景，借用页面不被导航；关闭失败仍上报',async()=>{
+ const order:string[]=[];
+ await closeCaptureResources({report:()=>({carrier:'private-browser'}),page:{goto:async(url:string)=>{expect(url).toBe('about:blank');order.push('unload');}},close:async()=>{order.push('close');}},null);
+ expect(order).toEqual(['unload','close']);
+ await closeCaptureResources({report:()=>({carrier:'borrowed'}),page:{goto:async()=>{throw Error('不能触碰借用页面');}},close:async()=>{}},null);
+ await expect(closeCaptureResources({report:()=>({carrier:'private-browser'}),page:{goto:async()=>{}},close:async()=>{throw Error('close failed');}},null)).rejects.toThrow('close failed');
+});

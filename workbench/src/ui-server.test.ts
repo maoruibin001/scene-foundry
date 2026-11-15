@@ -144,3 +144,15 @@ test('体素过程静态别名保留逻辑与真实边界，拒绝目录和外�
   expect(()=>uiHandler(root,upstream.url.toString(),undefined,'https://example.com')).toThrow('本机');
  }finally{upstream.stop(true);rmSync(parent,{recursive:true,force:true});}
 });
+
+test('规格管线同站独立 namespace 保留普通和体素上游，写操作不串站',async()=>{
+ const root=mkdtempSync(join(tmpdir(),'spec-unified-ui-'));writeFileSync(join(root,'index.html'),'spec shell');writeFileSync(join(root,'scene-context.js'),'namespace');
+ const ordinary=Bun.serve({hostname:'127.0.0.1',port:0,fetch(req){return Response.json({worker:'ordinary',path:new URL(req.url).pathname});}});
+ const spec=Bun.serve({hostname:'127.0.0.1',port:0,fetch(req){return Response.json({worker:'spec',path:new URL(req.url).pathname,method:req.method});}});
+ try{const handle=uiHandler(root,ordinary.url.toString(),undefined,undefined,undefined,undefined,spec.url.toString());
+ expect(await(await handle(new Request('http://127.0.0.1/spec/'))).text()).toBe('spec shell');expect(await(await handle(new Request('http://127.0.0.1/spec/scene-context.js'))).text()).toBe('namespace');
+ expect(await(await handle(new Request('http://127.0.0.1/api/spec-workbench/spec-jobs/11111111-1111-1111-1111-111111111111/review',{method:'POST',body:'{}'}))).json()).toEqual({worker:'spec',path:'/api/spec-jobs/11111111-1111-1111-1111-111111111111/review',method:'POST'});
+ expect((await(await handle(new Request('http://127.0.0.1/api/state'))).json()).worker).toBe('ordinary');
+ expect((await(await handle(new Request('http://127.0.0.1/spec/files/uploads/photo.jpg'))).json()).path).toBe('/files/uploads/photo.jpg');
+ }finally{ordinary.stop(true);spec.stop(true);rmSync(root,{recursive:true,force:true});}
+});

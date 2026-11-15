@@ -1,5 +1,7 @@
 from pathlib import Path
 import sys, zipfile, hashlib, json
+sys.dont_write_bytecode=True
+from package_evidence import write_spec_evidence
 root=Path(sys.argv[1]).resolve()
 job=json.loads((root/'job.json').read_text())
 if job.get('stages',{}).get('build',{}).get('status')!='passed': raise SystemExit('build not passed')
@@ -16,10 +18,7 @@ with zipfile.ZipFile(output,'w',zipfile.ZIP_DEFLATED,compresslevel=6) as archive
         for name in ['job.json','plan.json','scene-ir.json','generate-response.txt','generate-receipt.json','post-review.json']:
             f=previous/name
             if f.is_file(): archive.write(f,'lineage/'+name)
-    for image in job.get('images', [job['image']] if job.get('image') else []):
-        reference=root.parent.parent/'uploads'/image['file']
-        if not reference.is_file(): raise SystemExit('reference image missing')
-        archive.write(reference,'input/'+reference.name)
+    write_spec_evidence(archive,root,root,Path(__file__))
     for relative in ['project/game/assets','project/game/dist','project/source','project/evidence','runtime','iterations','assessments','materials','generation']:
         for file in sorted((root/relative).rglob('*')):
             if file.is_file() and not file.is_symlink(): archive.write(file,file.relative_to(root))
@@ -49,6 +48,6 @@ Open the Preview URL returned by the CLI. Space starts or pauses the camera; H h
 
 A fresh source build can use the same CLI's `project build --root project/game --json` command after binding the pinned Engine.
 """)
-receipt={'file':output.name,'sha256':hashlib.sha256(output.read_bytes()).hexdigest(),'bytes':output.stat().st_size,'qualityStatus':job['status']}
+receipt={'packagerSha256':hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),'file':output.name,'sha256':hashlib.sha256(output.read_bytes()).hexdigest(),'bytes':output.stat().st_size,'qualityStatus':job['status']}
 (root/'package-receipt.json').write_text(json.dumps(receipt,indent=2)+'\n')
 print(json.dumps(receipt))

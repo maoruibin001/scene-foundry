@@ -5,11 +5,12 @@ import {existsSync, realpathSync, statSync, readFileSync} from 'node:fs';
 import {createPreviewFpsProxyRegistry} from './preview-fps-proxy';
 import {createProcessRoutes} from './process-observer/routes';
 
-export function uiHandler(publicDir:string, upstream:string, productionTiming?:(id:string)=>any, voxelUpstream?:string, voxelObserverDataRoot?:string, previewProxies?:{wrapURL:(url:string)=>Promise<string>}) {
+export function uiHandler(publicDir:string, upstream:string, productionTiming?:(id:string)=>any, voxelUpstream?:string, voxelObserverDataRoot?:string, previewProxies?:{wrapURL:(url:string)=>Promise<string>},specUpstream?:string) {
   const root=realpathSync(publicDir), target=new URL(upstream);
   if(target.protocol!=='http:' || target.hostname!=='127.0.0.1' || target.username || target.password) throw Error('界面后端必须是本机 HTTP 服务');
   const voxel=voxelUpstream?new URL(voxelUpstream):target;
   if(voxel.protocol!=='http:'||voxel.hostname!=='127.0.0.1'||voxel.username||voxel.password)throw Error('体素后端必须是本机 HTTP 服务');
+  const spec=specUpstream?new URL(specUpstream):null;if(spec&&(spec.protocol!=='http:'||spec.hostname!=='127.0.0.1'||spec.username||spec.password))throw Error('规格后端必须是本机 HTTP 服务');
   const headers={'Cache-Control':'no-cache','Cross-Origin-Opener-Policy':'same-origin','Cross-Origin-Embedder-Policy':'require-corp'};
   const observer=voxelObserverDataRoot?createProcessRoutes(voxelObserverDataRoot,resolve(import.meta.dirname,'../public/process'),'/api/voxel/process/media'):null;
   return async(req:Request)=>{
@@ -18,13 +19,17 @@ export function uiHandler(publicDir:string, upstream:string, productionTiming?:(
     if(observer&&url.pathname.startsWith('/api/voxel/process/')){const observedURL=new URL(url);observedURL.pathname=observedURL.pathname.replace('/api/voxel/process/','/api/process/');const response=observer(new Request(observedURL,req));if(response)return response;}
     if(req.method==='GET' && !url.pathname.startsWith('/api/') && !url.pathname.startsWith('/files/')) {
       const requested=decodeURIComponent(url.pathname);
-      const pathname=requested==='/voxel/'||requested==='/voxel/index.html'?'/index.html':requested==='/voxel/scene-context.js'||requested.startsWith('/voxel/process/')?requested.slice('/voxel'.length):requested;
+      const normalized=requested.startsWith('/spec/')?requested.slice('/spec'.length):requested;
+      const pathname=normalized==='/voxel/'||normalized==='/voxel/index.html'?'/index.html':normalized==='/voxel/scene-context.js'||normalized.startsWith('/voxel/process/')?normalized.slice('/voxel'.length):normalized;
       const file=resolve(root,'.'+pathname+(pathname.endsWith('/')?'index.html':''));
       if(file.startsWith(root+sep) && existsSync(file) && realpathSync(file).startsWith(root+sep) && statSync(file).isFile()) return new Response(Bun.file(file),{headers});
     }
     try {
-      const selected=url.pathname.startsWith('/api/voxel/')||url.pathname.startsWith('/voxel/files/')||url.pathname.startsWith('/voxel/process/')?voxel:target;
-      const proxy=new URL(url.pathname+url.search,selected);
+      const isSpec=url.pathname.startsWith('/api/spec-workbench/')||url.pathname.startsWith('/spec/files/')||url.pathname.startsWith('/spec/process/');
+      if(isSpec&&!spec)return Response.json({error:'规格管线尚未配置'},{status:503});
+      const selected=isSpec?spec!:url.pathname.startsWith('/api/voxel/')||url.pathname.startsWith('/voxel/files/')||url.pathname.startsWith('/voxel/process/')?voxel:target;
+      const proxyPath=isSpec?url.pathname.replace(/^\/api\/spec-workbench\//,'/api/').replace(/^\/spec\//,'/'):url.pathname;
+      const proxy=new URL(proxyPath+url.search,selected);
       const requestHeaders=new Headers(req.headers);requestHeaders.delete('host');if(requestHeaders.has('origin'))requestHeaders.set('origin',selected.origin);
       const response=await fetch(proxy,{method:req.method,headers:requestHeaders,body:['GET','HEAD'].includes(req.method)?undefined:req.body,redirect:'manual',signal:req.signal});
       // Decorate only user-requested output previews; generated dist and worker receipts stay untouched.
@@ -54,6 +59,6 @@ export function uiHandler(publicDir:string, upstream:string, productionTiming?:(
 if(import.meta.main){
   const {productionTimingSnapshot}=await import('./production-timing');
   const port=Number(process.env.UI_PORT??19772),upstream=process.env.UI_UPSTREAM??'http://127.0.0.1:19771';
-  const server=Bun.serve({hostname:'127.0.0.1',port,idleTimeout:60,maxRequestBodySize:21*1024*1024,fetch:uiHandler(resolve(import.meta.dirname,'../public'),upstream,productionTimingSnapshot,process.env.VOXEL_UPSTREAM,process.env.VOXEL_OBSERVER_DATA_DIR)});
+  const server=Bun.serve({hostname:'127.0.0.1',port,idleTimeout:60,maxRequestBodySize:21*1024*1024,fetch:uiHandler(resolve(import.meta.dirname,'../public'),upstream,productionTimingSnapshot,process.env.VOXEL_UPSTREAM,process.env.VOXEL_OBSERVER_DATA_DIR,undefined,process.env.SPEC_UPSTREAM)});
   console.log('SCENE_WORKBENCH_UI '+server.url+' -> '+upstream);
 }
