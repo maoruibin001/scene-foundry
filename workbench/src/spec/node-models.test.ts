@@ -5,6 +5,7 @@ import {tmpdir} from 'node:os';
 import {CBC4_MODELS,validateNodeModels,nodeCacheHash,parseCbcResult} from './node-models';
 test('每个实际模型节点独立冻结配置，支持 hy4-preview-ioa / hy4std 与 medium 推理强度，禁止未知节点与模型冒充',()=>{
  expect(CBC4_MODELS).toEqual(['hy4-preview-ioa','hy4std']);
+ expect(validateNodeModels({styleReview:{provider:'codex',model:'gpt-6-luna',reasoningEffort:'medium'}}).styleReview.reasoningEffort).toBe('medium');
  const nodes=validateNodeModels({
   families:{provider:'cbc4',model:'hy4-preview-ioa',reasoningEffort:'high'},
   staging:{provider:'cbc4',model:'hy4std',reasoningEffort:'medium'},

@@ -24,7 +24,7 @@ export function validateNodeModels(value:unknown):NodeModels{
  for(const k of Object.keys(input))if(!NODE_IDS.includes(k as NodeId))throw Error('未知模型节点: '+k);
  return Object.fromEntries(NODE_IDS.map(id=>{
   const raw=(input[id]??(id==='styleReview'?{provider:'cbc5',model:'hy4flash-dev',reasoningEffort:'medium'}:id==='parameterRepair'?input.families??defaults:defaults)) as any;
-  const efforts=['cbc4','cbc5'].includes(raw?.provider)?['medium','high','xhigh']:['high','xhigh'];
+  const efforts=(['cbc4','cbc5'].includes(raw?.provider)||raw?.provider==='codex'&&raw?.model==='gpt-6-luna')?['medium','high','xhigh']:['high','xhigh'];
   if(!raw||!['claude10','codex','cbc4','cbc5'].includes(raw.provider)||typeof raw.model!=='string'||!/^[A-Za-z0-9._:/-]{1,120}$/.test(raw.model)||!efforts.includes(raw.reasoningEffort))throw Error('节点 '+id+' 的模型配置无效');
   if(raw.provider==='claude10'&&raw.model!==CLAUDE10_MODEL)throw Error('claude10 模型必须为 '+CLAUDE10_MODEL);
   if(raw.provider==='cbc4'&&!(CBC4_MODELS as readonly string[]).includes(raw.model))throw Error('cbc4 文本模型必须为 '+CBC4_MODELS.join(' 或 '));
