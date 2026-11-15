@@ -55,5 +55,5 @@ export function serveCodexTools(kit:CodexToolKit,signal?:AbortSignal,auditFile?:
  const args=['-c',`mcp_servers.scene_feedback.enabled_tools=${JSON.stringify(names)}`,'-c','mcp_servers.scene_feedback.default_tools_approval_mode="approve"','-c','features.shell_tool=false','-c','features.unified_exec=false','-c',`mcp_servers.scene_feedback.command=${JSON.stringify(process.execPath)}`,
   '-c',`mcp_servers.scene_feedback.args=${JSON.stringify([join(import.meta.dirname,'codex-tools-stdio.ts'),url])}`,
   '-c','mcp_servers.scene_feedback.required=true','-c','mcp_servers.scene_feedback.startup_timeout_sec=15','-c','mcp_servers.scene_feedback.tool_timeout_sec=240'];
- return {args,close:()=>server.stop(true)};
+ return {args,claudeConfig:{mcpServers:{scene_feedback:{command:process.execPath,args:[join(import.meta.dirname,'codex-tools-stdio.ts'),url]}}},claudeAllowedTools:names.map(n=>'mcp__scene_feedback__'+n).join(','),close:()=>server.stop(true)};
 }
