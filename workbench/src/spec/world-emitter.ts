@@ -64,8 +64,8 @@ export function emitSpecWorld(spec:SceneSpec,opts:{worldPackageId:string;stateId
  const [planar,...extraPlanar]=post.planarReflections;
  for(const p of extraPlanar)deferred.push({feature:'PlanarReflection:'+p.object,reason:'引擎每台相机只支持一个平面反射平面'});
  // 体积雾要 3D 密度纹理(pack 数据声明不了);先用解析高度雾表达空气透视,体积光柱延后。
- const fog=post.fog?{Name:{value:'Aerial fog'},Fog:buildFogComponent(post.fog)}:null;
- if(post.fog){components.add('Fog');
+ const fog=post.fog&&!post.volumetric?{Name:{value:'Aerial fog'},Fog:buildFogComponent(post.fog)}:null;
+ if(fog){components.add('Fog');
   if(!post.volumetric)deferred.push({feature:'VolumetricFog',reason:'规格未开 volumetric;只用解析高度雾 Fog,无体积光柱'});}
  const volumetricPlugin=post.fog&&post.volumetric?volumetricFogPlugin({mode:process.env.SPEC_VOLFOG_MODE,lightKey:'light_'+post.fog.light.replace(/[^A-Za-z0-9_]/g,'_'),boundsMin:post.fog.boundsMin,boundsMax:post.fog.boundsMax,...post.volumetric}):null;
  const span=Math.max(spec.bounds.max[0]-spec.bounds.min[0],spec.bounds.max[1]-spec.bounds.min[1],spec.bounds.max[2]-spec.bounds.min[2]);
@@ -78,7 +78,7 @@ export function emitSpecWorld(spec:SceneSpec,opts:{worldPackageId:string;stateId
   ambient:{components:{Name:{value:'Ambient'},Skylight:{color:state.ambient.color,groundColor,intensity:state.ambient.intensity}}},
   ...(fog?{fog:{components:fog}}:{}),
   // 静态反射探针覆盖整个包络,盒投影;金属环、核心球与湿地面映出大厅本身而不是空背景。
-  ...(post.reflectionProbe?{hallProbe:{components:{Name:{value:'Hall reflection probe'},Transform:{pos:toEnginePosition(spec.bounds.min.map((v,k)=>(v+spec.bounds.max[k])/2) as Vec3)},ReflectionProbe:{halfExtents:toEngineScale(spec.bounds.max.map((v,k)=>(v-spec.bounds.min[k])/2) as Vec3),priority:0,boxProjection:true,intensity:post.reflectionProbe.intensity,resolution:post.reflectionProbe.resolution,updateIntent:0,invalidationVersion:1}}}}:{}),
+  ...(post.reflectionProbe?{hallProbe:{components:{Name:{value:'Hall reflection probe'},Transform:{pos:toEnginePosition(post.reflectionProbe.position??spec.bounds.min.map((v,k)=>(v+spec.bounds.max[k])/2) as Vec3)},ReflectionProbe:{halfExtents:toEngineScale(spec.bounds.max.map((v,k)=>Math.max(Math.abs(v-(post.reflectionProbe!.position?.[k]??(v+spec.bounds.min[k])/2)),Math.abs(spec.bounds.min[k]-(post.reflectionProbe!.position?.[k]??(v+spec.bounds.min[k])/2)))) as Vec3),priority:0,boxProjection:true,intensity:post.reflectionProbe.intensity,resolution:post.reflectionProbe.resolution,updateIntent:0,invalidationVersion:1}}}}:{}),
  };
  // 引擎 0.5 的 irradiance-field GI 不接受矩形面光(ray-reference-invalid: analytic area lights are not admitted);
  // 开 GI 时把面光换成同位置同朝向的宽角聚光灯,强度按面积折算,并记入 deferred。

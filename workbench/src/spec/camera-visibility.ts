@@ -47,9 +47,16 @@ export function resolveCameraVisibility(spec:SceneSpec,plan:ExportPlan){
  const root=opaqueSceneTree(plan),result=structuredClone(spec),span=Math.max(...spec.bounds.max.map((v,k)=>v-spec.bounds.min[k])),maxMove=Math.min(6,Math.max(1,span*.1));
  const audit:any[]=[];
  for(const shot of result.shots){const start=toEnginePosition(shot.position),target=toEnginePosition(shot.target),forward=unit(sub(target,start)),right=unit(cross(forward,[0,1,0])),up=unit(cross(right,forward));
+  // A target inside a subject must be visible up to that subject's surface, not merely
+  // through an arbitrary first fraction of the ray. Large enclosing rooms lose to
+  // the smallest containing mesh envelope; no case IDs or semantic name rules.
+  const enclosing=plan.entities.flatMap(e=>{const m=plan.meshes.find(m=>m.key===e.mesh)!,a=m.aabb,[x,y,z,w]=e.quat,lo=[Infinity,Infinity,Infinity],hi=[-Infinity,-Infinity,-Infinity];
+   for(let mask=0;mask<8;mask++){const p=[0,1,2].map(k=>a[k+((mask>>k)&1)*3]*e.scale[k]),t=cross([x,y,z],p).map(v=>v*2),q=p.map((v,k)=>v+w*t[k]+cross([x,y,z],t)[k]+e.pos[k]);for(let k=0;k<3;k++){lo[k]=Math.min(lo[k],q[k]);hi[k]=Math.max(hi[k],q[k]);}}
+   return target.every((v,k)=>v>=lo[k]-.01&&v<=hi[k]+.01)?[{id:e.id,volume:hi.reduce((v,n,k)=>v*(n-lo[k]),1)}]:[];
+  }).sort((a,b)=>a.volume-b.volume);const subject=enclosing[0]?.id;
   const distance=Math.hypot(...sub(target,start)),halfHeight=distance*Math.tan(shot.fovDeg*Math.PI/360),radius=Math.min(4,halfHeight*.32);
   const evaluate=(p:number[])=>{const hits=[];let visible=0;for(const [u,v] of [[0,0],[-1,0],[1,0],[0,-1],[0,1],[-1,-1],[1,1],[-1,1],[1,-1]]){
-   const aim=target.map((x,k)=>x+right[k]*u*radius+up[k]*v*radius),hit=firstOpaqueHit(root,p,aim,.72);if(hit)hits.push(hit);else visible++;}
+   const aim=target.map((x,k)=>x+right[k]*u*radius+up[k]*v*radius),hit=firstOpaqueHit(root,p,aim,subject?1:.9);if(hit&&hit.id!==subject)hits.push(hit);else visible++;}
    let foregroundClear=0;for(const u of [-.8,-.4,0,.4,.8])for(const v of [-.65,0,.65]){const aim=target.map((x,k)=>x+right[k]*u*halfHeight*16/9+up[k]*v*halfHeight);if(!firstOpaqueHit(root,p,aim,.18))foregroundClear++;}
    return {visible,foregroundClear,blocked:hits,score:visible*100+foregroundClear*10};};
   const before=evaluate(start);let position=start,best=before,shift=0;
@@ -58,7 +65,19 @@ export function resolveCameraVisibility(spec:SceneSpec,plan:ExportPlan){
    const source=[p[0],-p[2],p[1]];if(source.some((v,k)=>v<spec.bounds.min[k]+.3||v>spec.bounds.max[k]-.3))continue;
    const q=evaluate(p);if(q.score>best.score||(q.score===best.score&&m<shift)){position=p;best=q;shift=m;}}
   shot.position=[position[0],-position[2],position[1]] as Vec3;
-  audit.push({id:shot.id,sourcePosition:spec.shots.find(s=>s.id===shot.id)!.position,effectivePosition:shot.position,target:shot.target,fovDeg:shot.fovDeg,before,after:best,shiftMeters:shift,basis:shift?'design_fill':'source',passed:best.visible>=8&&best.foregroundClear>=12});
+  audit.push({id:shot.id,subject,sourcePosition:spec.shots.find(s=>s.id===shot.id)!.position,effectivePosition:shot.position,target:shot.target,fovDeg:shot.fovDeg,before,after:best,shiftMeters:shift,basis:shift?'design_fill':'source',passed:best.visible>=8&&best.foregroundClear>=12});
  }
- return {spec:result,receipt:{version:'mesh-camera-visibility-v1',method:'9 target-region rays(first72%) +15 frame foreground rays(first18%); opaque triangles; bounded local camera search',maxMove,decisions:audit}};
+ const probe=resolveReflectionPlacement(result,root);if(probe)for(const s of result.lighting.states)if(s.post.reflectionProbe)s.post.reflectionProbe.position=probe.effectivePosition;
+ return {spec:result,receipt:{version:'mesh-camera-visibility-v2',method:'9 target-region first-hit subject rays +15 frame foreground rays(first18%); opaque triangles; bounded local camera search',maxMove,decisions:audit,reflectionProbe:probe}};
+}
+/** Probe origin needs open capture space, rather than the arbitrary center of a hero mesh. */
+export function resolveReflectionPlacement(spec:SceneSpec,root:Node){
+ if(!spec.lighting.states.some(s=>s.post.reflectionProbe))return null;
+ const lo=spec.bounds.min,hi=spec.bounds.max,center=lo.map((v,k)=>(v+hi[k])/2) as Vec3,limit=Math.min(12,Math.max(...hi.map((v,k)=>v-lo[k]))*.4);
+ const directions=[];for(const x of [-1,0,1])for(const y of [-1,0,1])for(const z of [-1,0,1])if(x||y||z)directions.push(unit([x,y,z]));
+ const clearance=(position:number[])=>{const origin=toEnginePosition(position as Vec3);return Math.min(...directions.map(d=>firstOpaqueHit(root,origin,origin.map((v,k)=>v+d[k]*limit))?.distance??limit));};
+ const before=clearance(center);let position=center,best=before,score=before;
+ if(before<1)for(const x of [.25,.5,.75])for(const y of [.25,.5,.75])for(const z of [.25,.5,.75]){
+  const p=lo.map((v,k)=>v+(hi[k]-v)*[x,y,z][k]) as Vec3,q=clearance(p),s=q-Math.hypot(...sub(p,center))*.02;if(s>score){position=p;best=q;score=s;}}
+ return {sourcePosition:center,effectivePosition:position,beforeClearanceMeters:before,afterClearanceMeters:best,samples:directions.length,basis:position===center?'source':'design_fill',passed:best>=1};
 }

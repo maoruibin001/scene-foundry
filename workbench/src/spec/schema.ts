@@ -28,7 +28,7 @@ export type SpecDecal={id:string;label:string;kind:'stencil'|'hazard'|'puddle';t
 export type SpecLight={id:string;kind:'directional'|'point'|'spot'|'area';position:Vec3|null;direction:Vec3|null;color:Vec3;intensity:number;range:number|null;innerConeDeg:number|null;outerConeDeg:number|null;width:number|null;height:number|null;castShadow:boolean};
 export type SpecPost={tonemap:'aces'|'agx'|'neutral';exposure:number|'auto';bloom:{threshold:number;intensity:number;radius:number}|null;gtao:boolean;ssr:{maxDistance:number;thickness:number;maxRoughness:number}|null;fog:{color:Vec3;density:number;anisotropy:number;boundsMin:Vec3;boundsMax:Vec3;light:string}|null;planarReflections:{object:string;height:number;distortion:number}[];
  /** 可选:覆盖整个包络的静态反射探针,给金属与光面材质提供环境反射。 */
- reflectionProbe?:{intensity:number;resolution:64|128|256}|null;
+ reflectionProbe?:{intensity:number;resolution:64|128|256;position?:Vec3}|null;
  /** 可选:漫反射全局光照(irradiance-field,延迟渲染)。environment 为天空/环境辐照颜色。 */
  gi?:{environment:Vec3}|null;
  /** 可选:真体积雾(引擎 VolumetricFog + 运行时 3D 密度纹理)。extinction 为每米消光;heightFalloff 为密度随高度指数衰减率(1/m);
@@ -134,6 +134,7 @@ export function sceneSpecErrors(value:unknown):string[]{
    if(po.ssr!==null&&(!finite(po.ssr?.maxDistance,0.1,200)||!finite(po.ssr?.thickness,0.001,5)||!finite(po.ssr?.maxRoughness,0,1)))e.push(`${p} ssr 无效`);
    if(po.fog!==null&&(!vec(po.fog?.color,0,1)||!finite(po.fog?.density,0,1)||!finite(po.fog?.anisotropy,-1,1)||!vec(po.fog?.boundsMin)||!vec(po.fog?.boundsMax)||!lightIds.has(po.fog?.light)))e.push(`${p} fog 无效(需绑定本状态内存在的灯)`);
    if(po.volumetric!=null&&(po.fog===null||!finite(po.volumetric.extinction,0,2)||!vec(po.volumetric.albedo,0,1)||!finite(po.volumetric.anisotropy,-0.99,0.99)||!finite(po.volumetric.heightFalloff,0,2)||!finite(po.volumetric.noise,0,1)||!finite(po.volumetric.maxDistance,1,1000)||(po.volumetric.emission!=null&&!vec(po.volumetric.emission,0,1))))e.push(`${p} volumetric 无效(须同时有 fog)`);
+   if(po.reflectionProbe!=null&&(!finite(po.reflectionProbe.intensity,0,10)||![64,128,256].includes(po.reflectionProbe.resolution)||(po.reflectionProbe.position!=null&&!vec(po.reflectionProbe.position))))e.push(`${p} reflectionProbe 无效`);
    if(po.cameraFx!=null&&(typeof po.cameraFx!=='object'||Object.keys(po.cameraFx).some(k=>!['LensFlare','LensEffects','DepthOfField'].includes(k))))e.push(`${p} cameraFx 只接受 LensFlare/LensEffects/DepthOfField`);
    if(typeof po.gtao!=='boolean')e.push(`${p} gtao 须为布尔`);
    if(!Array.isArray(po.planarReflections))e.push(`${p} planarReflections 须为数组`);
