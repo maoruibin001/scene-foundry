@@ -61,7 +61,9 @@ export async function prepareSpecProject(root:string,spec:SceneSpec,options:{id?
  }
  // 性能档(引擎会话 2026-11-06 建议):体积雾低画质、光照档 32;ProjectedDecal 与漫反射 GI 均要求 deferred 管线。
  const hasDecals=(spec.decals?.length??0)>0;
- const perfProfile={...DEFAULT_STANDARD_PROFILE,...(hasDecals?{renderPath:'deferred' as const}:{}),...(process.env.SPEC_RENDER_PATH?{renderPath:process.env.SPEC_RENDER_PATH}:{}),lightCount:32,volumetricFog:{quality:'low',depth:48,tileSize:16}};
+ const activePost=spec.lighting.states.find(s=>s.id===(options.stateId??spec.lighting.defaultState))!.post;
+ const requiresDeferred=hasDecals||activePost.gtao||Boolean(activePost.ssr);
+ const perfProfile={...DEFAULT_STANDARD_PROFILE,...(requiresDeferred?{renderPath:'deferred' as const}:{}),...(process.env.SPEC_RENDER_PATH?{renderPath:process.env.SPEC_RENDER_PATH}:{}),lightCount:32,volumetricFog:{quality:'low',depth:48,tileSize:16}};
  // 漫反射 GI:渲染器配置只能在构建期由 build 插件给出;默认 profile + 延迟渲染 + irradiance-field。
  const giState=spec.lighting.states.find(s=>s.id===(options.stateId??spec.lighting.defaultState))!.post.gi;
  if(!giState){
@@ -75,6 +77,8 @@ export async function prepareSpecProject(root:string,spec:SceneSpec,options:{id?
   cfg.plugins.push({id:'render-profile',name:'./assets/render-profile.plugin.ts',realm:'build',inject:[]});save(join(game,'forge.json'),cfg);
   save(join(root,'render-profile.json'),profile);
  }
+ save(join(assets,'generated/integration-environment.json'),{version:'source-environment-adoption-v1',lightingMode:spec.sourceEnvironment?.lightingMode??'preserve',removeKeys:Object.keys(spec.sourceEnvironment?.entities??{}),entities:world.entities,components:world.components,profile:giState?null:perfProfile,volumetric:!!world.volumetricPlugin});
+ if(world.volumetricPlugin)writeFileSync(join(assets,'generated/volumetric-fog.ts'),world.volumetricPlugin);
  const finalWorld=writeInspectionPlugins(root,assets,world.source,world.views);
  writeFileSync(join(assets,'ui.plugin.ts'),conceptLookUi(readFileSync(join(assets,'ui.plugin.ts'),'utf8')));
  writeFileSync(join(assets,'world.pack.ts'),finalWorld);

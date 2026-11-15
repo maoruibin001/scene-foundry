@@ -1007,7 +1007,7 @@ export function writeSpecPack(spec:SceneSpec,plan:ExportPlan,destination:string,
  const singleEntities=plan.entities.filter(e=>e.bindingKey===e.id).map(({bindingKey:_b,...e})=>e);
  const batches=plan.instancedBatches.map(b=>({key:b.key,label:b.label,mesh:b.mesh,transforms:Array.from(b.transforms)}));
  const decalMaterials=[...decalMaterialMap.values()];
- const data={gi,packageId:identity.packageId,name:identity.name,sceneKey:identity.sourceKey,specId:spec.id,materials:plan.materials,meshes:meshesData,entities:singleEntities,batches,decalMaterials,decals:plan.decals};
+ const data={gi,packageId:identity.packageId,name:identity.name,sceneKey:identity.sourceKey,specId:spec.id,materials:plan.materials,meshes:meshesData,entities:singleEntities,allBindings:plan.entities,batches,decalMaterials,decals:plan.decals};
  writeFileSync(join(destination,'spec-data.ts'),'export default '+JSON.stringify(data)+' as const;\n');
  // PBR 像素数据(gzip+base64)按资产各成一个模块,pbr-index.ts 静态导入,pack 构建时解压。
  const pbr=pbrAssets(spec);

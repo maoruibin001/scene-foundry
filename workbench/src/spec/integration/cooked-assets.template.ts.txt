@@ -10,7 +10,15 @@ import source from './spec-data.ts';
 const data:any=source,packageId=definePackageId(data.packageId);
 export default definePack({schemaVersion:'2.0.0',packageId,name:data.name,build(){
  const out:Record<string,any>={};
- for(const m of data.materials)out['material/'+m.key]=Materials.standard(m.options);
+ const ref=(key:string)=>AssetGuid.format(AssetGuid.derive(packageId,key));
+ if(data.surfaces?.length)out['sampler/surface-repeat']={kind:'sampler',magFilter:'linear',minFilter:'linear',mipmapFilter:'linear',addressModeU:'repeat',addressModeV:'repeat',maxAnisotropy:8};
+ for(const surface of data.surfaces??[]){
+  const raw=readFileSync(resolve(process.cwd(),data.assetDirectory,'cooked',surface.file)),n=surface.size*surface.size*4;
+  if(raw.byteLength!==n*3||createHash('sha256').update(raw).digest('hex')!==surface.sha256)throw Error('SURFACE_ASSET_DRIFT');
+  for(const [i,ch,srgb] of [[0,'normal',false],[1,'mr',false],[2,'color',true]] as const)out['texture/'+surface.pattern+'-'+ch]={kind:'texture',shape:{viewDimension:'2d',extent:{width:surface.size,height:surface.size}},format:srgb?'rgba8unorm-srgb':'rgba8unorm',data:new Uint8Array(raw.buffer.slice(raw.byteOffset+i*n,raw.byteOffset+(i+1)*n)),colorSpace:srgb?'srgb':'linear',mips:{kind:'generate'}};
+ }
+ for(const m of data.materials){const channel=(ch:string)=>({texture:ref('texture/'+m.surface.pattern+'-'+ch),sampler:ref('sampler/surface-repeat'),coordinates:{transform:{scale:[m.surface.tilesPerMeter*2,m.surface.tilesPerMeter*2]}}});out['material/'+m.key]=Materials.standard({...m.options,...(m.surface?{normalTexture:channel('normal'),metallicRoughnessTexture:channel('mr'),occlusionTexture:channel('mr'),baseColorTexture:channel('color')}:{})});}
+
  for(const m of data.meshes){
   const bytes=readFileSync(resolve(process.cwd(),data.assetDirectory,'cooked',m.key+'.bin'));
   if(bytes.byteLength!==m.cooked.byteLength||createHash('sha256').update(bytes).digest('hex').slice(0,16)!==m.cooked.sha256)throw Error('COOKED_ASSET_DRIFT:'+m.key);

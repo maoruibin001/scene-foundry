@@ -64,8 +64,8 @@ export function emitSpecWorld(spec:SceneSpec,opts:{worldPackageId:string;stateId
  const [planar,...extraPlanar]=post.planarReflections;
  for(const p of extraPlanar)deferred.push({feature:'PlanarReflection:'+p.object,reason:'引擎每台相机只支持一个平面反射平面'});
  // 体积雾要 3D 密度纹理(pack 数据声明不了);先用解析高度雾表达空气透视,体积光柱延后。
- const fog=post.fog?{Name:{value:'Aerial fog'},Fog:buildFogComponent(post.fog)}:null;
- if(post.fog){components.add('Fog');
+ const fog=post.fog&&!post.volumetric?{Name:{value:'Aerial fog'},Fog:buildFogComponent(post.fog)}:null;
+ if(fog){components.add('Fog');
   if(!post.volumetric)deferred.push({feature:'VolumetricFog',reason:'规格未开 volumetric;只用解析高度雾 Fog,无体积光柱'});}
  const volumetricPlugin=post.fog&&post.volumetric?volumetricFogPlugin({mode:process.env.SPEC_VOLFOG_MODE,lightKey:'light_'+post.fog.light.replace(/[^A-Za-z0-9_]/g,'_'),boundsMin:post.fog.boundsMin,boundsMax:post.fog.boundsMax,...post.volumetric}):null;
  const span=Math.max(spec.bounds.max[0]-spec.bounds.min[0],spec.bounds.max[1]-spec.bounds.min[1],spec.bounds.max[2]-spec.bounds.min[2]);
@@ -90,7 +90,7 @@ export function emitSpecWorld(spec:SceneSpec,opts:{worldPackageId:string;stateId
  const budgeted=budget?lights.map(l=>{let o=l;if(o.kind!=='directional'&&(o.range??0)>maxRange){deferred.push({feature:'LightRange:'+o.id,reason:`射程 ${o.range}m 截到 ${maxRange}m(光照预算)`});o={...o,range:maxRange};}
   if(o.castShadow&&o.kind!=='directional'){if(o.kind==='spot'&&spotShadows++<2)return o;deferred.push({feature:'LightShadow:'+o.id,reason:'只保留方向光与最多 2 盏聚光投影(光照预算)'});o={...o,castShadow:false};}return o;}):lights;
  budgeted.forEach(l=>{const e=lightEntity(l,shadowDistance);components.add(e.component);entities['light_'+l.id.replace(/[^A-Za-z0-9_]/g,'_')]={components:e.value};});
- if(spec.sourceEnvironment){
+ if(spec.sourceEnvironment&&spec.sourceEnvironment.lightingMode!=='spec'){
   // Existing native environment is an exclusive source, never mixed with guessed staging.
   for(const key of Object.keys(entities))if(key!=='garden'&&key!=='camera')delete entities[key];
   camera.Camera={...spec.sourceEnvironment.camera,fov:shot.fovDeg*Math.PI/180,aspect:16/9};
@@ -166,16 +166,17 @@ function density(){
   out[(z*H+y)*W+x]=Math.max(0,Math.min(255,Math.round(d*255)));}
  return out;
 }
-export default {name:'scene/volumetric-fog',inject:['world','gameHost','assets'],apply(ctx){
- const host=ctx.gameHost,assets=ctx.assets;
- if(host?.defaultSceneRoot===undefined||!assets)throw new Error('volumetric fog: scene root or asset registry unavailable');
- const light=worldResolveSceneEntity(ctx.world,host.defaultSceneRoot,sceneEntity('scene/main',${JSON.stringify(v.lightKey)})).unwrap();
+export function installVolumetricFog(ctx:any,root=ctx.gameHost?.defaultSceneRoot,sceneKey='scene/main'){
+ const assets=ctx.assets;
+ if(root===undefined||!assets)throw new Error('volumetric fog: scene root or asset registry unavailable');
+ const light=worldResolveSceneEntity(ctx.world,root,sceneEntity(sceneKey,${JSON.stringify(v.lightKey)})).unwrap();
  // 纹理须由资产注册表创建(引用归属校验);world.allocSharedRef 的裸对象会被判 asset-reference-invalid。
  // 验收开关(SPEC_VOLFOG_MODE,导出期决定):uniform=不带密度纹理的均匀体积雾(sf.1 起);sharedref=故意用 world.allocSharedRef 造纹理引用(验报错提示)。
  const desc={kind:'texture',shape:{viewDimension:'3d',extent:{width:W,height:H,depth:D}},format:'r8unorm',colorSpace:'linear',mips:{kind:'none'},data:density()};
  const tex=${v.mode==='uniform'?'undefined':v.mode==='sharedref'?"(ctx.world as any).allocSharedRef('Texture',desc)":"assets.create(desc as never).unwrap()"};
- const fog=ctx.world.spawn({component:VolumetricFog,data:{light,${v.mode==='uniform'?'':'density:tex,'}boundsMin:MIN,boundsMax:MAX,extinction:[${v.extinction},${v.extinction},${v.extinction}],albedo:${JSON.stringify(v.albedo)},emission:${JSON.stringify(v.emission??[0,0,0])},anisotropy:${v.anisotropy},maxDistance:${Math.min(v.maxDistance,80)},sampling:${v.mode==='uniform'?'3 /* VolumetricFogSamplingValue.uniform */':'VolumetricFogSamplingValue.density'}} as never}).unwrap();
- ctx.effect(function*(){yield()=>{ctx.world.despawn(fog);${v.mode==='uniform'||v.mode==='sharedref'?'':'assets.release(tex as never);'}};},'scene/volumetric-fog');
-}} satisfies Plugin;
+ const fog=ctx.world.spawn({component:VolumetricFog,data:{light,${v.mode==='uniform'?'':'density:tex,'}boundsMin:MIN,boundsMax:MAX,extinction:[${v.extinction},${v.extinction},${v.extinction}],albedo:${JSON.stringify(v.albedo)},emission:${JSON.stringify(v.emission??[0,0,0])},anisotropy:${v.anisotropy},maxDistance:${v.maxDistance},sampling:${v.mode==='uniform'?'3 /* VolumetricFogSamplingValue.uniform */':'VolumetricFogSamplingValue.density'}} as never}).unwrap();
+ return ()=>{ctx.world.despawn(fog);${v.mode==='uniform'||v.mode==='sharedref'?'':'assets.release(tex as never);'}};
+}
+export default {name:'scene/volumetric-fog',inject:['world','gameHost','assets'],apply(ctx){ctx.effect(function*(){yield installVolumetricFog(ctx);},'scene/volumetric-fog');}} satisfies Plugin;
 `;
 }

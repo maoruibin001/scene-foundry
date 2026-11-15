@@ -142,6 +142,14 @@ if(!FOLLOWER){claimCoordinator();if(!executionHeld()){references.recover();recov
   const stored=storeSpec(result.spec),job=createSpecJob({specId:stored.id,nodeModels:source.nodeModels,sourceJobId:source.id,continuation:result.receipt});
   return json(job,201);
  }
+ const appearance=u.pathname.match(/^\/api\/spec-jobs\/([a-f0-9-]{36})\/appearance$/);
+ if(req.method==='POST'&&appearance){
+  assertCurrentVersion(activeVersion.id);const source=getJob(appearance[1]);
+  if(!source.specJob||!source.specId||!['failed','needs_review'].includes(source.status)||source.styleReview?.evidence?.status!=='visible')throw Error('需要已结束的真实规格视觉报告');
+  const root=source.executionRecoveryRoot??source.retryRoot??source.id;if(listJobs().some(j=>(j.executionRecoveryRoot??j.id)===root&&['queued','running'].includes(j.status)))throw Error('已有在途续修');
+  let rounds=0,prior=source;while(prior.appearanceSourceJobId){rounds++;prior=getJob(prior.appearanceSourceJobId);if(rounds>=2)throw Error('两轮外观修订已完成，需保留历史并重新诊断；不能继续盲目重跑');}
+  return json(createSpecJob({specId:source.specId,nodeModels:source.nodeModels,sourceJobId:source.id,appearanceSourceJobId:source.id}),201);
+ }
  const specRetry=u.pathname.match(/^\/api\/spec-jobs\/([a-f0-9-]{36})\/retry$/);if(req.method==='POST'&&specRetry){assertCurrentVersion(activeVersion.id);const source=getJob(specRetry[1]);if(!source.specJob||!['failed','needs_review','passed','cancelled'].includes(source.status)||!source.specId)throw Error('仅可重建已结束且保留规格的任务');const root=source.executionRecoveryRoot??source.retryRoot??source.id;if(listJobs().some(j=>(j.executionRecoveryRoot??j.id)===root&&['queued','running'].includes(j.status)))throw Error('此规格已有在途续接');return json(createSpecJob({specId:source.specId,nodeModels:{...source.nodeModels,styleReview:{provider:'cbc5',model:'hy4flash-dev',reasoningEffort:'medium'}},normalizationTemplate:source.normalizationTemplate,sourceJobId:source.id}),201);}
  const specReview=u.pathname.match(/^\/api\/spec-jobs\/([a-f0-9-]{36})\/review$/);if(req.method==='POST'&&specReview){assertCurrentVersion(activeVersion.id);const b=await req.json(),selection=validateNodeModels({styleReview:b.model}).styleReview;if(selection.provider==='codex'&&process.env.PIPELINE_VISUAL_HOLD_REASON)throw Error('VISUAL_REVIEW_HELD：'+process.env.PIPELINE_VISUAL_HOLD_REASON);if(selection.provider==='codex')await selectedSettings({model:selection.model,reasoningEffort:selection.reasoningEffort});return json(startSpecReview(specReview[1],selection),202);}
  const specApproval=u.pathname.match(/^\/api\/spec-jobs\/([a-f0-9-]{36})\/approve$/);

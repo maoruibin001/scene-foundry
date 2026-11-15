@@ -1,3 +1,5 @@
+import {getJob,runDir} from './store';
+import {repairAppearance} from './spec/appearance-continuation';
 import {repairSpecParameters} from './spec/parameter-repair';
 import {VISUAL_SCHEMA as STYLE_SCHEMA,verifiedVisualReview,VISUAL_REVIEW_VERSION,visualReferences} from './spec/visual-review';
 /**
@@ -82,9 +84,16 @@ export async function runSpec({job,dir,stage,command,preview,signal}:any){
   });
  }
  const {spec:sourceSpec,styleImages}=loadSpec(job.specId);let spec=sourceSpec;const project=join(dir,'project'),PROTO=resolve(ROOT,'../prototype');
+ if(job.appearanceSourceJobId){
+  const previous=getJob(job.appearanceSourceJobId),sourceDir=runDir(previous.id),shots=(previous.runtime?.images??[]).filter((f:string)=>/^inspection-[^/]+\.png$/.test(f));
+  const images=[...visualReferences(styleImages).map((im:any)=>({path:join(UPLOADS,im.file),mime:im.mime})),...shots.map((f:string)=>({path:join(sourceDir,'runtime',f),mime:'image/png'}))];
+  const revised=await stage('appearance',()=>repairAppearance(sourceSpec,previous.styleReview,images,join(dir,'appearance'),nodeModels.parameterRepair,signal));
+  spec=revised.spec;job.specContinuation=revised.receipt;job.appearanceRevision={sourceJobId:previous.id,before:previous.styleReview.overall,mechanism:'source-appearance-continuation-v1'};
+  job.specId=storeSpec(spec).id;saveJob(job);
+ }
  job.plan=await stage('plan',async()=>{const p=specPlan(spec);save(join(dir,'plan.json'),p);save(join(dir,'scene-spec.json'),spec);return p;});
  job.styleImages=styleImages;
- const repaired=await stage('parameters',()=>repairSpecParameters(sourceSpec,join(dir,'parameter-repair'),nodeModels.parameterRepair,signal));spec=repaired.spec;job.parameterResolution=repaired.receipt?{resolved:repaired.receipt.decisions.length,unresolved:repaired.receipt.remaining.unresolved.length,designFill:repaired.receipt.decisions.filter((x:any)=>x.basis==='design_fill').length}:null;save(join(dir,'source-scene-spec.json'),sourceSpec);save(join(dir,'scene-spec.json'),spec);saveJob(job);
+ const repaired=await stage('parameters',()=>repairSpecParameters(spec,join(dir,'parameter-repair'),nodeModels.parameterRepair,signal));spec=repaired.spec;job.parameterResolution=repaired.receipt?{resolved:repaired.receipt.decisions.length,unresolved:repaired.receipt.remaining.unresolved.length,designFill:repaired.receipt.decisions.filter((x:any)=>x.basis==='design_fill').length}:null;save(join(dir,'source-scene-spec.json'),sourceSpec);save(join(dir,'scene-spec.json'),spec);saveJob(job);
  await stage('generate',async()=>{
   const r=await prepareSpecProject(project,spec,{id:'spec-'+job.id});
   job.generationMethod='spec-pack';job.generationModel=spec.provenance.model?`规格化 ${spec.provenance.model};网格由程序化生成器在 Engine 构建时产出`:'程序化生成器';

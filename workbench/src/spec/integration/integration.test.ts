@@ -50,3 +50,8 @@ it('refuses a changed binary and leaves the existing game untouched',async()=>{
  await expect(adoptCandidate(request)).rejects.toThrow('CANDIDATE_MESH_DRIFT');expect(readFileSync(join(f.game,'assets/original.pack.ts'),'utf8')).toBe(f.original);expect(existsSync(join(f.game,'assets/original.pipeline-base.ts'))).toBe(false);
  }finally{rmSync(f.root,{recursive:true,force:true});}
 });
+import {environmentWrapperFragment} from './environment-adoption';
+it('adopts explicit pipeline lighting and camera effects without replacing geometry or camera transforms',()=>{
+ const x=environmentWrapperFragment({removeKeys:['oldSky'],components:['Camera','Name','Transform','SpotLight','Skylight'],entities:{camera:{components:{Camera:{exposure:.8},Transform:{pos:[1,2,3]},Name:{value:'capture'}}},ambient:{components:{Skylight:{intensity:.1}}}}});
+ expect(x.body).toContain('ENV_WOULD_REMOVE_GEOMETRY');expect(x.body).toContain('"exposure":0.8');expect(x.body).not.toContain('"pos"');expect(x.definition).toContain('RenderComponents');
+});

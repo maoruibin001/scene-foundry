@@ -6,7 +6,7 @@
 import {readFileSync,writeFileSync} from 'node:fs';
 import {validateSceneSpec,type SceneSpec} from './schema';
 
-export type SpecPatch={target:'replaceGeometry'|'material'|'addMaterial'|'family'|'familyParam'|'object'|'addObject'|'addFamily'|'removeObject'|'state'|'post'|'shot'|'light'|'addLight';id:string;state?:string;set:Record<string,unknown>;reason:string};
+export type SpecPatch={target:'sourceLightingMode'|'replaceGeometry'|'material'|'addMaterial'|'family'|'familyParam'|'object'|'addObject'|'addFamily'|'removeObject'|'state'|'post'|'shot'|'light'|'addLight';id:string;state?:string;set:Record<string,unknown>;reason:string};
 export type SpecRevision={id:string;summary:string;patches:SpecPatch[]};
 
 export function reviseSpec(spec:SceneSpec,rev:SpecRevision):SceneSpec{
@@ -16,6 +16,7 @@ export function reviseSpec(spec:SceneSpec,rev:SpecRevision):SceneSpec{
  for(const p of rev.patches){
   if(!p.reason)throw Error(`修订 ${rev.id}:补丁 ${p.target}/${p.id} 缺原因`);
   switch(p.target){
+   case 'sourceLightingMode':{if(!s.sourceEnvironment||Object.keys(p.set).some(k=>k!=='lightingMode')||!['preserve','spec'].includes(String(p.set.lightingMode)))throw Error('需要已导入场景和显式光照来源模式');s.sourceEnvironment.lightingMode=p.set.lightingMode as 'preserve'|'spec';break;}
    case 'replaceGeometry':{const o=find(s.objects,p.id,'对象');if(!p.set.geometryBinding)throw Error('替换几何需要显式 geometryBinding');if(Object.keys(p.set).some(k=>k!=='geometryBinding'))throw Error('替换几何不能改写其他对象字段');delete o.sourceMesh;o.geometryBinding=structuredClone(p.set.geometryBinding) as any;break;}
    case 'material':Object.assign(find(s.materials,p.id,'材质'),p.set);break;
    case 'addMaterial':{if(s.materials.some(x=>x.id===p.id))throw Error(`修订 ${rev.id}:材质 ${p.id} 已存在`);s.materials.push({id:p.id,label:p.id,baseColor:[1,1,1,1],metallic:0,roughness:0.5,emissive:null,emissiveIntensity:0,transmission:0,ior:1.5,thickness:0,clearcoat:0,clearcoatRoughness:0,...p.set,sources:[{kind:'inferred',ref:`修订 ${rev.id}`}]} as any);break;}

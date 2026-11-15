@@ -45,7 +45,7 @@ export type SpecAcceptance={id:string;description:string;critical:boolean}&(
  |{kind:'position';object:string;position:Vec3;tolerance:number}
  |{kind:'size';object:string;size:Vec3;tolerance:number}
  |{kind:'clearance';from:Vec3;to:Vec3;width:number;height:number});
-export type SceneSpec={sourceEnvironment?:{entities:Record<string,{components:Record<string,unknown>}>;camera:Record<string,unknown>};version:typeof SCENE_SPEC_VERSION;id:string;name:string;units:'m';up:'+Z';bounds:{min:Vec3;max:Vec3};
+export type SceneSpec={sourceEnvironment?:{lightingMode?:'preserve'|'spec';entities:Record<string,{components:Record<string,unknown>}>;camera:Record<string,unknown>};version:typeof SCENE_SPEC_VERSION;id:string;name:string;units:'m';up:'+Z';bounds:{min:Vec3;max:Vec3};
  sources:{id:string;title:string;kind:'doc'|'image'|'prompt';path:string}[];
  families:SpecFamily[];objects:SpecObject[];materials:SpecMaterial[];
  decals?:SpecDecal[];
@@ -68,6 +68,7 @@ export function sceneSpecErrors(value:unknown):string[]{
  if(!SPEC_ID.test(String(s.id)))e.push('id 不符合 '+SPEC_ID);
  if(!text(s.name,200))e.push('name 不能为空');
  if(s.sourceEnvironment){
+  if(s.sourceEnvironment.lightingMode!==undefined&&!['preserve','spec'].includes(s.sourceEnvironment.lightingMode))e.push('sourceEnvironment.lightingMode 无效');
   const env=s.sourceEnvironment,allowed=['Name','Transform','Skylight','DirectionalLight','PointLight','SpotLight','RectAreaLight','Fog'];
   if(!env.entities||Object.keys(env.entities).length>48||!env.camera||JSON.stringify(env).length>200000)e.push('sourceEnvironment 无效');
   else for(const [id,value] of Object.entries(env.entities))if(!/^[a-zA-Z][a-zA-Z0-9_-]{0,80}$/.test(id)||!value?.components||Object.keys(value.components).some(k=>!allowed.includes(k)))e.push('sourceEnvironment 含不支持组件 '+id);

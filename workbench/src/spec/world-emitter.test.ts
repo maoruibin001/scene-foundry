@@ -92,3 +92,12 @@ test('adopted native lighting is exclusive and camera values survive without gue
  expect((w.entities as any).ambient).toBeUndefined();expect((w.entities as any).source_originalFill.components.DirectionalLight.intensity).toBe(.25);expect((w.entities as any).camera.components.Camera.bloomIntensity).toBe(.22);
  expect(Object.keys(w.entities).filter(k=>k.startsWith('light_'))).toEqual([]);
 });
+
+test('explicit spec lighting continuation replaces native lighting, exports beam and does not stack analytic fog',()=>{
+ const s=sampleSpec();s.sourceEnvironment={lightingMode:'spec',entities:{oldSun:{components:{DirectionalLight:{intensity:99}}}},camera:{exposure:10}};
+ const st=s.lighting.states[0];st.post.fog={color:[.1,.2,.3],density:.004,anisotropy:.5,boundsMin:[-20,-20,0],boundsMax:[20,20,20],light:'key'};
+ st.post.volumetric={extinction:.004,albedo:[.6,.7,.9],anisotropy:.5,heightFalloff:.01,noise:.1,maxDistance:150};
+ const w=emitSpecWorld(s,{worldPackageId:'60fb39fb-420e-4aa5-8189-fd9c4d8369e7'});
+ expect(w.entities).toHaveProperty('light_key');expect(w.entities).not.toHaveProperty('source_oldSun');expect(w.entities).not.toHaveProperty('fog');
+ expect((w.entities.camera as any).components.Camera.exposure).toBe(1);expect(w.volumetricPlugin).toContain('maxDistance:150');expect(w.volumetricPlugin).toContain('"light_key"');
+});

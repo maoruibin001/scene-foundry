@@ -203,3 +203,15 @@ test('reference switching beside an open Engine never touches its iframe or enab
  const s=comparisonFixture('comparison-live-'+crypto.randomUUID(),true);bindSceneComparison(s.root);s.buttons.reference[1].onclick();s.buttons.output[1].onclick();
  expect(s.images.reference.getAttribute('src')).toBe('reference-1.jpg');expect(s.buttons.output[1].disabled).toBe(true);expect(s.iframeChanges).toBe(0);expect(s.images.output).toBeNull();
 });
+
+test('spec visual failure is shown in the hero instead of an unassessed ordinary delivery score',()=>{
+ const j=job({specJob:'spec-job-v1',styleReview:{overall:50,evidence:{status:'visible'}},specGate:{failed:[],ownerApproval:'pending',styleJudge:{overall:50,passed:false,threshold:{overall:70}}}});
+ const output=sceneOutput(j);expect(output.score).toBe(50);expect(output.qualityLabel).toContain('未达70分目标');expect(output.limitations).toContain('评审已完成：50 分');
+ const html=sceneHeroHTML(j);expect(html).not.toContain('未完成成品评分');expect(html).not.toContain('正式验收通过');
+});
+test('spec score and owner approval stay separate and unavailable or mismatched receipts do not replace evidence',()=>{
+ const j=job({specJob:'spec-job-v1',styleReview:{overall:75,evidence:{status:'visible'}},specGate:{failed:[],ownerApproval:'pending',styleJudge:{overall:75,passed:true,threshold:{overall:70}}}});
+ expect(sceneOutput(j).qualityLabel).toContain('等待用户确认');expect(sceneHeroHTML(j)).not.toContain('正式验收通过');
+ j.styleReview.evidence.status='unavailable';expect(sceneOutput(j).score).toBe(72);
+ j.styleReview.evidence.status='visible';j.styleReview.overall=90;expect(sceneOutput(j).score).toBe(72);
+});
