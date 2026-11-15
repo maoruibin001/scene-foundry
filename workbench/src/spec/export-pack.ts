@@ -1,3 +1,4 @@
+import {bindingGeometryIssues} from './binding-geometry';
 import {bindDimensionalAliases} from './parameter-binding';
 /**
  * 规格 → 引擎场景 pack。网格在导出期跨 Bun Worker 线程并行生成并缓存到内存与 .mesh-cache,
@@ -352,7 +353,7 @@ function prepareExportPlacements(spec:SceneSpec){
     placements.push({kind:'proxy',object:o,mesh});
    };
    if(!gen){addProxy(family.generator?`生成器 ${family.generator.id} 尚未实现`:'资产族未指定生成器');return;}
-   const pending:{key:string;input:unknown;reason:string}[]=[];
+   const pending:{key:string;input:unknown;reason:string}[]=bindingGeometryIssues(spec,o).map(q=>({key:q.key,input:q.input,reason:q.kind+' '+JSON.stringify({expected:q.expected,actual:q.actual})}));
    const merged:Record<string,ParamValue>={};
    // 族参数与对象参数分别过生成器适配(区间/合并向量 → 生成器参数),对象值覆盖族值。
    const ctx={id:o.id,position:o.transform.position},binding=bindDimensionalAliases(gen,{...family.generator!.params,...inputParams},ctx);

@@ -1,3 +1,4 @@
+import {bindingGeometryIssues} from './binding-geometry';
 import {createHash} from 'node:crypto';
 import {writeFileSync,mkdirSync,existsSync,readFileSync} from 'node:fs';
 import {join} from 'node:path';
@@ -27,6 +28,17 @@ export function applyParameterBindings(source:SceneSpec,answer:any){
  }
  return {spec,receipt:{version:'spec-parameter-binding-v1',sourceSha256:hash(source),effectiveSha256:hash(spec),decisions,unresolved:answer.unresolved??[],remaining:inspectSpecParameters(spec)}};
 }
+/** A targeted correction cannot replace the asset or shrink its path to evade a geometry diagnostic. */
+export function validateGeometryCorrection(current:SceneSpec,issues:ReturnType<typeof bindingGeometryIssues>,delta:any){
+ const length=(p:number[])=>{let n=0;for(let i=3;i<p.length;i+=3)n+=Math.hypot(...p.slice(i,i+3).map((v,k)=>v-p[i-3+k]));return n;};
+ for(const b of delta.bindings??[])for(const id of b.objects){
+  const o=current.objects.find(o=>o.id===id),prior=o?.geometryBinding,allowed=new Set(issues.filter(q=>q.object===id).map(q=>q.key));
+  if(!prior||!allowed.size||b.generator!==prior.id)throw Error('PARAMETER_CORRECTION_INVALID：不得替换资产生成器');
+  const params=Object.fromEntries(b.params.map((p:any)=>[p.key,p.number??p.numbers??p.flag]));
+  for(const key in prior.params)if(!allowed.has(key)&&JSON.stringify(prior.params[key])!==JSON.stringify(params[key]))throw Error('PARAMETER_CORRECTION_INVALID：修改了未诊断参数 '+key);
+  if(allowed.has('path')){const before=prior.params.path,after=params.path;if(!Array.isArray(before)||!Array.isArray(after)||Math.abs(length(before)-length(after))>Math.max(.01,length(before)*.001))throw Error('PARAMETER_CORRECTION_INVALID：不得通过缩短路径逃避边界校验');}
+ }
+}
 export async function repairSpecParameters(source:SceneSpec,dir:string,model:NodeModel,signal?:AbortSignal){
  const before=inspectSpecParameters(source);if(!before.proxies.length)return {spec:source,receipt:null};
  const ids=before.proxies.map(x=>x.object),objects=source.objects.filter(o=>ids.includes(o.id));
@@ -36,6 +48,14 @@ export async function repairSpecParameters(source:SceneSpec,dir:string,model:Nod
  const cached=join(cache,'answer.json');let result:any,reused=false;
  if(existsSync(cached)){result=JSON.parse(readFileSync(cached,'utf8'));reused=true;}else{result=await callSpecNode({role:'spec-parameter-repair',system,text,signal},dir,model,parameterRepairSchema(ids));writeFileSync(cached,JSON.stringify({...result,sourceCallDir:dir}));}
  writeFileSync(join(dir,'answer.json'),JSON.stringify({...result,reused},null,2));
- const applied=applyParameterBindings(source,JSON.parse(result.text));const receipt={...applied.receipt,reused,sourceCallDir:result.sourceCallDir??dir,model,route:result.receipt,before:{unresolved:before.unresolved.length,proxies:before.proxies.length}};
- writeFileSync(join(dir,'parameter-resolution.json'),JSON.stringify(receipt,null,2));return {...applied,receipt};
+ let answer=JSON.parse(result.text),applied=applyParameterBindings(source,answer);const geometryIssues=bindingGeometryIssues(applied.spec);let correction:any=null;
+ if(geometryIssues.length){
+  const ids=[...new Set(geometryIssues.map(q=>q.object))],system='你是通用生成器参数的几何契约校验修正器。只修正已列出的诊断，不能改变对象ID、族、原参数、位置、旋转、缩放，也不能删对象。输出每个待修对象的完整合法生成器参数，basis=design_fill并说明依据。所有 path/endPoint 点均为局部引擎坐标 +Y向上，规格世界坐标 +Z向上：局部点 [x,y,z] 在未旋转时对应规格 [x,-z,y]。先按给定旋转/缩放换算，再平移，世界端点必须在 bounds 中；显式 placement 两点连接必须命中另一世界点。适配器指出的 expected 数值必须直接成为显式参数，不依赖适配器暗改。不能用零长度路径或改变对象变换绕过诊断。只返回列出对象，给齐每个生成器参数；其他绑定不动。只能修改诊断列出的参数键；生成器ID及其他参数原样保留。修正路径的坐标轴时保留原路径总长度，不能缩短。';
+  const text=JSON.stringify({bounds:source.bounds,issues:geometryIssues,objects:applied.spec.objects.filter(o=>ids.includes(o.id)),generators:Object.values(GENERATORS).filter(g=>applied.spec.objects.some(o=>ids.includes(o.id)&&o.geometryBinding?.id===g.id)).map(g=>({id:g.id,label:g.label,params:g.params}))}),folder=join(dir,'geometry-correction'),cache=join(DATA,'specs','parameter-bindings',hash({system,text,model}));mkdirSync(folder,{recursive:true});mkdirSync(cache,{recursive:true});
+  const file=join(cache,'answer.json');if(existsSync(file)){correction=JSON.parse(readFileSync(file,'utf8'));correction.reused=true;}else{correction=await callSpecNode({role:'spec-parameter-correction',system,text,signal},folder,model,parameterRepairSchema(ids));writeFileSync(file,JSON.stringify({...correction,sourceCallDir:folder}));}
+  writeFileSync(join(folder,'answer.json'),JSON.stringify(correction,null,2));const delta=JSON.parse(correction.text);validateGeometryCorrection(applied.spec,geometryIssues,delta);
+  answer={bindings:[...answer.bindings.map((b:any)=>({...b,objects:b.objects.filter((id:string)=>!ids.includes(id))})).filter((b:any)=>b.objects.length),...delta.bindings],unresolved:delta.unresolved};applied=applyParameterBindings(source,answer);
+ }
+ const receipt={...applied.receipt,reused,sourceCallDir:result.sourceCallDir??dir,model,route:result.receipt,geometryIssuesBeforeCorrection:geometryIssues,correctionRoute:correction?.receipt??null,correctionReused:correction?.reused??false,before:{unresolved:before.unresolved.length,proxies:before.proxies.length}};
+ writeFileSync(join(dir,'parameter-resolution.json'),JSON.stringify(receipt,null,2));if(bindingGeometryIssues(applied.spec).length)throw Error('PARAMETER_GEOMETRY_UNRESOLVED：一次定向修正后仍有几何契约矛盾；保留依据，不继续构建');return {...applied,receipt};
 }
