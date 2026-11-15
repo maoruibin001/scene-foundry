@@ -14,7 +14,8 @@ test('generated near-horizontal normals are bounded, explicit strength and input
 });
 test('output quality is bounded and follows aspect; no scene IDs or fixed 640 image',()=>{
  expect(opticsQuality().planar).toMatchObject({width:1280,height:720});
- expect(validateRenderProfile({...DEFAULT_STANDARD_PROFILE,volumetricFog:opticsQuality().volumetricFog})).toBeNull();
+ expect(validateRenderProfile({...DEFAULT_STANDARD_PROFILE,volumetricFog:opticsQuality().volumetricFog})).toBeUndefined();
+ expect(validateRenderProfile({...DEFAULT_STANDARD_PROFILE,volumetricFog:{quality:'medium',depth:64,tileSize:8}} as any)).toContain('requires quality low/high');
  expect(opticsQuality(800,800).planar).toMatchObject({width:640,height:640});
  expect(opticsQuality(8000,8000).planar.width).toBeLessThanOrEqual(1280);
  expect(()=>opticsQuality(NaN,900)).toThrow();expect(()=>opticsQuality(0,900)).toThrow();

@@ -15,7 +15,7 @@ import {validateSceneSpec,type SceneSpec} from './schema';
 import {emitSpecWorld} from './world-emitter';
 import {conceptLookPlugin,conceptLookUi} from './concept-look';
 import {irradianceFieldGi,renderProfilePlugin} from './render-profile';
-import {DEFAULT_STANDARD_PROFILE} from '@forgeax/engine/render';
+import {DEFAULT_STANDARD_PROFILE,validateRenderProfile} from '@forgeax/engine/render';
 import {resolveCameraVisibility} from './camera-visibility';
 
 const W=resolve(import.meta.dirname,'../..'),BASE=resolve(W,'..'),P=join(BASE,'prototype'),ENGINE=join(BASE,'engine');
@@ -70,6 +70,7 @@ export async function prepareSpecProject(root:string,spec:SceneSpec,options:{id?
  // 性能档(引擎会话 2026-11-06 建议):体积雾低画质、光照档 32;ProjectedDecal 与漫反射 GI 均要求 deferred 管线。
  const hasDecals=(spec.decals?.length??0)>0;
  const perfProfile={...DEFAULT_STANDARD_PROFILE,...(hasDecals?{renderPath:'deferred' as const}:{}),...(process.env.SPEC_RENDER_PATH?{renderPath:process.env.SPEC_RENDER_PATH}:{}),lightCount:32,volumetricFog:opticsQuality(world.views[0].frame.width,world.views[0].frame.height).volumetricFog};
+ const profileError=validateRenderProfile(perfProfile as any);if(profileError)throw Error('SPEC_RENDER_PROFILE_INVALID '+profileError);
  // 漫反射 GI:渲染器配置只能在构建期由 build 插件给出;默认 profile + 延迟渲染 + irradiance-field。
  const giState=spec.lighting.states.find(s=>s.id===(options.stateId??spec.lighting.defaultState))!.post.gi;
  if(!giState){
