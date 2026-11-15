@@ -147,6 +147,7 @@ if(!FOLLOWER){claimCoordinator();if(!executionHeld()){references.recover();recov
   assertCurrentVersion(activeVersion.id);const source=getJob(appearance[1]);
   if(!source.specJob||!source.specId||!['failed','needs_review'].includes(source.status)||source.styleReview?.evidence?.status!=='visible')throw Error('需要已结束的真实规格视觉报告');
   const root=source.executionRecoveryRoot??source.retryRoot??source.id;if(listJobs().some(j=>(j.executionRecoveryRoot??j.id)===root&&['queued','running'].includes(j.status)))throw Error('已有在途续修');
+  if(listJobs().filter(j=>(j.executionRecoveryRoot??j.retryRoot??j.id)===root&&j.appearanceSourceJobId).length>=2)throw Error('本场景两次外观修订调用已使用，需保留结果重新诊断');
   let rounds=0,prior=source;while(prior.appearanceSourceJobId){rounds++;prior=getJob(prior.appearanceSourceJobId);if(rounds>=2)throw Error('两轮外观修订已完成，需保留历史并重新诊断；不能继续盲目重跑');}
   return json(createSpecJob({specId:source.specId,nodeModels:source.nodeModels,sourceJobId:source.id,appearanceSourceJobId:source.id}),201);
  }
