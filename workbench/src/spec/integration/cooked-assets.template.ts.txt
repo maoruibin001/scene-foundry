@@ -1,0 +1,23 @@
+// Scene Foundry cooked incremental assets. No runtime geometry generation or game entrypoint.
+import {readFileSync} from 'node:fs';
+import {resolve} from 'node:path';
+import {createHash} from 'node:crypto';
+import {definePack,definePackageId} from '@forgeax/engine/pack/source';
+import {AssetGuid} from '@forgeax/engine/pack/guid';
+import {Materials} from '@forgeax/engine/render';
+import {ok,type MeshAsset} from '@forgeax/engine/types';
+import source from './spec-data.ts';
+const data:any=source,packageId=definePackageId(data.packageId);
+export default definePack({schemaVersion:'2.0.0',packageId,name:data.name,build(){
+ const out:Record<string,any>={};
+ for(const m of data.materials)out['material/'+m.key]=Materials.standard(m.options);
+ for(const m of data.meshes){
+  const bytes=readFileSync(resolve(process.cwd(),data.assetDirectory,'cooked',m.key+'.bin'));
+  if(bytes.byteLength!==m.cooked.byteLength||createHash('sha256').update(bytes).digest('hex').slice(0,16)!==m.cooked.sha256)throw Error('COOKED_ASSET_DRIFT:'+m.key);
+  const ab=bytes.buffer.slice(bytes.byteOffset,bytes.byteOffset+bytes.byteLength),meta=m.cooked;
+  const view=(s:any)=>s.dtype==='f32'?new Float32Array(ab,s.byteOffset,s.length):s.dtype==='u16'?new Uint16Array(ab,s.byteOffset,s.length):s.dtype==='u32'?new Uint32Array(ab,s.byteOffset,s.length):new Uint8Array(ab,s.byteOffset,s.length);
+  const asset:MeshAsset={kind:'mesh',vertices:view(meta.vertices) as Float32Array,indices:view(meta.indices) as Uint16Array|Uint32Array,aabb:view(meta.aabb) as Float32Array,attributes:Object.fromEntries(Object.entries(meta.attributes).map(([k,v])=>[k,view(v)])) as any,submeshes:meta.submeshes,materialSlots:meta.materialSlots.map((s:any)=>({...s,sourceKey:m.key+':'+s.slotName,defaultMaterial:AssetGuid.derive(packageId,'material/'+m.slots[s.slotName])}))};
+  out['mesh/'+m.key]=asset;
+ }
+ return ok(out);
+}});
