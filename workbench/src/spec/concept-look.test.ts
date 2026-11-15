@@ -549,3 +549,14 @@ describe('ForgeaX Engine Showcase Interactive Deck', () => {
     expect(keyListeners.size).toBe(0);
   });
 });
+
+test('adopted scenes bind actual Skylights rather than a hard-coded ambient address',()=>{
+ const code=conceptLookPlugin({camera:{components:{Camera:{}}},source_sky:{components:{Skylight:{}}},secondSky:{components:{Skylight:{}}}});
+ const audit={channelId:'source-world',specSha256:'source-sha'};
+ const {plugin,tokens,send}=instantiateGeneratedPlugin(code,audit);
+ const a={color:[.1,.2,.3],intensity:.42},b={color:[.4,.5,.6],intensity:.2};
+ const env=createMockWorld(tokens as any,{camera:new Map([[tokens.Camera as symbol,{bloom:1}]]),source_sky:new Map([[tokens.Skylight as symbol,a]]),secondSky:new Map([[tokens.Skylight as symbol,b]])});
+ plugin.apply(env.ctx);send({kind:'scene-look',look:'neutral',specSha256:audit.specSha256});
+ expect(env.store.get('source_sky')!.get(tokens.Skylight as symbol).intensity).toBe(.72);expect(env.store.get('secondSky')!.get(tokens.Skylight as symbol).intensity).toBe(.72);
+ send({kind:'scene-look',look:'concept',specSha256:audit.specSha256});expect(env.store.get('source_sky')!.get(tokens.Skylight as symbol)).toEqual(a);expect(env.store.get('secondSky')!.get(tokens.Skylight as symbol)).toEqual(b);env.dispose();
+});

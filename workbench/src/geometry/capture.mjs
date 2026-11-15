@@ -72,4 +72,11 @@ try{
  const videoFps=(videoFrames.decodedFrames-1)/(videoFrames.durationMs/1000);
  const result={...metrics,hard:{...metrics.hard,runtime:metrics.submittedFps>0,noErrors:errors.length===0,hudToggle:hidden&&restored,video:motion.videoPassed,frameRate:metrics.hard.frameRate&&videoFps>=10,cameraStopped:terminal?.running===false,multipleViews:metrics.hard.multipleViews&&new Set(hashes.slice(0,audit.views.length)).size===audit.views.length},captureIssue:motion.issue,images,hashes,referenceFrames:audit.views.map((v,i)=>({referenceIndex:v.referenceIndex,file:images[i]})),video:'scene-tour.webm',recording:{...receipt,quality:recordingQuality,decodedFps:videoFps,frames:videoFrames},poses:samples.map(({frameTimes,...s})=>s),errors,engineReport,distManifestDigest:createHash('sha256').update(await readFile(join(root,'dist/forgeax-dist.json'))).digest('hex'),scope:motion.issue?'静态机位为Engine官方采集，仍可独立评估；原始录屏缺少250毫秒内的帧与实际相机配对，video硬检查失败。motion-observation仅为运行观测，不代表配对截图；不补造连续画面。':'静态机位为Engine官方采集；连续画面从原始录屏按PTS提取，与实际相机观测相差不超过250毫秒；未见区域仍需视觉判断'};
  await writeFile(join(output,'runtime.json'),JSON.stringify(result,null,2));console.log(JSON.stringify({hard:result.hard,fps:result.submittedFps}));
+}catch(error){
+ // Preserve the actual failed owner page, rather than returning only a selector timeout.
+ // Diagnostic evidence never relaxes the successful runtime/capture gates.
+ if(session?.page){
+  try{const page=session.page;await writeFile(join(output,'capture-failure.json'),JSON.stringify({error:String(error),url:page.url(),body:await page.locator('body').innerText({timeout:3000}),report:session.report()},null,2));await page.screenshot({path:join(output,'capture-failure.png')});}catch(diagnosticError){console.error('保存失败画面未完成: '+String(diagnosticError));}
+ }
+ throw error;
 }finally{await shutdown.close();}

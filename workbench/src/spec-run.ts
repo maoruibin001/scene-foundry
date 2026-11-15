@@ -88,7 +88,7 @@ export async function runSpec({job,dir,stage,command,preview,signal}:any){
  await stage('generate',async()=>{
   const r=await prepareSpecProject(project,spec,{id:'spec-'+job.id});
   job.generationMethod='spec-pack';job.generationModel=spec.provenance.model?`规格化 ${spec.provenance.model};网格由程序化生成器在 Engine 构建时产出`:'程序化生成器';
-  job.specExport={triangles:r.plan.triangles,meshes:r.plan.meshes.length,entities:r.plan.entities.length,instancing:r.plan.instancing,decals:(spec.decals??[]).length,proxies:r.plan.report.proxies.length,unresolved:r.plan.report.unresolved.length,covered:r.plan.report.covered.length,dropped:r.plan.report.dropped.length,errors:r.plan.report.errors.length,deferred:r.world.deferred,parallelWorkers:r.exportStats.parallelWorkers,exportMs:r.exportStats.durationMs,previewMs:0};
+  job.specExport={reusedSourceObjects:spec.objects.filter(o=>o.sourceMesh).length,generatedObjects:spec.objects.filter(o=>!o.sourceMesh).length,triangles:r.plan.triangles,meshes:r.plan.meshes.length,entities:r.plan.entities.length,instancing:r.plan.instancing,decals:(spec.decals??[]).length,proxies:r.plan.report.proxies.length,unresolved:r.plan.report.unresolved.length,covered:r.plan.report.covered.length,dropped:r.plan.report.dropped.length,errors:r.plan.report.errors.length,deferred:r.world.deferred,parallelWorkers:r.exportStats.parallelWorkers,exportMs:r.exportStats.durationMs,previewMs:0};
   save(join(dir,'spec-export.json'),{...job.specExport,report:r.plan.report});
   if(r.plan.report.errors.length)throw Error('规格导出存在错误:'+r.plan.report.errors.slice(0,5).join(';'));
   // 程序化资产预览:每种生成器网格一张等轴缩略图 + 参数索引,供工作台「程序化资产」卡片与资产页展示。

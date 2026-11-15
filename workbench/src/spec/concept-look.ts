@@ -8,7 +8,9 @@ export function conceptLookPlugin(entities: Record<string, any>) {
       .filter(([k]) => ['DirectionalLight', 'PointLight', 'SpotLight', 'RectAreaLight'].includes(k))
       .map(([kind]) => ({ key, kind })),
   );
-  const hasFog = 'fog' in entities;
+  const ambientKeys=Object.entries(entities).filter(([,e])=>e?.components?.Skylight).map(([key])=>key);
+  const fogKey=Object.entries(entities).find(([,e])=>e?.components?.Fog)?.[0];
+  const hasFog = fogKey!==undefined;
   const lightTypes = [...new Set(lights.map((x) => x.kind))];
   const renderTypes = [
     'Camera',
@@ -19,7 +21,7 @@ export function conceptLookPlugin(entities: Record<string, any>) {
     ...lightTypes,
   ];
   const fogSetup = hasFog
-    ? `\n  const fogEntity = resolve('fog'), originalFog = structuredClone(ctx.world.get(fogEntity, Fog).unwrap());`
+    ? `\n  const fogEntity = resolve(${JSON.stringify(fogKey)}), originalFog = structuredClone(ctx.world.get(fogEntity, Fog).unwrap());`
     : '';
   const fogApply = hasFog
     ? `\n      ctx.world.set(fogEntity, Fog, neutral ? { ...originalFog, maxOpacity: 0 } : originalFog).unwrap();`
@@ -119,8 +121,7 @@ export default {
     const resolve = (key: string) => worldResolveSceneEntity(ctx.world, root, sceneEntity('scene/main', key)).unwrap();
     const camera = resolve('camera');
     const originalCamera = structuredClone(ctx.world.get(camera, Camera).unwrap());
-    const ambient = resolve('ambient');
-    const originalAmbient = structuredClone(ctx.world.get(ambient, Skylight).unwrap());${fogSetup}
+    const ambientEntries = ${JSON.stringify(ambientKeys)}.map(key=>{const ambient=resolve(key);return {ambient,originalAmbient:structuredClone(ctx.world.get(ambient,Skylight).unwrap())};});${fogSetup}
     const lightTypeMap: Record<string, any> = { ${lightTypes.map((x) => `${x}:${x}`).join(', ')} };
     const entries = ${JSON.stringify(lights)}.map(({ key, kind }) => {
       const entity = resolve(key);
@@ -190,6 +191,7 @@ export default {
 
       if (e.data?.kind === 'scene-look' && ['concept', 'neutral'].includes(e.data.look)) {
         const neutral = e.data.look === 'neutral';
+        for(const {ambient,originalAmbient} of ambientEntries){
         const nextAmbient = neutral
           ? ({
               ...originalAmbient,
@@ -201,6 +203,7 @@ export default {
             } as typeof originalAmbient)
           : originalAmbient;
         ctx.world.set(ambient, Skylight, nextAmbient).unwrap();
+        }
 
         const nextCamera = neutral
           ? ({
