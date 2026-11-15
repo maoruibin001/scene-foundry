@@ -1,3 +1,4 @@
+import {lightingSemantics} from './spec/lighting-semantics';
 import {continueSpec} from './spec/continuation';
 import {startSpecReview} from './spec-review';
 import {validationBoundaryStatus} from './validation-rounds';
@@ -142,6 +143,8 @@ if(!FOLLOWER){claimCoordinator();if(!executionHeld()){references.recover();recov
   const stored=storeSpec(result.spec),job=createSpecJob({specId:stored.id,nodeModels:source.nodeModels,sourceJobId:source.id,continuation:result.receipt});
   return json(job,201);
  }
+ const physics=u.pathname.match(/^\/api\/spec-jobs\/([a-f0-9-]{36})\/resolve-lighting$/);
+ if(req.method==='POST'&&physics){assertCurrentVersion(activeVersion.id);const source=getJob(physics[1]);if(!source.specJob||!source.specId||!['failed','needs_review'].includes(source.status)||source.styleReview?.evidence?.status!=='visible')throw Error('需要真实失败评审');const root=source.executionRecoveryRoot??source.id;if(listJobs().some(j=>(j.executionRecoveryRoot??j.id)===root&&(j.appearanceKind==='physics'||['queued','running'].includes(j.status))))throw Error('本场景已有灯光参数解析或在途任务');if(!lightingSemantics(loadSpec(source.specId).spec).issues.length)throw Error('没有新的可验证灯光参数问题');return json(createSpecJob({specId:source.specId,nodeModels:source.nodeModels,sourceJobId:source.id,appearanceSourceJobId:source.id,appearanceKind:'physics'}),201);}
  const appearance=u.pathname.match(/^\/api\/spec-jobs\/([a-f0-9-]{36})\/appearance$/);
  if(req.method==='POST'&&appearance){
   assertCurrentVersion(activeVersion.id);const source=getJob(appearance[1]);

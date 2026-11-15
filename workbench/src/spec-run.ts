@@ -1,5 +1,5 @@
 import {getJob,runDir} from './store';
-import {repairAppearance} from './spec/appearance-continuation';
+import {repairAppearance,resolveLightingSemantics} from './spec/appearance-continuation';
 import {repairSpecParameters} from './spec/parameter-repair';
 import {VISUAL_SCHEMA as STYLE_SCHEMA,verifiedVisualReview,VISUAL_REVIEW_VERSION,visualReferences} from './spec/visual-review';
 /**
@@ -87,7 +87,7 @@ export async function runSpec({job,dir,stage,command,preview,signal}:any){
  if(job.appearanceSourceJobId){
   const previous=getJob(job.appearanceSourceJobId),sourceDir=runDir(previous.id),shots=(previous.runtime?.images??[]).filter((f:string)=>/^inspection-[^/]+\.png$/.test(f));
   const images=[...visualReferences(styleImages).map((im:any)=>({path:join(UPLOADS,im.file),mime:im.mime})),...shots.map((f:string)=>({path:join(sourceDir,'runtime',f),mime:'image/png'}))];
-  const revised=await stage('appearance',()=>repairAppearance(sourceSpec,previous.styleReview,images,join(dir,'appearance'),nodeModels.parameterRepair,signal));
+  const revised=await stage('appearance',()=>job.appearanceKind==='physics'?resolveLightingSemantics(sourceSpec,previous.styleReview,join(dir,'appearance'),nodeModels.parameterRepair,signal):repairAppearance(sourceSpec,previous.styleReview,images,join(dir,'appearance'),nodeModels.parameterRepair,signal));
   spec=revised.spec;job.specContinuation=revised.receipt;job.appearanceRevision={sourceJobId:previous.id,before:previous.styleReview.overall,mechanism:'source-appearance-continuation-v1'};
   job.specId=storeSpec(spec).id;saveJob(job);
  }
