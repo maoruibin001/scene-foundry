@@ -129,7 +129,7 @@ export function sceneSpecErrors(value:unknown):string[]{
    if(!['directional','point','spot','area'].includes(l.kind))e.push(`${q} kind 无效`);
    if(l.kind!=='directional'&&!vec(l.position))e.push(`${q} 需要 position`);
    if((l.kind==='directional'||l.kind==='spot'||l.kind==='area')&&(!vec(l.direction,-1,1)||Math.hypot(...(l.direction as Vec3))<1e-3))e.push(`${q} 需要非零 direction`);
-   if(!vec(l.color,0,1)||!finite(l.intensity,0,10000))e.push(`${q} color 须为 0..1、intensity 0..10000`);
+   if(!vec(l.color,0,1)||!finite(l.intensity,0,l.kind==='spot'?2_000_000:10_000))e.push(`${q} color 须为 0..1、intensity 须符合灯型范围（spot 0..2000000 cd，其余 0..10000）`);
    if(l.kind==='spot'&&(!finite(l.outerConeDeg,1,89)||!finite(l.innerConeDeg,0,l.outerConeDeg as number)))e.push(`${q} 聚光需要 innerConeDeg ≤ outerConeDeg(1..89)`);
    if(l.kind==='area'&&(!finite(l.width,0.05,20)||!finite(l.height,0.05,20)))e.push(`${q} 面光需要 width/height 0.05..20`);
    if(l.kind==='area'&&l.castShadow)e.push(`${q} 面光不投影(引擎 RectAreaLight 无阴影)`);

@@ -1,3 +1,4 @@
+import {radiometryAudit} from './spec/radiometry';
 import {photometricContinuity} from './spec/photometric-continuity';
 import {lightingSemantics} from './spec/lighting-semantics';
 import {continueSpec} from './spec/continuation';
@@ -144,6 +145,8 @@ if(!FOLLOWER){claimCoordinator();if(!executionHeld()){references.recover();recov
   const stored=storeSpec(result.spec),job=createSpecJob({specId:stored.id,nodeModels:source.nodeModels,sourceJobId:source.id,continuation:result.receipt});
   return json(job,201);
  }
+ const radiometry=u.pathname.match(/^\/api\/spec-jobs\/([a-f0-9-]{36})\/calibrate-lighting$/);
+ if(req.method==='POST'&&radiometry){assertCurrentVersion(activeVersion.id);const source=getJob(radiometry[1]);if(!source.specJob||!source.specId||source.status!=='needs_review'||source.styleReview?.evidence?.status!=='visible'||source.specGate?.styleJudge?.passed)throw Error('需要未达标的真实视觉评审');const root=source.executionRecoveryRoot??source.id;if(listJobs().some(j=>(j.executionRecoveryRoot??j.id)===root&&(j.appearanceKind==='radiometry'||['queued','running'].includes(j.status))))throw Error('本根照度校准已使用或已有在途任务');if(!radiometryAudit(loadSpec(source.specId).spec).length)throw Error('没有新的照度契约问题');return json(createSpecJob({specId:source.specId,nodeModels:source.nodeModels,sourceJobId:source.id,appearanceSourceJobId:source.id,appearanceKind:'radiometry'}),201);}
  const photometry=u.pathname.match(/^\/api\/spec-jobs\/([a-f0-9-]{36})\/photometric$/);
  if(req.method==='POST'&&photometry){assertCurrentVersion(activeVersion.id);const source=getJob(photometry[1]);if(!source.specJob||!source.specId||source.status!=='needs_review'||!source.appearanceSourceJobId||source.styleReview?.evidence?.status!=='visible')throw Error('需要已结束的灯型修订和真实评审');const root=source.executionRecoveryRoot??source.id;if(listJobs().some(j=>(j.executionRecoveryRoot??j.id)===root&&(j.appearanceKind==='photometric'||['queued','running'].includes(j.status))))throw Error('本根已有单位换算或在途任务');photometricContinuity(loadSpec(getJob(source.appearanceSourceJobId).specId).spec,loadSpec(source.specId).spec);return json(createSpecJob({specId:source.specId,nodeModels:source.nodeModels,sourceJobId:source.id,appearanceSourceJobId:source.id,appearanceKind:'photometric'}),201);}
  const physics=u.pathname.match(/^\/api\/spec-jobs\/([a-f0-9-]{36})\/resolve-lighting$/);
