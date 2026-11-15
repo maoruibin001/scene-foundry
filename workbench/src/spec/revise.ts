@@ -6,7 +6,7 @@
 import {readFileSync,writeFileSync} from 'node:fs';
 import {validateSceneSpec,type SceneSpec} from './schema';
 
-export type SpecPatch={target:'material'|'family'|'familyParam'|'object'|'addObject'|'addFamily'|'removeObject'|'state'|'post'|'shot'|'light'|'addLight';id:string;state?:string;set:Record<string,unknown>;reason:string};
+export type SpecPatch={target:'material'|'addMaterial'|'family'|'familyParam'|'object'|'addObject'|'addFamily'|'removeObject'|'state'|'post'|'shot'|'light'|'addLight';id:string;state?:string;set:Record<string,unknown>;reason:string};
 export type SpecRevision={id:string;summary:string;patches:SpecPatch[]};
 
 export function reviseSpec(spec:SceneSpec,rev:SpecRevision):SceneSpec{
@@ -17,6 +17,7 @@ export function reviseSpec(spec:SceneSpec,rev:SpecRevision):SceneSpec{
   if(!p.reason)throw Error(`修订 ${rev.id}:补丁 ${p.target}/${p.id} 缺原因`);
   switch(p.target){
    case 'material':Object.assign(find(s.materials,p.id,'材质'),p.set);break;
+   case 'addMaterial':{if(s.materials.some(x=>x.id===p.id))throw Error(`修订 ${rev.id}:材质 ${p.id} 已存在`);s.materials.push({id:p.id,label:p.id,baseColor:[1,1,1,1],metallic:0,roughness:0.5,emissive:null,emissiveIntensity:0,transmission:0,ior:1.5,thickness:0,clearcoat:0,clearcoatRoughness:0,...p.set,sources:[{kind:'inferred',ref:`修订 ${rev.id}`}]} as any);break;}
    case 'family':Object.assign(find(s.families,p.id,'资产族'),p.set);break;
    case 'familyParam':{const f=find(s.families,p.id,'资产族');if(!f.generator)throw Error(`修订 ${rev.id}:${p.id} 没有生成器`);Object.assign(f.generator.params,p.set);break;}
    case 'object':{const o=find(s.objects,p.id,'对象');if(o.authority==='master'&&('transform' in p.set))throw Error(`修订 ${rev.id}:不能改写 master 对象 ${p.id} 的变换`);Object.assign(o,p.set);break;}

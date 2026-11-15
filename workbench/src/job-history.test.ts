@@ -43,3 +43,13 @@ test('state summary keeps navigation and calibration fields without large execut
  expect('runtime' in row).toBe(false);expect('review' in row).toBe(false);expect(JSON.stringify(row).length).toBeLessThan(1000);
  expect(stateJobSummary(job('b',{status:'running',review:{score:90}})).benchEligible).toBe(false);
 });
+test('spec jobs display actual nodeModels provider/model and styleJudge score in history',()=>{
+ const specRow=job('spec-1',{quality:undefined,specJob:'spec-job-v1',modelSettings:{model:'claude-opus-5-5',reasoningEffort:'xhigh'},nodeModels:{families:{provider:'cbc4',model:'hy4-preview-ioa',reasoningEffort:'high'},objects:{provider:'cbc4',model:'hy4-preview-ioa',reasoningEffort:'high'},staging:{provider:'cbc4',model:'hy4-preview-ioa',reasoningEffort:'high'},styleReview:{provider:'cbc4',model:'hy4-preview-ioa',reasoningEffort:'high'}},styleReview:{overall:74,evidence:{status:'visible'}},specGate:{styleJudge:{overall:74}}});
+ const res=query('scoreStatus=scored&model=cbc4%2Fhy4-preview-ioa',[specRow]);
+ expect(res.total).toBe(1);expect(res.items[0].model).toBe('cbc4/hy4-preview-ioa');expect(res.items[0].reasoningEffort).toBe('high');expect(res.items[0].score).toBe(74);
+});
+
+test('历史规格占位分没有实际看图证据时不计作已评分',()=>{
+ const row=job('spec-unseen',{quality:undefined,specJob:'spec-job-v1',specGate:{styleJudge:{overall:40}},styleReview:{overall:40}});
+ expect(query('scoreStatus=scored',[row]).total).toBe(0);
+});

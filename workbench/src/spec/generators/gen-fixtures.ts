@@ -10,7 +10,7 @@ const kindOf=(id:string|undefined,prefixes:string[])=>Math.max(0,prefixes.findIn
 
 export const GEN_RINGMOUNT=defineGenerator({
  id:'GEN-RINGMOUNT-01',label:'环挂点 / 核心吊杆',
- params:{mast:{type:'bool',default:false},mastUp:{type:'number',default:0.8,min:0,max:30},mastDown:{type:'number',default:6.7,min:0,max:30},hubDiameter:{type:'number',default:1.6,min:0.2,max:6},mastSection:{type:'number',default:0.9,min:0.1,max:4}},
+ params:{mast:{type:'bool',default:false},mastUp:{type:'number',default:0.8,min:0,max:80},mastDown:{type:'number',default:6.7,min:0,max:80},hubDiameter:{type:'number',default:1.6,min:0.2,max:6},mastSection:{type:'number',default:0.9,min:0.1,max:4}},
  slots:['mountHousing','jointAxle','mast','emitterLens','indicator'],
  // 吊杆从桁架下弦一直落到核心顶(规格 mastBottomZ),所以长度按对象高度换算。
  adapt(raw,ctx){const out={...raw};if(typeof raw.hubDiameter==='number'&&ctx){out.mast=true;const bottom=typeof raw.mastBottomZ==='number'?raw.mastBottomZ:11;out.mastDown=Math.max(0.5,ctx.position[2]-bottom);if(typeof raw.mastTopZ==='number')out.mastUp=Math.max(0,Math.min(1.2,raw.mastTopZ-ctx.position[2]));}return out;},
@@ -48,7 +48,7 @@ export const GEN_BRACE=defineGenerator({
  id:'GEN-BRACE-01',label:'护盖支撑 / 接口维护架',
  params:{endPoint:{type:'list',default:[0,3,0],min:-30,max:30,minLength:3,maxLength:3,stride:3},diameter:{type:'number',default:0.22,min:0.03,max:2},seamFraction:{type:'number',default:0.45,min:0.05,max:0.95},rack:{type:'bool',default:false},footprint:{type:'vec3',default:[1.6,4.2,0],min:0,max:30},deckHeight:{type:'number',default:4.5,min:0.3,max:20}},
  slots:['braceBody','seamSection','frame','bolt'],
- adapt(raw,ctx){const out={...raw};if(typeof raw.cutSeamFraction==='number')out.seamFraction=raw.cutSeamFraction;const f=nums(raw.footprint,2);if(f){out.rack=true;out.footprint=[f[0],f[1],0];if(typeof raw.topDeckZ==='number'&&ctx)out.deckHeight=raw.topDeckZ-ctx.position[2];}return out;},
+ adapt(raw,ctx){const out={...raw};if(typeof raw.cutSeamFraction==='number')out.seamFraction=raw.cutSeamFraction;const f=nums(raw.footprint,2);if(f){out.rack=true;out.footprint=[f[0],f[1],0];if(typeof raw.topDeckZ==='number'&&ctx)out.deckHeight=raw.topDeckZ-ctx.position[2];}else if(typeof raw.footprint==='number'&&Number.isFinite(raw.footprint)&&raw.footprint>0){out.rack=true;out.footprint=[Math.min(30,raw.footprint),Math.min(30,raw.footprint*2),0];if(typeof raw.topDeckZ==='number'&&ctx)out.deckHeight=Math.max(0.3,raw.topDeckZ-ctx.position[2]);}return out;},
  build(m,p){
   if(p.rack){const [w,l]=p.footprint,h=p.deckHeight;
    for(const x of [-1,1])for(const z of [-1,1])bar(m,[x*(w/2-0.08),0,z*(l/2-0.08)],[x*(w/2-0.08),h,z*(l/2-0.08)],0.14,0.14,'frame','leg');
@@ -105,14 +105,20 @@ export const GEN_INDUSTRIALDOOR=defineGenerator({
 
 export const GEN_LUMINAIRE=defineGenerator({
  id:'GEN-LUMINAIRE-01',label:'灯具',
- params:{kind:{type:'int',default:0,min:0,max:4},size:{type:'vec3',default:[2.4,1.2,0.12],min:0.02,max:20},count:{type:'int',default:16,min:1,max:64},ringHalfX:{type:'number',default:14,min:1,max:60},ringHalfY:{type:'number',default:16,min:1,max:60}},
+ params:{kind:{type:'int',default:0,min:0,max:5},size:{type:'vec3',default:[2.4,1.2,0.12],min:0.02,max:20},count:{type:'int',default:16,min:1,max:64},ringHalfX:{type:'number',default:14,min:1,max:60},ringHalfY:{type:'number',default:16,min:1,max:60}},
  slots:['housing','lampFace','guideStrip','wallLamp','emergencyLens'],
- adapt(raw,ctx){const out={...raw};out.kind=kindOf(ctx?.id,['CTRL_LIGHT','LUM_HIGHBAY','LUM_SPOT','LUM_EMERGENCY','LUM_GUIDE']);return out;},
+ adapt(raw,ctx){const out={...raw};out.kind=kindOf(ctx?.id,['CTRL_LIGHT','LUM_HIGHBAY','LUM_SPOT','LUM_EMERGENCY','LUM_GUIDE','LUM_AISLE']);return out;},
  build(m,p){
   if(p.kind===0){const [w,d,h]=p.size;m.box({size:[w,h,d],center:[0,0,0],material:'housing',label:'trough'});m.box({size:[w-0.1,0.01,d-0.1],center:[0,-h/2-0.006,0],material:'lampFace',label:'face'});}
   else if(p.kind===1){m.box({size:[0.5,0.25,3],center:[0,0,0],material:'housing',label:'highbay'});m.box({size:[0.4,0.01,2.8],center:[0,-0.13,0],material:'lampFace',label:'face'});rod(m,[0,0.12,0],[0,1.2,0],0.02,'housing','hanger',6);}
   else if(p.kind===2){m.cylinder({radiusTop:0.25,radiusBottom:0.35,height:0.6,radialSegments:20,center:[0,0,0],material:'housing',label:'can'});m.cylinder({radiusTop:0.3,radiusBottom:0.3,height:0.02,radialSegments:20,center:[0,-0.31,0],material:'lampFace',label:'lens'});m.box({size:[0.7,0.1,0.1],center:[0,0.35,0],material:'housing',label:'yoke'});}
   else if(p.kind===3){m.box({size:[0.35,0.18,0.12],center:[0,0,0],material:'wallLamp',label:'box'});m.box({size:[0.3,0.13,0.02],center:[0,0,0.07],material:'emergencyLens',label:'lens'});}
+  else if(p.kind===5){ // 中轴走道:两条琥珀色嵌地灯带夹一条深色防滑走道(概念图 01 前景直通水池的通道),沿局部 -Z 延伸 ringHalfY 米
+   const L=p.ringHalfY,w=p.ringHalfX;
+   m.box({size:[w,0.02,L],center:[0,0.01,-L/2],material:'housing',label:'aisle'});
+   for(const sx of [-1,1]){m.box({size:[0.08,0.03,L-0.4],center:[sx*(w/2+0.1),0.025,-L/2],material:'guideStrip',label:'aisle-lamp'});
+    m.box({size:[0.22,0.02,L-0.2],center:[sx*(w/2+0.1),0.012,-L/2],material:'housing',label:'aisle-lamp-frame'});}
+  }
   else{ // 引导灯:沿外环通路外缘等距排布的琥珀色地灯
    const hx=p.ringHalfX+1.6,hy=p.ringHalfY+1.6,per=4*(hx+hy);
    for(let i=0;i<p.count;i++){let s=per*i/p.count,x:number,z:number;

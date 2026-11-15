@@ -11,7 +11,7 @@ export const GEN_GLASS=defineGenerator({
   width:{type:'number',default:3,min:0.2,max:10},
   height:{type:'number',default:3,min:0.2,max:10},
   thickness:{type:'number',default:0.05,min:0.005,max:0.3},
-  gasket:{type:'number',default:0.03,min:0,max:0.2},
+  gasket:{type:'number',default:0.03,min:0,max:0.2,toggle:0.03},
  },
  slots:['glass','edgeGasket'],
  adapt(raw){const v=nums(raw.widthHeightThickness,3);return v?{...raw,width:v[0],height:v[1],thickness:v[2]}:raw;},

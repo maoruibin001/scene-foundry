@@ -20,12 +20,14 @@ export const GEN_FLOOR=defineGenerator({
   markingWidth:{type:'number',default:0.12,min:0.02,max:0.5},
   walkwayInset:{type:'number',default:10,min:0,max:60},
   roundCutout:{type:'bool',default:false},
+  clutter:{type:'number',default:0,min:0,max:400},
  },
  slots:['substrate','metalPanel','wetOverlay','drainGrate','markingStripe'],
  adapt(raw){
   const out={...raw},ext=nums(raw.extentXY,4),cut=nums(raw.poolCutoutXY,4),panel=nums(raw.panelSize);
   if(ext){out.width=ext[1]-ext[0];out.length=ext[3]-ext[2];}
   if(cut)out.poolCutout=[cut[1]-cut[0],cut[3]-cut[2],0];
+  if(Array.isArray(raw.poolCutout)&&raw.poolCutout.length===2)out.poolCutout=[...raw.poolCutout,0];
   if(panel)out.panelSize=panel[0];                                            // 面板按方格铺,取长边
   return out;
  },
@@ -57,10 +59,21 @@ export const GEN_FLOOR=defineGenerator({
   if(p.roundCutout){
    // 池边环形平台(内缘贴椭圆池洞,宽度盖住整板锯齿)+ 外缘一圈黄色标线;旋转出圆环后沿 Z 拉成椭圆。
    const r=cw/2,deck=ps*1.5+0.3,k=cl/cw,ring=(r0:number,r1:number,y0:number,y1:number,material:string,label:string)=>{m.revolve({points:[[r0,y0],[r1,y0],[r1,y1],[r0,y1],[r0,y0]],segments:96,material,label});if(k!==1)m.scale(sel.createdBy(label),[1,1,k],[0,0,0]);};
-   ring(r,r+deck,-0.3,top+0.012,'metalPanel','pool-deck');ring(r+deck-0.25,r+deck-0.1,top+0.012,top+0.016,'markingStripe','marking-pool');
+   ring(r,r+deck,-0.3,top,'metalPanel','pool-deck');ring(r+deck-0.25,r+deck-0.1,top,top+0.004,'markingStripe','marking-pool');
   }else ring(cw/2+0.6,cl/2+0.6,'marking-pool');
   const rw=cw/2+p.walkwayInset/2,rl=cl/2+p.walkwayInset/2;
   if(p.walkwayInset>0&&rw<W/2-0.5&&rl<L/2-0.5)ring(rw,rl,'marking-walkway');
+  // 贴地杂物(clutter>0):线缆束、检修盖板、排水沟格栅条、散落螺栓板、地面接线盒——
+  // 概念图地面的高频细节主要来自这些贴地小件,不是贴图。确定性排布,避开池洞。
+  if(p.clutter>0){const clutterCount=p.clutter<1?Math.round((W*L-cw*cl)*p.clutter/4):Math.round(p.clutter);let sd=7;const rr=()=>{sd=(sd*16807)%2147483647;return sd/2147483647;};
+   for(let i=0;i<clutterCount;i++){const x=(rr()-0.5)*(W-2),z=(rr()-0.5)*(L-2),k=rr();
+    if(p.roundCutout?(x/(cw/2+2.4))**2+(z/(cl/2+2.4))**2<1:Math.abs(x)<cw/2+2&&Math.abs(z)<cl/2+2)continue;
+    if(k<0.3){const a=rr()*Math.PI,len=1.5+rr()*5;for(let j=0;j<2+Math.floor(rr()*3);j++){const o=j*0.06;m.box({size:[len,0.035,0.035],center:[x+Math.sin(a)*o,top+0.018,z+Math.cos(a)*o],material:'substrate',label:'cable'});m.rotate(sel.createdBy('cable'),'y',0);}}
+    else if(k<0.5){m.box({size:[0.9,0.02,0.9],center:[x,top+0.01,z],material:'drainGrate',label:'hatch'});for(const [dx,dz] of [[-0.38,-0.38],[0.38,-0.38],[-0.38,0.38],[0.38,0.38]])m.box({size:[0.05,0.012,0.05],center:[x+dx,top+0.026,z+dz],material:'metalPanel',label:'hatch-bolt'});}
+    else if(k<0.7){for(let j=0;j<10;j++)m.box({size:[0.05,0.02,1.4],center:[x-0.25+j*0.055,top+0.01,z],material:'drainGrate',label:'gutter-bar'});}
+    else if(k<0.85){m.box({size:[0.35,0.12,0.25],center:[x,top+0.06,z],material:'substrate',label:'junction'});m.box({size:[0.06,0.03,0.02],center:[x+0.1,top+0.1,z+0.13],material:'markingStripe',label:'junction-tag'});}
+    else m.box({size:[0.5+rr()*0.8,0.015,0.3+rr()*0.5],center:[x,top+0.008,z],material:'wetOverlay',label:'puddle'});
+   }}
   // 排水格栅:沿两条长边,间距 drainGrateSpacing。
   if(p.drainGrateSpacing>0)for(let z=-L/2+p.drainGrateSpacing/2;z<L/2;z+=p.drainGrateSpacing)for(const s of [-1,1])
    m.box({size:[0.4,0.03,1.2],center:[s*(W/2-1),top+0.015,z],material:'drainGrate',label:'drain'});

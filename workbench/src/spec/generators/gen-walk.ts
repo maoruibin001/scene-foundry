@@ -15,7 +15,7 @@ export const GEN_WALK=defineGenerator({
   thickness:{type:'number',default:0.2,min:0.04,max:1},
   moduleLength:{type:'number',default:4,min:0.5,max:12},
   angleDeg:{type:'number',default:0,min:0,max:360},
-  radius:{type:'number',default:7.5,min:1,max:60},
+  radius:{type:'number',default:7.5,min:0,max:60},
   railHeight:{type:'number',default:1.1,min:0,max:2},
   railPitch:{type:'number',default:2,min:0.5,max:6},
   railLeft:{type:'bool',default:true},

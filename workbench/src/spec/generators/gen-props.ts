@@ -98,7 +98,7 @@ export const GEN_CONSOLE=defineGenerator({
 
 export const GEN_CARRIER=defineGenerator({
  id:'GEN-CARRIER-01',label:'导流体与存放座',
- params:{kind:{type:'int',default:0,min:0,max:2},pedestalHeight:{type:'number',default:1,min:0.2,max:3},length:{type:'number',default:1.2,min:0.2,max:4},width:{type:'number',default:0.35,min:0.05,max:2},sign:{type:'number',default:0.5,min:0.1,max:3}},
+ params:{kind:{type:'int',default:0,min:0,max:2},pedestalHeight:{type:'number',default:1,min:0.2,max:3},length:{type:'number',default:1.2,min:0.2,max:4},width:{type:'number',default:0.35,min:0.05,max:2},sign:{type:'number',default:0.5,min:0,max:3,toggle:0.5}},
  slots:['carrierBody','carrierGripRing','cradle','cradlePad','signIcon','signBackground'],
  adapt(raw,ctx){const out={...raw};out.kind=kindOf(ctx?.id,['CARRIER_HOME','CARRIER_0','CARRIER_SIGN']);const lw=nums(raw.lengthWidth,2);if(lw){out.length=lw[0];out.width=lw[1];}const s=nums(raw.size,2);if(s)out.sign=s[0];return out;},
  build(m,p){

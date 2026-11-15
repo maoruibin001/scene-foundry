@@ -25,7 +25,7 @@ export function assertBuiltState(report:any,digest:string){
 }
 
 const root=resolve(process.env.ASSET_PIPELINE_ROOT??resolve(import.meta.dirname,'..'));
-const dependencies=resolve(import.meta.dirname,'../..'),engine=join(dependencies,'engine');
+const dependencies=resolve(import.meta.dirname,'../..'),engine=process.env.PIPELINE_ENGINE_ROOT??join(dependencies,'engine');
 const cli=join(engine,'packages/engine/dist/bin/forgeax.mjs');
 const game=join(root,'game'), evidence=join(root,'evidence');
 const reportPath=join(evidence,'run-report.json');
@@ -65,7 +65,7 @@ async function main(){
     catch(error){report.stages[name]={status:'failed',durationMs:Date.now()-started,error:String(error)};save(reportPath,report);throw error;}
   };
   const engineCommand=(name:string,args:string[])=>{
-    const r=spawnSync(process.execPath.includes('bun')?'node':process.execPath,[cli,...args,'--root',game,'--json'],{cwd:game,encoding:'utf8',env:sharedInputsEnv(),timeout:240000,killSignal:'SIGKILL',maxBuffer:32*1024*1024});
+    const r=spawnSync(process.execPath.includes('bun')?'node':process.execPath,[cli,...args,'--root',game,'--json'],{cwd:game,encoding:'utf8',env:sharedInputsEnv(),timeout:Number(process.env.ASSET_PIPELINE_ENGINE_TIMEOUT_MS??600000),killSignal:'SIGKILL',maxBuffer:32*1024*1024});
     writeFileSync(join(evidence,name+'.stdout'),r.stdout??'');writeFileSync(join(evidence,name+'.stderr'),r.stderr??'');
     if(r.error||r.status!==0)throw new Error(`${name} exit=${r.status}: ${(r.stderr??'').slice(-1800)} ${(r.stdout??'').slice(-1200)}`);
     let result;try{result=JSON.parse(r.stdout)}catch{throw new Error(`${name}: response is not structured JSON`)}
@@ -86,7 +86,7 @@ async function main(){
     const result=await stage('generate-export',()=>brief.generator==='spec-pack'?specExport(brief,staging):exportSceneModulePack({sourceDir:join(root,'source'),entryFile:brief.entry,exportName:brief.exportName,args:brief.args,packageId:brief.packageId,sourceKey:brief.sourceKey,projectName:brief.name,destination:staging,includeDefaultLighting:false,consumerBuildBudgetMs:brief.budget.consumerBuildMs}));
     await stage('generation-budget',()=>{
       if(result.triangleCount>brief.budget.maxTriangles||result.materialCount>brief.budget.maxMaterials)throw new Error('generated content exceeds declared budget');
-      if(result.diagnostics.some((d:any)=>d.severity==='error'))throw new Error('scene diagnostics contain errors');
+      if(result.diagnostics.some((d:any)=>d.severity==='error'))throw new Error('scene diagnostics contain errors: '+JSON.stringify(result.diagnostics.filter((d:any)=>d.severity==='error').slice(0,5)));
       if(result.meshCount===0)throw new Error('generated scene is empty');
     });
     await stage('publish-assets',()=>{

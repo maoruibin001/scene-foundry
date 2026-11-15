@@ -1,7 +1,7 @@
 /** Engine session owns browser cleanup. Keep teardown bounded and report failures. */
 export async function closeCaptureResources(session,sink,step=()=>{},{timeoutMs=30000}={}){
  let timer;
- const cleanup=(async()=>{try{step('关闭录屏接收器');await sink?.close();}finally{step('关闭Engine采集会话');await session?.close();}})();
+ const cleanup=(async()=>{try{step('关闭录屏接收器');await sink?.close();}finally{step('关闭Engine采集会话');if(session?.report?.()?.carrier==='private-browser'&&session?.page?.goto){step('释放私有采集页面的渲染资源');try{await session.page.goto('about:blank',{waitUntil:'commit',timeout:5000});}catch(error){step('释放页面未完成，继续由Engine关闭会话：'+String(error));}}await session?.close();}})();
  try{await Promise.race([cleanup,new Promise((_,reject)=>{timer=setTimeout(()=>reject(Error('CAPTURE_CLEANUP_TIMEOUT：采集资源关闭超时，保留画面及日志，不视为采集成功')),timeoutMs);})]);step('采集资源已关闭');}
  finally{clearTimeout(timer);}
 }
