@@ -1,4 +1,5 @@
 import {bindingGeometryIssues} from './binding-geometry';
+import {compileNormalScale} from './optics';
 import {bindDimensionalAliases} from './parameter-binding';
 /**
  * 规格 → 引擎场景 pack。网格在导出期跨 Bun Worker 线程并行生成并缓存到内存与 .mesh-cache,
@@ -64,7 +65,7 @@ export type ExportEntity={id:string;label:string;mesh:string;pos:Vec3;quat:Quat;
 export type ExportInstanceBatch={key:string;label:string;mesh:string;entityIds:string[];transforms:Float32Array};
 export type ExportDecal={id:string;entityKey:string;label:string;kind:SpecDecal['kind'];text:string;color:Vec3;material:string;pos:Vec3;quat:Quat;scale:Vec3;order:number;opacity:number;roughness:number;normalThreshold:number;colorOpacity:number;normalOpacity:number;roughnessOpacity:number};
 export type ExportReport={unresolved:{object:string;family:string;key:string;input:unknown;reason:string}[];expanded:{object:string;count:number}[];slotFallbacks:{family:string;slot:string;material:string}[];covered:{object:string;family:string;by:string}[];proxies:{object:string;family:string;reason:string}[];dropped:{family:string;key:string;reason:string}[];derived:{object:string;key:string;value:ParamValue}[];errors:string[]};
-export type ExportPlan={meshes:ExportMesh[];entities:ExportEntity[];materials:{key:string;options:Record<string,unknown>;surface?:{pattern:string;tilesPerMeter:number;normalStrength?:number}}[];decals:ExportDecal[];instancing:{batches:number;totalInstances:number;savedEntities:number};instancedBatches:ExportInstanceBatch[];instancedInstances:number;report:ExportReport;triangles:number};
+export type ExportPlan={meshes:ExportMesh[];entities:ExportEntity[];materials:{key:string;options:Record<string,unknown>;surface?:{pattern:string;tilesPerMeter:number;normalStrength?:number;normalStrengthAuthored?:boolean}}[];decals:ExportDecal[];instancing:{batches:number;totalInstances:number;savedEntities:number};instancedBatches:ExportInstanceBatch[];instancedInstances:number;report:ExportReport;triangles:number};
 
 export interface ExportPlanTelemetry{
  parallelWorkers:number;
@@ -315,7 +316,7 @@ export function materialOptions(m:SpecMaterial,opts:{deferredCompatible?:boolean
   ...(m.emissive&&m.emissiveIntensity>0?{emissive:m.emissive,emissiveIntensity:m.emissiveIntensity}:{}),
   // 清透玻璃:alpha 混合 + 不写深度 + 双面;透射关闭(两者互斥,透射会把后方发光体模糊成乳白)。
   ...(alphaBlend?{baseColor:[m.baseColor[0],m.baseColor[1],m.baseColor[2],m.opacity],renderState:{blend:{color:{srcFactor:'src-alpha',dstFactor:'one-minus-src-alpha',operation:'add'},alpha:{srcFactor:'one',dstFactor:'one-minus-src-alpha',operation:'add'}},depthWriteEnabled:false,cullMode:'none'}}
-   :transmissive?{transmission:m.transmission,ior:m.ior,thickness:m.thickness}:{}),
+   :transmissive?{transmission:m.transmission,ior:m.ior,thickness:m.thickness,...(m.attenuationColor?{attenuationColor:m.attenuationColor}:{}),...(m.attenuationDistance!==undefined?{attenuationDistance:m.attenuationDistance}:{})}:{}),
   ...(forwardOnly&&m.clearcoat>0?{clearcoat:m.clearcoat,clearcoatRoughness:m.clearcoatRoughness,staticSwitches:{clearcoat:true}}:{}),
   ...(opts.planarReflection?{planarReflection:true}:{})};
 }
@@ -343,7 +344,7 @@ function prepareExportPlacements(spec:SceneSpec){
  // 质感默认:没有指定表面纹样、不发光、不透光的材质自动套"使用痕迹"纹样(粗糙度/底色变化,去塑料感);
  // 规格写 surface:null 以外的值或 SPEC_DEFAULT_WEAR=0 时不套。
  const wear=(m:SceneSpec['materials'][number])=>process.env.SPEC_DEFAULT_WEAR!=='0'&&m.surface===undefined&&!(m.emissiveIntensity>0)&&!((m.transmission??0)>0.3)&&!((m as any).opacity<1)?{pattern:'worn',tilesPerMeter:0.8}:null;
- const materials=spec.materials.map(m=>{const surface=m.surface??wear(m),isPlanar=mirrored.has(m.id);return {key:sourceSegment(m.id),options:materialOptions(m,{deferredCompatible,planarReflection:isPlanar}),...(surface?{surface:{...surface,normalStrength:surface.normalStrength??defaultSurfaceNormalStrength(m,surface.pattern)}}:{})};});
+ const materials=spec.materials.map(m=>{const surface=m.surface??wear(m),isPlanar=mirrored.has(m.id);return {key:sourceSegment(m.id),options:materialOptions(m,{deferredCompatible,planarReflection:isPlanar}),...(surface?{surface:{...surface,normalStrengthAuthored:surface.normalStrength!==undefined,normalStrength:surface.normalStrength??defaultSurfaceNormalStrength(m,surface.pattern)}}:{})};});
  // 灰模代理压成暗色:它只占位,不应在画面里抢眼(仍保留可见,如实标示缺生成器)。
  materials.push({key:PROXY_MATERIAL,options:{baseColor:[0.06,0.065,0.07,1],metallic:0.3,roughness:0.6}});
 
@@ -973,6 +974,21 @@ export default {name:'scene/projected-decals',inject:['world','gameHost','assets
 /** 写出 spec.pack.ts、spec-data.ts 与生成器源码;返回与 scene-generator 导出一致的收据字段。 */
 /** 规格里引用的 Poly Haven 资产名(去重,稳定顺序)。 */
 export const pbrAssets=(spec:SceneSpec)=>[...new Set(spec.materials.flatMap(m=>m.surface&&m.surface.pattern.startsWith('polyhaven:')?[m.surface.pattern.slice(10)]:[]))].sort();
+export function compileExportOptics(plan:ExportPlan,cacheDirs:readonly string[]=[]){
+ const audit:any[]=[];
+ const materials=plan.materials.map(m=>{
+  const surface=m.surface,roughness=Number(m.options.roughness);
+  if(!surface||surface.pattern.startsWith('polyhaven:')){audit.push({material:m.key,options:m.options,normalPolicy:surface?'external-map-preserved':'no-normal-map'});return m;}
+  const size=['deck','worn','trim'].includes(surface.pattern)?1024:256;
+  const rec=getCachedSurfaceRecord(surface.pattern,sourceSegment(surface.pattern),size,cacheDirs)??buildSurfaceSync(surface.pattern,sourceSegment(surface.pattern),size);
+  const plane=size*size*4,normal=rec.bin.subarray(0,plane);
+  const compiled=compileNormalScale(normal,surface.normalStrength??1,roughness,surface.normalStrengthAuthored===true);
+  let min=1,max=0;for(let i=plane+1;i<plane*2;i+=4){const r=rec.bin[i]!/255*roughness;min=Math.min(min,r);max=Math.max(max,r);}
+  audit.push({material:m.key,options:m.options,normal:compiled,roughnessBeforeShaderClamp:{min,max},textureSha256:rec.sha256,scope:'input texels, not measured GPU pixels'});
+  return {...m,surface:{...surface,normalStrength:compiled.effective}};
+ });
+ return {materials,audit};
+}
 export function writeSpecPack(spec:SceneSpec,plan:ExportPlan,destination:string,identity:{packageId:string;sourceKey:string;name:string},pbrDir?:string){
  mkdirSync(join(destination,'spec-kit'),{recursive:true});
  for(const file of GENERATOR_SOURCES)cpSync(join(import.meta.dir,'generators',file),join(destination,'spec-kit',file));
@@ -1027,7 +1043,9 @@ export function writeSpecPack(spec:SceneSpec,plan:ExportPlan,destination:string,
  const singleEntities=plan.entities.filter(e=>e.bindingKey===e.id).map(({bindingKey:_b,...e})=>e);
  const batches=plan.instancedBatches.map(b=>({key:b.key,label:b.label,mesh:b.mesh,transforms:Array.from(b.transforms)}));
  const decalMaterials=[...decalMaterialMap.values()];
- const data={gi,packageId:identity.packageId,name:identity.name,sceneKey:identity.sourceKey,specId:spec.id,materials:plan.materials,meshes:meshesData,entities:singleEntities,batches,decalMaterials,decals:plan.decals};
+ const optics=compileExportOptics(plan,extraCacheDirs);
+ writeFileSync(join(destination,'surface-optics.json'),JSON.stringify(optics.audit,null,2)+'\n');
+ const data={gi,packageId:identity.packageId,name:identity.name,sceneKey:identity.sourceKey,specId:spec.id,materials:optics.materials,meshes:meshesData,entities:singleEntities,batches,decalMaterials,decals:plan.decals};
  writeFileSync(join(destination,'spec-data.ts'),'export default '+JSON.stringify(data)+' as const;\n');
  // PBR 像素数据(gzip+base64)按资产各成一个模块,pbr-index.ts 静态导入,pack 构建时解压。
  const pbr=pbrAssets(spec);

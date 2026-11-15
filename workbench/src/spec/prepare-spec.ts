@@ -7,7 +7,9 @@ import {copyFileSync,existsSync,lstatSync,mkdirSync,readFileSync,symlinkSync,wri
 import {createHash,randomUUID} from 'node:crypto';
 import {join,resolve} from 'node:path';
 import {writeInspectionPlugins} from '../geometry/prepare';
-import {getExportPlanTelemetry,pbrAssets,planSpecExportParallel,projectedDecalPlugin,toEnginePosition} from './export-pack';
+import {compileExportOptics,getExportPlanTelemetry,pbrAssets,planSpecExportParallel,projectedDecalPlugin,toEnginePosition} from './export-pack';
+import {inspectSceneOptics,opticsQuality} from './optics';
+import {opticsObserverPlugin} from './optics-observer';
 import {ensurePbr} from './pbr-library';
 import {validateSceneSpec,type SceneSpec} from './schema';
 import {emitSpecWorld} from './world-emitter';
@@ -20,7 +22,7 @@ const W=resolve(import.meta.dirname,'../..'),BASE=resolve(W,'..'),P=join(BASE,'p
 const read=(p:string)=>JSON.parse(readFileSync(p,'utf8')),save=(p:string,v:unknown)=>writeFileSync(p,JSON.stringify(v,null,2)+'\n');
 const sha=(s:string)=>createHash('sha256').update(s).digest('hex');
 
-export async function prepareSpecProject(root:string,spec:SceneSpec,options:{id?:string;stateId?:string;maxTriangles?:number;concurrency?:number}={}){
+export async function prepareSpecProject(root:string,spec:SceneSpec,options:{id?:string;stateId?:string;maxTriangles?:number;concurrency?:number;outputFrame?:{width:number;height:number}}={}){
  validateSceneSpec(spec);
  const plan=await planSpecExportParallel(spec,{cacheDir:join(root,'.mesh-cache'),concurrency:options.concurrency});
  const exportStats=getExportPlanTelemetry(plan)??{parallelWorkers:0,durationMs:0,uniqueMeshes:plan.meshes.length,workerMeshBuilds:0,meshCacheHits:0,surfaceBuilds:0};
@@ -45,7 +47,11 @@ export async function prepareSpecProject(root:string,spec:SceneSpec,options:{id?
  save(join(game,'package.json'),{name:'spec-scene',private:true,type:'module',packageManager:'pnpm@12.15.0'});
  if(!lstatSync(join(game,'node_modules/@forgeax/engine'),{throwIfNoEntry:false}))symlinkSync(join(ENGINE,'packages/engine'),join(game,'node_modules/@forgeax/engine'),'dir');
 
- const world=emitSpecWorld(spec,{worldPackageId:'60fb39fb-420e-4aa5-8189-fd9c4d8369e7',stateId:options.stateId});
+ const world=emitSpecWorld(spec,{worldPackageId:'60fb39fb-420e-4aa5-8189-fd9c4d8369e7',stateId:options.stateId,outputFrame:options.outputFrame});
+ const optics=inspectSceneOptics(spec,compileExportOptics(plan,[join(root,'.mesh-cache')]).audit,options.stateId);
+ save(join(root,'optics-audit.json'),optics);
+ writeFileSync(join(assets,'optics-observer.plugin.ts'),opticsObserverPlugin());
+ cfg.plugins.push({id:'optics-observer',name:'./assets/optics-observer.plugin.ts',realm:'frontend',inject:['gameHost']});save(join(game,'forge.json'),cfg);
  save(join(root,'lighting-export.json'),{version:'spec-lighting-v1',state:options.stateId??spec.lighting.defaultState,components:world.components,planarReflection:world.planar,deferred:world.deferred});
  copyFileSync(join(W,'src/camera-v3.txt'),join(assets,'camera.plugin.ts'));copyFileSync(join(W,'src/ui-v3.txt'),join(assets,'ui.plugin.ts'));
  writeFileSync(join(assets,'concept-look.plugin.ts'),conceptLookPlugin(world.entities));cfg.plugins.push({id:'concept-look',name:'./assets/concept-look.plugin.ts',realm:'engine',inject:['world','gameHost']});save(join(game,'forge.json'),cfg);
@@ -63,7 +69,7 @@ export async function prepareSpecProject(root:string,spec:SceneSpec,options:{id?
  }
  // 性能档(引擎会话 2026-11-06 建议):体积雾低画质、光照档 32;ProjectedDecal 与漫反射 GI 均要求 deferred 管线。
  const hasDecals=(spec.decals?.length??0)>0;
- const perfProfile={...DEFAULT_STANDARD_PROFILE,...(hasDecals?{renderPath:'deferred' as const}:{}),...(process.env.SPEC_RENDER_PATH?{renderPath:process.env.SPEC_RENDER_PATH}:{}),lightCount:32,volumetricFog:{quality:'low',depth:48,tileSize:16}};
+ const perfProfile={...DEFAULT_STANDARD_PROFILE,...(hasDecals?{renderPath:'deferred' as const}:{}),...(process.env.SPEC_RENDER_PATH?{renderPath:process.env.SPEC_RENDER_PATH}:{}),lightCount:32,volumetricFog:opticsQuality(world.views[0].frame.width,world.views[0].frame.height).volumetricFog};
  // 漫反射 GI:渲染器配置只能在构建期由 build 插件给出;默认 profile + 延迟渲染 + irradiance-field。
  const giState=spec.lighting.states.find(s=>s.id===(options.stateId??spec.lighting.defaultState))!.post.gi;
  if(!giState){
@@ -88,7 +94,8 @@ export async function prepareSpecProject(root:string,spec:SceneSpec,options:{id?
   return {id:e.id,role:'subject',position:center,size};});
  const reflectionProbeCount=Object.values(world.entities).filter((e:any)=>e?.components?.ReflectionProbe).length;
  const b=spec.bounds,center=toEnginePosition(b.min.map((v,k)=>(v+b.max[k])/2) as any),radius=Math.hypot(...b.max.map((v,k)=>v-b.min[k]))/2;
- save(join(assets,'scene-audit.json'),{name:spec.name,channelId:brief.packageId,specSha256:sha(JSON.stringify(spec)),camera:{center,radius,height:radius*.4},...(reflectionProbeCount?{reflectionProbeCount}:{}),views:world.views,
+ const active=spec.lighting.states.find(s=>s.id===(options.stateId??spec.lighting.defaultState))!;
+ save(join(assets,'scene-audit.json'),{name:spec.name,channelId:brief.packageId,specSha256:sha(JSON.stringify(spec)),camera:{center,radius,height:radius*.4},...(reflectionProbeCount?{reflectionProbeCount}:{}),opticsInspection:{probes:reflectionProbeCount,ssr:!!active.post.ssr,volume:!!active.post.volumetric},views:world.views,
   parts:plan.entities.map(e=>({id:e.id,entityId:e.id,bindingKey:e.bindingKey})),entities:[],landmarks,geometry:{nonFlat:true},
   provenance:{kind:'spec-scene-generation',validationKind:'generation',specId:spec.id,engineSha:pin.engineSha,qualityAssessment:'not-run'}});
  return {brief,plan,world,exportStats,effectiveSpec:spec,cameraVisibility:visibility?.receipt??null};
