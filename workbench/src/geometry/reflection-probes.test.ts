@@ -3,7 +3,7 @@ import {readFileSync,mkdtempSync,rmSync} from 'node:fs';
 import {join,resolve} from 'node:path';
 import {tmpdir} from 'node:os';
 import {validateReflectionProbes,reflectionProbeEntities,bindReflectionProbes,reflectionProbeSchema,REFLECTION_PROBE_EXPORT} from './reflection-probes';
-import {reflectionFramesSettled,waitForReflections} from './reflection-ready.mjs';
+import {reflectionFramesSettled,waitForReflections,acceptedGpuCompletion} from './reflection-ready.mjs';
 import {bindCameraOutput} from './camera-output';
 import {validateLighting,lightingSchema,LIGHTING_RULES} from './lighting';
 import {prepareGeometryProject} from './prepare';
@@ -24,11 +24,18 @@ test('拒绝无效、无限、负尺寸、不支持分辨率和无界数量；sc
  for(const good of [null,[],[p],[p,{...p,resolution:128,intensity:0}]])expect(()=>validateReflectionProbes(good)).not.toThrow();
  expect(lightingSchema().properties.reflectionProbes).toEqual(reflectionProbeSchema());expect(LIGHTING_RULES).toContain('不会新增光源');
 });
-test('等待引擎完成帧而非固定延时；旧场景不增加等待；缺失帧不伪造就绪',async()=>{
- expect(reflectionFramesSettled(65,5,1)).toBe(true);expect(reflectionFramesSettled(64,5,1)).toBe(false);expect(reflectionFramesSettled(65,5,2)).toBe(false);expect(reflectionFramesSettled(NaN,5,1)).toBe(false);
- let reads=0;const result=await waitForReflections({evaluate:()=>++reads===1?5:65,waitForTimeout:async()=>{}},{reflectionProbeCount:1});expect(result.endFrame).toBe(65);expect(result.probeStateInspected).toBe(false);
+const gpu=(frame:number,extra={})=>({canvases:[{canvas:0,submitted:{frameId:frame+1,worldIdentity:'world-A',deviceGeneration:1},completed:{frameId:frame,worldIdentity:'world-A',deviceGeneration:1,presentation:'ready',...extra}}]});
+test('等待真实完成回执，提交帧/缺失/未呈现/混源/多canvas不能放行',async()=>{
+ expect(reflectionFramesSettled(65,5,1)).toBe(true);expect(reflectionFramesSettled(64,5,1)).toBe(false);expect(reflectionFramesSettled(65,5,2)).toBe(false);
+ for(const bad of [undefined,65,{canvases:[]},gpu(65,{presentation:'pending'}),gpu(65,{worldIdentity:'other'}),gpu(65,{deviceGeneration:2}),gpu(NaN),{canvases:[...gpu(5).canvases,...gpu(65).canvases]}])expect(acceptedGpuCompletion(bad)).toBeNull();
+ const frames=[null,gpu(5),gpu(64),gpu(65)];const r=await waitForReflections({evaluate:()=>frames.shift(),waitForTimeout:async()=>{}},{reflectionProbeCount:1});expect(r.startFrame).toBe(5);expect(r.endFrame).toBe(65);expect(r.passed).toBe(true);expect(r.source).toBe('canvas.forgeaxFrameProgress');expect(r.probeStateInspected).toBe(false);
  await waitForReflections({evaluate:()=>{throw Error('旧场景不得增加检查')}},{});
- const frames=[NaN,NaN,5,65];const delayed=await waitForReflections({evaluate:()=>frames.shift(),waitForTimeout:async()=>{}},{reflectionProbeCount:1});expect(delayed.startFrame).toBe(5);expect(delayed.endFrame).toBe(65);
+});
+test('计时只作截止条件，不能冒充GPU进展；倒退和设备身份变化拒绝',async()=>{
+ let clock=0;try{await waitForReflections({evaluate:()=>gpu(5),waitForTimeout:async()=>{}},{reflectionProbeCount:1},{now:()=>clock+=10001});throw Error('must fail');}catch(e:any){expect(e.message).toContain('20秒');expect(e.evidence.passed).toBe(false);}
+ for(const next of [gpu(4),{canvases:[{...gpu(66).canvases[0],submitted:{...gpu(66).canvases[0].submitted,deviceGeneration:2},completed:{...gpu(66).canvases[0].completed,deviceGeneration:2}}]}]){
+  const f=[gpu(5),next];await expect(waitForReflections({evaluate:()=>f.shift(),waitForTimeout:async()=>{}},{reflectionProbeCount:1})).rejects.toThrow();
+ }
 });
 test('真实prepare保留探针声明但暂不导出到固定 Engine，不改输入数据或旧场景相机',()=>{
  const transform={position:[0,0,0],rotation:[0,0,0],scale:[1,1,1]},lighting={direction:[0,0,-1],color:[1,1,1],intensity:1,ambientColor:[1,1,1],ambientIntensity:.2,points:[],reflectionProbes:[p]};
