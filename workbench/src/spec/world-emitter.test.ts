@@ -85,3 +85,10 @@ test('Skylight 半球反弹 groundColor 导出与巨构大空间自适应射程/
  expect((wLarge.entities.light_extra_spot as any).components.SpotLight).toMatchObject({range:72,castShadow:false});
  expect(wLarge.deferred.map(d=>d.feature)).toEqual(['LightRange:extra_spot','LightShadow:extra_spot']);
 });
+
+test('adopted native lighting is exclusive and camera values survive without guessed ambient',()=>{
+ const s=sampleSpec();s.sourceEnvironment={entities:{originalSun:{components:{DirectionalLight:{direction:[0,-1,0],intensity:2}}},originalFill:{components:{DirectionalLight:{direction:[0,1,0],intensity:.25}}}},camera:{tonemap:4,bloom:1,bloomIntensity:.22,near:.1,far:1000,clearColor:[.1,.14,.19,1]}};
+ const w=emitSpecWorld(s,{worldPackageId:'60fb39fb-420e-4aa5-8189-fd9c4d8369e7'});
+ expect((w.entities as any).ambient).toBeUndefined();expect((w.entities as any).source_originalFill.components.DirectionalLight.intensity).toBe(.25);expect((w.entities as any).camera.components.Camera.bloomIntensity).toBe(.22);
+ expect(Object.keys(w.entities).filter(k=>k.startsWith('light_'))).toEqual([]);
+});

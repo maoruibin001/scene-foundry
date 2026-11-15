@@ -3,6 +3,7 @@
  * 之后照常走 prototype/bin/pipeline.ts generate/build/verify 与 capture.mjs。
  * brief.generator='spec-pack' 让 pipeline 的 generate 阶段调用 writeSpecPack,不经外部 scene-generator。
  */
+import {performanceAudit} from './performance-audit';
 import {copyFileSync,existsSync,lstatSync,mkdirSync,readFileSync,symlinkSync,writeFileSync} from 'node:fs';
 import {createHash,randomUUID} from 'node:crypto';
 import {join,resolve} from 'node:path';
@@ -35,6 +36,7 @@ export async function prepareSpecProject(root:string,spec:SceneSpec,options:{id?
  save(join(source,'scene-spec.json'),spec);
  // 引用的 Poly Haven 贴图下载/解码后放进 source/pbr(generationDigest 覆盖 source/,贴图变化会触发重新 generate)。
  const pbr=pbrAssets(spec);if(pbr.length){mkdirSync(join(source,'pbr'),{recursive:true});for(const a of pbr)save(join(source,'pbr',a+'.json'),await ensurePbr(a));}
+ save(join(root,'performance-audit.json'),performanceAudit(plan));
  save(join(root,'spec-export-plan.json'),{triangles:plan.triangles,meshes:plan.meshes.length,entities:plan.entities.length,instancing:plan.instancing,decals:plan.decals.length,parallelWorkers:exportStats.parallelWorkers,exportMs:exportStats.durationMs,report:plan.report});
 
  const cfg=read(join(P,'game/forge.json'));cfg.id=brief.id;cfg.name=spec.name;save(join(game,'forge.json'),cfg);

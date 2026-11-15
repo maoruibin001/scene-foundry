@@ -7,6 +7,7 @@ import {bindDimensionalAliases} from './parameter-binding';
  * 缺少库生成器的资产族按手册 4.3 回退为同 ID 灰模代理并写入 repair 列表,不静默丢弃。
  * 坐标:规格右手、米、Z 向上 → 引擎 Y 向上,位置 (x,y,z)→(x,z,-y);旋转按 X、Y、Z 依次绕固定轴。
  */
+import {loadSourceMesh} from './source-mesh';
 import {cpSync,existsSync,mkdirSync,readFileSync,renameSync,writeFileSync} from 'node:fs';
 import {createHash} from 'node:crypto';
 import {tmpdir} from 'node:os';
@@ -305,6 +306,7 @@ export function materialOptions(m:SpecMaterial){
 }
 
 type PendingPlacement=
+ |{kind:'source';object:SpecObject;mesh:ExportMesh}
  |{kind:'proxy';object:SpecObject;mesh:ExportMesh}
  |{kind:'generated';object:SpecObject;family:SceneSpec['families'][number];key:string;generatorId:string;params:Record<string,ParamValue>};
 
@@ -340,7 +342,7 @@ function prepareExportPlacements(spec:SceneSpec){
   }
   const sourceFamily=family;
   objects.forEach((o:SpecObject,index)=>{
-   const family=o.geometryBinding?{...sourceFamily,generator:o.geometryBinding}:sourceFamily;
+   const family=o.geometryBinding?{...sourceFamily,generator:o.geometryBinding,materialSlots:o.geometryBinding.materialSlots??sourceFamily.materialSlots}:sourceFamily;
    const gen=o.geometryBinding?GENERATORS[o.geometryBinding.id]:baseGen;
    const inputParams=o.geometryBinding?{}:o.params;
    const addProxy=(reason:string)=>{
@@ -352,6 +354,15 @@ function prepareExportPlacements(spec:SceneSpec){
     const mesh:ExportMesh={key:`${sourceSegment(family.id)}-proxy-${hash(params)}`,family:family.id,generator:'proxy',params:params as any,slots:{proxy:PROXY_MATERIAL},triangles:12,aabb:[-sx/2,base,-sy/2,sx/2,base+sz,sy/2]};
     placements.push({kind:'proxy',object:o,mesh});
    };
+   if(o.sourceMesh){
+    try{
+     const asset=loadSourceMesh(o.sourceMesh),slots=Object.fromEntries(Object.entries(o.sourceMesh.slots).map(([k,v])=>[k,sourceSegment(v)]));
+     const key='source-'+hash([o.sourceMesh.binarySha256,o.sourceMesh.metadataSha256,slots]);
+     const mesh:ExportMesh={key,family:family.id,generator:'GEN-SOURCE-MESH-01',params:{},slots,triangles:asset.indices!.length/3,aabb:Array.from(asset.aabb!)};
+     COOKED_MESH_CACHE.set(mesh,asset);placements.push({kind:'source',object:o,mesh});
+    }catch(error){report.errors.push(o.id+': '+String(error));}
+    return;
+   }
    if(!gen){addProxy(family.generator?`生成器 ${family.generator.id} 尚未实现`:'资产族未指定生成器');return;}
    const pending:{key:string;input:unknown;reason:string}[]=bindingGeometryIssues(spec,o).map(q=>({key:q.key,input:q.input,reason:q.kind+' '+JSON.stringify({expected:q.expected,actual:q.actual})}));
    const merged:Record<string,ParamValue>={};
@@ -408,7 +419,7 @@ function finalizeExportPlan(
  for(const item of placements){
   const o=item.object;
   let mesh:ExportMesh;
-  if(item.kind==='proxy'){
+  if(item.kind==='proxy'||item.kind==='source'){
    mesh=meshes.get(item.mesh.key)??item.mesh;
    meshes.set(mesh.key,mesh);
   }else{
@@ -955,7 +966,7 @@ export function writeSpecPack(spec:SceneSpec,plan:ExportPlan,destination:string,
 
  const meshesData=plan.meshes.map(m=>{
   const {triangles,family,aabb,...rest}=m;
-  if(precookEnabled&&m.generator!=='proxy'&&triangles>=precookMinTris){
+  if((precookEnabled&&m.generator!=='proxy'&&triangles>=precookMinTris)||m.generator==='GEN-SOURCE-MESH-01'){
    let bin:Buffer,meta:CookedMeshMeta;
    const rec=getCachedMeshRecord(m.key,m.generator,m.params,extraCacheDirs);
    if(rec){

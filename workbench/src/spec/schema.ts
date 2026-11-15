@@ -3,6 +3,7 @@
  * 字段对齐《临界：零重力》手册卷三 §4.1 输入包与 G2 机器字段:稳定 ID、米制变换、来源权威、P/冻结状态、
  * 生成器参数、材质与光照意图、机位、可程序检查的验收条目。坐标与 scene-foundry 场景一致:右手、米、Z 向上。
  */
+import {sourceMeshErrors,type SourceMeshRef} from './source-mesh';
 import {RANGE} from '../geometry/constraints';
 
 export const SCENE_SPEC_VERSION='scene-spec-v1';
@@ -16,8 +17,8 @@ export type SpecSource={kind:'doc'|'image'|'prompt'|'inferred';ref:string};
 export type SpecParamValue=number|string|boolean|number[];
 export type SpecParams=Record<string,SpecParamValue>;
 export type SpecTransform={position:Vec3;rotationDeg:Vec3;rotationOrder:'XYZ';scale:Vec3};
-export type SpecGeometryBinding={id:string;params:SpecParams;basis:'source'|'design_fill';reason:string};
-export type SpecObject={geometryBinding?:SpecGeometryBinding;id:string;label:string;family:string;parent:string|null;transform:SpecTransform;params:SpecParams;authority:SpecAuthority;sources:SpecSource[];confidence:number;notes:string};
+export type SpecGeometryBinding={materialSlots?:Record<string,string>;id:string;params:SpecParams;basis:'source'|'design_fill';reason:string};
+export type SpecObject={sourceMesh?:SourceMeshRef;geometryBinding?:SpecGeometryBinding;id:string;label:string;family:string;parent:string|null;transform:SpecTransform;params:SpecParams;authority:SpecAuthority;sources:SpecSource[];confidence:number;notes:string};
 export type SpecFamily={id:string;label:string;description:string;priority:'P0'|'P1'|'P2';generator:{id:string;params:SpecParams}|null;materialSlots:Record<string,string>;authority:SpecAuthority;sources:SpecSource[]};
 export type SpecMaterial={id:string;label:string;baseColor:[number,number,number,number];metallic:number;roughness:number;emissive:Vec3|null;emissiveIntensity:number;transmission:number;ior:number;thickness:number;clearcoat:number;clearcoatRoughness:number;sources:SpecSource[];
  /** 可选:alpha 混合透明度(0..1)。用于清透玻璃——引擎透射在发光体前会糊成乳白,alpha 混合保持清晰。 */
@@ -44,7 +45,7 @@ export type SpecAcceptance={id:string;description:string;critical:boolean}&(
  |{kind:'position';object:string;position:Vec3;tolerance:number}
  |{kind:'size';object:string;size:Vec3;tolerance:number}
  |{kind:'clearance';from:Vec3;to:Vec3;width:number;height:number});
-export type SceneSpec={version:typeof SCENE_SPEC_VERSION;id:string;name:string;units:'m';up:'+Z';bounds:{min:Vec3;max:Vec3};
+export type SceneSpec={sourceEnvironment?:{entities:Record<string,{components:Record<string,unknown>}>;camera:Record<string,unknown>};version:typeof SCENE_SPEC_VERSION;id:string;name:string;units:'m';up:'+Z';bounds:{min:Vec3;max:Vec3};
  sources:{id:string;title:string;kind:'doc'|'image'|'prompt';path:string}[];
  families:SpecFamily[];objects:SpecObject[];materials:SpecMaterial[];
  decals?:SpecDecal[];
@@ -61,11 +62,18 @@ const AUTHORITIES=['master','aux','design_fill'],SOURCE_KINDS=['doc','image','pr
 export function sceneSpecErrors(value:unknown):string[]{
  const e:string[]=[],s=value as SceneSpec;
  if(!s||typeof s!=='object')return ['规格必须是对象'];
+ const coordinateLimit=s.sourceEnvironment?1000:RANGE.max;
+ const vec=(v:unknown,min=-coordinateLimit,max=coordinateLimit)=>Array.isArray(v)&&v.length===3&&v.every(n=>finite(n,min,max));
  if(s.version!==SCENE_SPEC_VERSION)e.push(`version 必须为 ${SCENE_SPEC_VERSION}`);
  if(!SPEC_ID.test(String(s.id)))e.push('id 不符合 '+SPEC_ID);
  if(!text(s.name,200))e.push('name 不能为空');
- if(s.units!=='m'||s.up!=='+Z')e.push('units 必须为 m,up 必须为 +Z');
- if(!vec(s.bounds?.min)||!vec(s.bounds?.max)||[0,1,2].some(k=>s.bounds.max[k]<=s.bounds.min[k]))e.push('bounds 必须是 ±'+RANGE.max+' 内的有效包围盒');
+ if(s.sourceEnvironment){
+  const env=s.sourceEnvironment,allowed=['Name','Transform','Skylight','DirectionalLight','PointLight','SpotLight','RectAreaLight','Fog'];
+  if(!env.entities||Object.keys(env.entities).length>48||!env.camera||JSON.stringify(env).length>200000)e.push('sourceEnvironment 无效');
+  else for(const [id,value] of Object.entries(env.entities))if(!/^[a-zA-Z][a-zA-Z0-9_-]{0,80}$/.test(id)||!value?.components||Object.keys(value.components).some(k=>!allowed.includes(k)))e.push('sourceEnvironment 含不支持组件 '+id);
+ }
+ if(s.units!=='m' ||s.up!=='+Z')e.push('units 必须为 m,up 必须为 +Z');
+ if(!vec(s.bounds?.min)||!vec(s.bounds?.max)||[0,1,2].some(k=>s.bounds.max[k]<=s.bounds.min[k]))e.push('bounds 必须是 ±'+coordinateLimit+' 内的有效包围盒');
  const list=<T,>(key:keyof SceneSpec,max:number):T[]=>{const v=(s as any)[key];if(!Array.isArray(v)){e.push(`${String(key)} 必须是数组`);return [];}if(v.length>max)e.push(`${String(key)} 超过上限 ${max}`);return v;};
  const unique=(items:{id:string}[],what:string)=>{const seen=new Set<string>();for(const x of items){if(!SPEC_ID.test(String(x?.id)))e.push(`${what} ID ${JSON.stringify(x?.id)} 不符合 ${SPEC_ID}`);else if(seen.has(x.id))e.push(`${what} ID 重复:${x.id}`);seen.add(x?.id);}return seen;};
  const sources=(v:unknown,path:string,required=true)=>{if(!Array.isArray(v)||(required&&!v.length)){e.push(`${path}.sources 至少需要一个来源`);return;}for(const x of v as SpecSource[])if(!SOURCE_KINDS.includes(x?.kind)||!text(x?.ref,300))e.push(`${path}.sources 含无效来源 ${JSON.stringify(x)}`);};
@@ -99,7 +107,8 @@ export function sceneSpecErrors(value:unknown):string[]{
   if(!t||!vec(t.position)||!vec(t.rotationDeg,-360,360)||t.rotationOrder!=='XYZ'||!vec(t.scale,RANGE.positiveMin,RANGE.max))e.push(`${p} transform 无效(position ±${RANGE.max}m、rotationDeg ±360、rotationOrder XYZ、scale 为正)`);
   else if(o.parent===null&&s.bounds&&[0,1,2].some(k=>t.position[k]<s.bounds.min[k]||t.position[k]>s.bounds.max[k]))e.push(`${p} 位置超出场景 bounds`);
   params(o.params,`${p}.params`);
-  if(o.geometryBinding){const b=o.geometryBinding;if(!/^GEN-[A-Z0-9-]+$/.test(b.id)||!['source','design_fill'].includes(b.basis)||!text(b.reason))e.push(`${p} geometryBinding 依据无效`);params(b.params,`${p}.geometryBinding.params`);}
+  if(o.sourceMesh){e.push(...sourceMeshErrors(o.sourceMesh).map(x=>p+': '+x));for(const id of Object.values(o.sourceMesh.slots??{}))if(!materialIds.has(id))e.push(p+': source material missing '+id);if(o.geometryBinding)e.push(p+': sourceMesh and geometryBinding are mutually exclusive');}
+  if(o.geometryBinding){const b=o.geometryBinding;if(!/^GEN-[A-Z0-9-]+$/.test(b.id)||!['source','design_fill'].includes(b.basis)||!text(b.reason))e.push(`${p} geometryBinding 依据无效`);params(b.params,`${p}.geometryBinding.params`);if(b.materialSlots)for(const id of Object.values(b.materialSlots))if(!materialIds.has(id))e.push(`${p} geometryBinding 材质不存在 ${id}`);}
   if(!AUTHORITIES.includes(o.authority))e.push(`${p} authority 无效`);
   if(!finite(o.confidence,0,1))e.push(`${p} confidence 须在 0..1`);
   if(typeof o.notes!=='string')e.push(`${p} notes 须为字符串`);

@@ -3,12 +3,14 @@
  * 局部 +Z 指向门斗(规格 -Y,大厅外),局部 -Z 指向大厅。门扇按"平时开启"外观收进两侧门袋;
  * 门框带一圈发光条,门扇有不可碎观察窗;门轨与驱动箱在门洞上方;安全区地面标记在门斗内。
  */
-import type {Model} from '@forgeax/engine/modeling';
+import {sel,type Model} from '@forgeax/engine/modeling';
 import {defineGenerator} from './kit.ts';
 
 export const GEN_ENTRY=defineGenerator({
  id:'GEN-ENTRY-01',label:'入口隔爆门与门斗',
  params:{
+  origin:{type:'vec3',default:[0,0,0],min:-1000,max:1000},
+  includeVestibule:{type:'bool',default:true},
   doorClearWidth:{type:'number',default:6,min:1,max:20},
   doorHeight:{type:'number',default:4,min:2,max:12},
   vestibuleDepth:{type:'number',default:5,min:1,max:20},
@@ -51,6 +53,7 @@ export const GEN_ENTRY=defineGenerator({
   m.box({size:[2*w+2*jamb,0.14,0.2],center:[0,h+0.07,fd/2+0.2],material:'doorRail',label:'rail'});
   m.box({size:[1.6,0.5,0.45],center:[0,h+0.4,fd/2+0.3],material:'driveBox',label:'drive'});
   // 门斗壳体:两侧墙、顶板、后壁(后壁中间留通往外部走廊的门洞)。
+  if(p.includeVestibule){
   const t=0.25,z0=fd/2,z1=fd/2+vd;
   for(const s of [-1,1])m.box({size:[t,vh,vd],center:[s*(vw/2+t/2),vh/2,(z0+z1)/2],material:'vestibuleShell',label:'vest-wall'});
   m.box({size:[vw+2*t,t,vd],center:[0,vh+t/2,(z0+z1)/2],material:'vestibuleShell',label:'vest-roof'});
@@ -64,5 +67,7 @@ export const GEN_ENTRY=defineGenerator({
    m.box({size:[mx,0.006,lw],center:[0,0.043,mzc+s*(mz/2-lw/2)],material:'safeMarking',label:'safe-mark'});
    m.box({size:[lw,0.006,mz],center:[s*(mx/2-lw/2),0.043,mzc],material:'safeMarking',label:'safe-mark'});
   }
+  }
+  if(p.origin.some((v:number)=>v!==0))m.translate(sel.all(),p.origin);
  },
 });

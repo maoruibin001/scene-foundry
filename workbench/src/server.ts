@@ -1,3 +1,4 @@
+import {continueSpec} from './spec/continuation';
 import {startSpecReview} from './spec-review';
 import {validationBoundaryStatus} from './validation-rounds';
 import {voxelRequest,voxelInput} from './voxel/namespace';
@@ -130,6 +131,17 @@ if(!FOLLOWER){claimCoordinator();if(!executionHeld()){references.recover();recov
  if(req.method==='POST'&&u.pathname==='/api/spec-uploads'){assertCurrentVersion(activeVersion.id);const form=await req.formData(),file=form.get('file');if(!(file instanceof File)||file.size===0||file.size>50*1024*1024)throw Error('文件须为非空且不超过 50 MB 的 .html 或 .json');const bytes=new Uint8Array(await file.arrayBuffer()),name=file.name;let inputModels:any;try{inputModels=form.get('nodeModels')?JSON.parse(String(form.get('nodeModels'))):undefined;}catch{throw Error('节点模型配置不是有效 JSON');}const nodeModels=validateNodeModels(inputModels);for(const model of Object.values(nodeModels)){if(model.provider==='codex')await selectedSettings({model:model.model,reasoningEffort:model.reasoningEffort});if(model.provider==='cbc4'&&!Bun.which(process.env.PIPELINE_CBC4_BIN?.trim()||'cbc4'))throw Error('找不到 cbc4 启动器');}
   if(/\.json$/i.test(name)){let spec;try{spec=JSON.parse(new TextDecoder().decode(bytes));}catch{throw Error('规格 JSON 无法解析');}const stored=storeSpec(spec);return json(createSpecJob({specId:stored.id,nodeModels,normalizationTemplate:form.get('normalizationTemplate')}),201);}
   if(!/\.html?$/i.test(name))throw Error('仅支持设计文档 .html 或场景规格 .json');const doc=storeDoc(bytes,name);return json(createSpecJob({docId:doc.id,docName:name,nodeModels,normalizationTemplate:form.get('normalizationTemplate')}),201);}
+ const specContinue=u.pathname.match(/^\/api\/spec-jobs\/([a-f0-9-]{36})\/continue$/);
+ if(req.method==='POST'&&specContinue){
+  assertCurrentVersion(activeVersion.id);const source=getJob(specContinue[1]);
+  if(!source.specJob||!source.specId||!['failed','needs_review','passed','cancelled'].includes(source.status))throw Error('仅可完善已结束并保留规格的场景');
+  const root=source.executionRecoveryRoot??source.retryRoot??source.id;
+  if(listJobs().some(j=>(j.executionRecoveryRoot??j.id)===root&&['queued','running'].includes(j.status)))throw Error('此场景已有在途修订');
+  const b=await req.json(),base=loadSpec(source.specId).spec;
+  const result=continueSpec(base,{baseSpecSha256:b.baseSpecSha256,revision:b.revision});
+  const stored=storeSpec(result.spec),job=createSpecJob({specId:stored.id,nodeModels:source.nodeModels,sourceJobId:source.id,continuation:result.receipt});
+  return json(job,201);
+ }
  const specRetry=u.pathname.match(/^\/api\/spec-jobs\/([a-f0-9-]{36})\/retry$/);if(req.method==='POST'&&specRetry){assertCurrentVersion(activeVersion.id);const source=getJob(specRetry[1]);if(!source.specJob||!['failed','needs_review','passed','cancelled'].includes(source.status)||!source.specId)throw Error('仅可重建已结束且保留规格的任务');const root=source.executionRecoveryRoot??source.retryRoot??source.id;if(listJobs().some(j=>(j.executionRecoveryRoot??j.id)===root&&['queued','running'].includes(j.status)))throw Error('此规格已有在途续接');return json(createSpecJob({specId:source.specId,nodeModels:{...source.nodeModels,styleReview:{provider:'cbc5',model:'hy4flash-dev',reasoningEffort:'medium'}},normalizationTemplate:source.normalizationTemplate,sourceJobId:source.id}),201);}
  const specReview=u.pathname.match(/^\/api\/spec-jobs\/([a-f0-9-]{36})\/review$/);if(req.method==='POST'&&specReview){assertCurrentVersion(activeVersion.id);const b=await req.json(),selection=validateNodeModels({styleReview:b.model}).styleReview;if(selection.provider==='codex'&&process.env.PIPELINE_VISUAL_HOLD_REASON)throw Error('VISUAL_REVIEW_HELD：'+process.env.PIPELINE_VISUAL_HOLD_REASON);if(selection.provider==='codex')await selectedSettings({model:selection.model,reasoningEffort:selection.reasoningEffort});return json(startSpecReview(specReview[1],selection),202);}
  const specApproval=u.pathname.match(/^\/api\/spec-jobs\/([a-f0-9-]{36})\/approve$/);

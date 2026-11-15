@@ -90,6 +90,15 @@ export function emitSpecWorld(spec:SceneSpec,opts:{worldPackageId:string;stateId
  const budgeted=budget?lights.map(l=>{let o=l;if(o.kind!=='directional'&&(o.range??0)>maxRange){deferred.push({feature:'LightRange:'+o.id,reason:`射程 ${o.range}m 截到 ${maxRange}m(光照预算)`});o={...o,range:maxRange};}
   if(o.castShadow&&o.kind!=='directional'){if(o.kind==='spot'&&spotShadows++<2)return o;deferred.push({feature:'LightShadow:'+o.id,reason:'只保留方向光与最多 2 盏聚光投影(光照预算)'});o={...o,castShadow:false};}return o;}):lights;
  budgeted.forEach(l=>{const e=lightEntity(l,shadowDistance);components.add(e.component);entities['light_'+l.id.replace(/[^A-Za-z0-9_]/g,'_')]={components:e.value};});
+ if(spec.sourceEnvironment){
+  // Existing native environment is an exclusive source, never mixed with guessed staging.
+  for(const key of Object.keys(entities))if(key!=='garden'&&key!=='camera')delete entities[key];
+  camera.Camera={...spec.sourceEnvironment.camera,fov:shot.fovDeg*Math.PI/180,aspect:16/9};
+  for(const [key,value] of Object.entries(spec.sourceEnvironment.entities)){
+   entities['source_'+key]=structuredClone(value);
+   for(const component of Object.keys(value.components))components.add(component);
+  }
+ }
  const views=shots.map(s=>({id:s.id,name:s.label.split(/[：:]/)[0].slice(0,12),position:toEnginePosition(s.position),target:toEnginePosition(s.target),up:[0,1,0],fov:s.fovDeg*Math.PI/180,frame:{width:1600,height:900}}));
  const list=[...components].sort();
  const source=`// 由 scene-foundry 规格导出器生成(${spec.id} / 光照状态 ${state.id})。
