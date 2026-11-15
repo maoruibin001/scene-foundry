@@ -142,7 +142,8 @@ export const GEN_CORE=defineGenerator({
    // 内壳:抬起的盖板之间露出的底面,避免缝里透光。
    m.sphere({radius:r*0.985,widthSegments:p.panelColumns,heightSegments:p.panelRows,material:'shell',label:'inner'});
   }
-  for(const s of ([-1,1] as const).slice(0,p.bands)){
+  const bandSigns=p.bands<=0?[]:p.bandLatitude===0?[1 as const]:([-1,1] as const).slice(0,p.bands);
+  for(const s of bandSigns){
    const lat=rad(p.bandLatitude),y=s*r*Math.sin(lat),rr=r*Math.cos(lat),hw=p.bandWidth/2,tag=s<0?'south':'north';
    m.revolve({points:rect(rr-0.02,rr+0.16,y-hw,y+hw),segments:96,label:`band-${tag}`,material:'serviceBand'});
    m.revolve({points:rect(rr+0.16,rr+0.19,y-hw*0.3,y+hw*0.3),segments:96,label:`glow-${tag}`,material:'serviceBandGlow'});

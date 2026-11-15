@@ -1,4 +1,5 @@
 import {bindingGeometryIssues} from './binding-geometry';
+import {compileNormalScale} from './optics';
 import {bindDimensionalAliases} from './parameter-binding';
 /**
  * 规格 → 引擎场景 pack。网格在导出期跨 Bun Worker 线程并行生成并缓存到内存与 .mesh-cache,
@@ -64,7 +65,7 @@ export type ExportEntity={id:string;label:string;mesh:string;pos:Vec3;quat:Quat;
 export type ExportInstanceBatch={key:string;label:string;mesh:string;entityIds:string[];transforms:Float32Array};
 export type ExportDecal={id:string;entityKey:string;label:string;kind:SpecDecal['kind'];text:string;color:Vec3;material:string;pos:Vec3;quat:Quat;scale:Vec3;order:number;opacity:number;roughness:number;normalThreshold:number;colorOpacity:number;normalOpacity:number;roughnessOpacity:number};
 export type ExportReport={unresolved:{object:string;family:string;key:string;input:unknown;reason:string}[];expanded:{object:string;count:number}[];slotFallbacks:{family:string;slot:string;material:string}[];covered:{object:string;family:string;by:string}[];proxies:{object:string;family:string;reason:string}[];dropped:{family:string;key:string;reason:string}[];derived:{object:string;key:string;value:ParamValue}[];errors:string[]};
-export type ExportPlan={meshes:ExportMesh[];entities:ExportEntity[];materials:{key:string;options:Record<string,unknown>;surface?:{pattern:string;tilesPerMeter:number}}[];decals:ExportDecal[];instancing:{batches:number;totalInstances:number;savedEntities:number};instancedBatches:ExportInstanceBatch[];instancedInstances:number;report:ExportReport;triangles:number};
+export type ExportPlan={meshes:ExportMesh[];entities:ExportEntity[];materials:{key:string;options:Record<string,unknown>;surface?:{pattern:string;tilesPerMeter:number;normalStrength?:number;normalStrengthAuthored?:boolean}}[];decals:ExportDecal[];instancing:{batches:number;totalInstances:number;savedEntities:number};instancedBatches:ExportInstanceBatch[];instancedInstances:number;report:ExportReport;triangles:number};
 
 export interface ExportPlanTelemetry{
  parallelWorkers:number;
@@ -294,14 +295,30 @@ function buildSurfaceSync(pattern:string,safeKey:string,size:number):CachedSurfa
 }
 
 export const PROXY_MATERIAL='spec-proxy';
-export function materialOptions(m:SpecMaterial){
- // 只传非默认的物理层:引擎按传入字段启用清漆/透射层,透射材质自动关闭深度写入。
- return {baseColor:m.baseColor,metallic:m.metallic,roughness:m.roughness,
+export function materialOptions(m:SpecMaterial,opts:{deferredCompatible?:boolean;planarReflection?:boolean}={}){
+ const alphaBlend=m.opacity!=null&&m.opacity<1;
+ const transmissive=!alphaBlend&&m.transmission>0;
+ const forwardOnly=alphaBlend||transmissive||opts.planarReflection===true;
+ const foldClearcoat=!forwardOnly&&opts.deferredCompatible!==false&&m.clearcoat>0;
+ const coat=Math.max(0,Math.min(1,m.clearcoat));
+ const coatRough=Math.max(0.04,m.clearcoatRoughness||0.04);
+ const roughness=foldClearcoat&&coatRough<m.roughness
+  ?Number((m.roughness*(1-coat*0.65)+coatRough*(coat*0.65)).toFixed(4))
+  :m.roughness;
+ const foldedIor=foldClearcoat
+  ?Math.min(1.68,Number(((m.ior||1.5)+coat*0.14*(1-m.metallic*0.5)).toFixed(3)))
+  :undefined;
+ // 只传非默认的物理层:引擎中开启 clearcoat staticSwitch 会将材质归入 physical 层并剥离 deferred G-Buffer pass,
+ // 导致不透明地面/墙体/核心丧失 GTAO 接触阴影、SSR 屏幕空间反射与 ProjectedDecal 贴花;
+ // 对进入延迟通道的不透明材质将其清漆光泽与菲涅尔折算入单层 G-Buffer PBR,仅对本就走前向的透射/半透明/平面反射保留双层 clearcoat。
+ return {baseColor:m.baseColor,metallic:m.metallic,roughness,
+  ...(foldedIor&&foldedIor>1.5?{ior:foldedIor}:{}),
   ...(m.emissive&&m.emissiveIntensity>0?{emissive:m.emissive,emissiveIntensity:m.emissiveIntensity}:{}),
   // 清透玻璃:alpha 混合 + 不写深度 + 双面;透射关闭(两者互斥,透射会把后方发光体模糊成乳白)。
-  ...(m.opacity!=null&&m.opacity<1?{baseColor:[m.baseColor[0],m.baseColor[1],m.baseColor[2],m.opacity],renderState:{blend:{color:{srcFactor:'src-alpha',dstFactor:'one-minus-src-alpha',operation:'add'},alpha:{srcFactor:'one',dstFactor:'one-minus-src-alpha',operation:'add'}},depthWriteEnabled:false,cullMode:'none'}}
-   :m.transmission>0?{transmission:m.transmission,ior:m.ior,thickness:m.thickness}:{}),
-  ...(m.clearcoat>0?{clearcoat:m.clearcoat,clearcoatRoughness:m.clearcoatRoughness,staticSwitches:{clearcoat:true}}:{})};
+  ...(alphaBlend?{baseColor:[m.baseColor[0],m.baseColor[1],m.baseColor[2],m.opacity],renderState:{blend:{color:{srcFactor:'src-alpha',dstFactor:'one-minus-src-alpha',operation:'add'},alpha:{srcFactor:'one',dstFactor:'one-minus-src-alpha',operation:'add'}},depthWriteEnabled:false,cullMode:'none'}}
+   :transmissive?{transmission:m.transmission,ior:m.ior,thickness:m.thickness,...(m.attenuationColor?{attenuationColor:m.attenuationColor}:{}),...(m.attenuationDistance!==undefined?{attenuationDistance:m.attenuationDistance}:{})}:{}),
+  ...(forwardOnly&&m.clearcoat>0?{clearcoat:m.clearcoat,clearcoatRoughness:m.clearcoatRoughness,staticSwitches:{clearcoat:true}}:{}),
+  ...(opts.planarReflection?{planarReflection:true}:{})};
 }
 
 type PendingPlacement=
@@ -311,16 +328,23 @@ type PendingPlacement=
 type UniqueMeshJob={key:string;generatorId:string;params:Record<string,ParamValue>;family:string};
 type BuiltMeshOutcome={ok:true;record:CachedMeshRecord}|{ok:false;error:string};
 
+function defaultSurfaceNormalStrength(m:SpecMaterial,pattern:string):number{
+ if(pattern.startsWith('polyhaven:'))return Number((1-Math.min(0.45,Math.max(0,m.clearcoat)*0.45)).toFixed(3));
+ const base=pattern==='trim'?Math.min(0.16,Math.max(0.08,m.roughness*0.45)):Math.max(0.12,Math.min(0.6,m.roughness));
+ return Number((base*(1-Math.min(0.5,Math.max(0,m.clearcoat)*0.5))).toFixed(3));
+}
+
 function prepareExportPlacements(spec:SceneSpec){
  const report:ExportReport={unresolved:[],expanded:[],slotFallbacks:[],covered:[],proxies:[],dropped:[],derived:[],errors:[]};
  // 平面反射只作用于反射对象所属族里的光滑材质(roughness≤0.15,如池水);引擎要求材质在 pack 里烘焙该开关。
  const state=spec.lighting.states.find(s=>s.id===spec.lighting.defaultState),planar=state?.post.planarReflections[0];
+ const deferredCompatible=Boolean(state?.post.gtao||state?.post.ssr||state?.post.gi||(spec.decals?.length??0)>0||process.env.SPEC_RENDER_PATH==='deferred');
  const planarFamily=planar?spec.families.find(f=>f.id===spec.objects.find(o=>o.id===planar.object)?.family):undefined;
  const mirrored=new Set(Object.values(planarFamily?.materialSlots??{}).filter(id=>(spec.materials.find(m=>m.id===id)?.roughness??1)<=0.15));
  // 质感默认:没有指定表面纹样、不发光、不透光的材质自动套"使用痕迹"纹样(粗糙度/底色变化,去塑料感);
  // 规格写 surface:null 以外的值或 SPEC_DEFAULT_WEAR=0 时不套。
  const wear=(m:SceneSpec['materials'][number])=>process.env.SPEC_DEFAULT_WEAR!=='0'&&m.surface===undefined&&!(m.emissiveIntensity>0)&&!((m.transmission??0)>0.3)&&!((m as any).opacity<1)?{pattern:'worn',tilesPerMeter:0.8}:null;
- const materials=spec.materials.map(m=>{const surface=m.surface??wear(m);return {key:sourceSegment(m.id),options:{...materialOptions(m),...(mirrored.has(m.id)?{planarReflection:true}:{})},...(surface?{surface}:{})};});
+ const materials=spec.materials.map(m=>{const surface=m.surface??wear(m),isPlanar=mirrored.has(m.id);return {key:sourceSegment(m.id),options:materialOptions(m,{deferredCompatible,planarReflection:isPlanar}),...(surface?{surface:{...surface,normalStrengthAuthored:surface.normalStrength!==undefined,normalStrength:surface.normalStrength??defaultSurfaceNormalStrength(m,surface.pattern)}}:{})};});
  // 灰模代理压成暗色:它只占位,不应在画面里抢眼(仍保留可见,如实标示缺生成器)。
  materials.push({key:PROXY_MATERIAL,options:{baseColor:[0.06,0.065,0.07,1],metallic:0.3,roughness:0.6}});
 
@@ -788,7 +812,15 @@ export default definePack({
   const channel=(p:string,ch:string,tiles:number)=>({texture:ref('texture/'+p.replace(':','-')+'-'+ch),sampler:ref('sampler/surface-repeat'),coordinates:{transform:{scale:[tiles*2,tiles*2]}}});
   const nonShadowMatKeys=new Set(data.meshes.flatMap((mesh:any)=>Object.entries(mesh.slots??{}).filter(([slot])=>/^(skylight|sky|tubeGlass|glass|pane|window|constraintField|holoGlow)$/i.test(slot)).map(([,mk])=>String(mk))));
   for(const m of data.materials as any[]){
-   const std=Materials.standard({...m.options,...(m.surface?{normalTexture:channel(m.surface.pattern,'normal',m.surface.tilesPerMeter),metallicRoughnessTexture:channel(m.surface.pattern,'mr',m.surface.tilesPerMeter),baseColorTexture:channel(m.surface.pattern,'color',m.surface.tilesPerMeter)}:{})} as any);
+   const ns=m.surface?.normalStrength??1;
+   const std=Materials.standard({...m.options,...(m.surface?{
+    normalTexture:channel(m.surface.pattern,'normal',m.surface.tilesPerMeter),
+    normalScale:[ns,ns],
+    metallicRoughnessTexture:channel(m.surface.pattern,'mr',m.surface.tilesPerMeter),
+    occlusionTexture:channel(m.surface.pattern,'mr',m.surface.tilesPerMeter),
+    baseColorTexture:channel(m.surface.pattern,'color',m.surface.tilesPerMeter),
+    ...((m.options?.clearcoat??0)>0?{clearcoatNormalTexture:channel(m.surface.pattern,'normal',m.surface.tilesPerMeter),clearcoatNormalScale:Math.min(1,Number((ns*0.35).toFixed(4)))}:{}),
+   }:{})} as any);
    const noShadow=nonShadowMatKeys.has(m.key)||(m.options?.transmission??0)>0||Boolean(m.options?.renderState?.blend);
    out['material/'+m.key]=noShadow?{...std,passes:std.passes.filter((p:any)=>p.name!=='shadow-caster'&&p.renderState?.tags?.LightMode!=='ShadowCaster')}:std;
   }
@@ -942,6 +974,21 @@ export default {name:'scene/projected-decals',inject:['world','gameHost','assets
 /** 写出 spec.pack.ts、spec-data.ts 与生成器源码;返回与 scene-generator 导出一致的收据字段。 */
 /** 规格里引用的 Poly Haven 资产名(去重,稳定顺序)。 */
 export const pbrAssets=(spec:SceneSpec)=>[...new Set(spec.materials.flatMap(m=>m.surface&&m.surface.pattern.startsWith('polyhaven:')?[m.surface.pattern.slice(10)]:[]))].sort();
+export function compileExportOptics(plan:ExportPlan,cacheDirs:readonly string[]=[]){
+ const audit:any[]=[];
+ const materials=plan.materials.map(m=>{
+  const surface=m.surface,roughness=Number(m.options.roughness);
+  if(!surface||surface.pattern.startsWith('polyhaven:')){audit.push({material:m.key,options:m.options,normalPolicy:surface?'external-map-preserved':'no-normal-map'});return m;}
+  const size=['deck','worn','trim'].includes(surface.pattern)?1024:256;
+  const rec=getCachedSurfaceRecord(surface.pattern,sourceSegment(surface.pattern),size,cacheDirs)??buildSurfaceSync(surface.pattern,sourceSegment(surface.pattern),size);
+  const plane=size*size*4,normal=rec.bin.subarray(0,plane);
+  const compiled=compileNormalScale(normal,surface.normalStrength??1,roughness,surface.normalStrengthAuthored===true);
+  let min=1,max=0;for(let i=plane+1;i<plane*2;i+=4){const r=rec.bin[i]!/255*roughness;min=Math.min(min,r);max=Math.max(max,r);}
+  audit.push({material:m.key,options:m.options,normal:compiled,roughnessBeforeShaderClamp:{min,max},textureSha256:rec.sha256,scope:'input texels, not measured GPU pixels'});
+  return {...m,surface:{...surface,normalStrength:compiled.effective}};
+ });
+ return {materials,audit};
+}
 export function writeSpecPack(spec:SceneSpec,plan:ExportPlan,destination:string,identity:{packageId:string;sourceKey:string;name:string},pbrDir?:string){
  mkdirSync(join(destination,'spec-kit'),{recursive:true});
  for(const file of GENERATOR_SOURCES)cpSync(join(import.meta.dir,'generators',file),join(destination,'spec-kit',file));
@@ -996,7 +1043,9 @@ export function writeSpecPack(spec:SceneSpec,plan:ExportPlan,destination:string,
  const singleEntities=plan.entities.filter(e=>e.bindingKey===e.id).map(({bindingKey:_b,...e})=>e);
  const batches=plan.instancedBatches.map(b=>({key:b.key,label:b.label,mesh:b.mesh,transforms:Array.from(b.transforms)}));
  const decalMaterials=[...decalMaterialMap.values()];
- const data={gi,packageId:identity.packageId,name:identity.name,sceneKey:identity.sourceKey,specId:spec.id,materials:plan.materials,meshes:meshesData,entities:singleEntities,batches,decalMaterials,decals:plan.decals};
+ const optics=compileExportOptics(plan,extraCacheDirs);
+ writeFileSync(join(destination,'surface-optics.json'),JSON.stringify(optics.audit,null,2)+'\n');
+ const data={gi,packageId:identity.packageId,name:identity.name,sceneKey:identity.sourceKey,specId:spec.id,materials:optics.materials,meshes:meshesData,entities:singleEntities,batches,decalMaterials,decals:plan.decals};
  writeFileSync(join(destination,'spec-data.ts'),'export default '+JSON.stringify(data)+' as const;\n');
  // PBR 像素数据(gzip+base64)按资产各成一个模块,pbr-index.ts 静态导入,pack 构建时解压。
  const pbr=pbrAssets(spec);

@@ -25,7 +25,7 @@ const param=obj({name:str,number:nullable(num),numbers:nullable(arr(num,64)),tex
 const authority={type:'string',enum:['master','aux','design_fill']};
 const surface=nullable(obj({pattern:{type:'string',enum:['panel','plate','grate','concrete','puddle','deck','worn','trim']},tilesPerMeter:num}));
 
-const materialItem=obj({id:str,label:str,baseColor:arr(num,4),metallic:num,roughness:num,emissive:nullable(vec3),emissiveIntensity:num,transmission:num,ior:num,thickness:num,clearcoat:num,clearcoatRoughness:num,surface,sources:arr(source)});
+const materialItem=obj({id:str,label:str,baseColor:arr(num,4),metallic:num,roughness:num,emissive:nullable(vec3),emissiveIntensity:num,transmission:num,ior:num,thickness:num,clearcoat:num,clearcoatRoughness:num,attenuationColor:nullable(vec3),attenuationDistance:nullable(num),surface,sources:arr(source)});
 const familyItem=obj({id:str,label:str,description:str,priority:{type:'string',enum:['P0','P1','P2']},covers:arr(str),generatorId:nullable(str),generatorParams:arr(param,SPEC_LIMITS.params),materialSlots:arr(obj({slot:str,material:str}),12),authority,sources:arr(source)});
 export const MATERIALS_ONLY_SCHEMA=obj({materials:arr(materialItem,SPEC_LIMITS.materials)});
 export const FAMILIES_SHARD_SCHEMA=obj({families:arr(familyItem,SPEC_LIMITS.families),excludedLeaves:arr(obj({id:str,reason:str}))});
@@ -49,7 +49,7 @@ export const INFRA_DECALS_SCHEMA=obj({
 const light=obj({id:str,kind:{type:'string',enum:['directional','point','spot','area']},position:nullable(vec3),direction:nullable(vec3),color:vec3,intensity:num,range:nullable(num),innerConeDeg:nullable(num),outerConeDeg:nullable(num),width:nullable(num),height:nullable(num),castShadow:bool});
 export const STAGING_SCHEMA=obj({
  states:arr(obj({id:str,label:str,lights:arr(light,SPEC_LIMITS.lights),ambient:obj({color:vec3,groundColor:nullable(vec3),intensity:num}),background:vec3,
-  post:obj({tonemap:{type:'string',enum:['aces','agx','neutral']},exposure:nullable(num),bloom:nullable(obj({threshold:num,intensity:num,radius:num})),gtao:bool,ssr:nullable(obj({maxDistance:num,thickness:num,maxRoughness:num})),fog:nullable(obj({color:vec3,density:num,anisotropy:num,boundsMin:vec3,boundsMax:vec3,light:str})),planarReflections:arr(obj({object:str,height:num,distortion:num}),4),volumetric:nullable(obj({extinction:num,albedo:vec3,anisotropy:num,heightFalloff:num,noise:num,maxDistance:num,emission:vec3})),cameraFx:nullable(obj({flareIntensity:num,flareThreshold:num,vignette:num,chromaticAberration:num,grain:num}))})}),SPEC_LIMITS.states),
+  post:obj({tonemap:{type:'string',enum:['aces','agx','neutral']},exposure:nullable(num),bloom:nullable(obj({threshold:num,intensity:num,radius:num})),gtao:bool,ssr:nullable(obj({maxDistance:num,thickness:num,maxRoughness:num})),fog:nullable(obj({color:vec3,density:num,anisotropy:num,boundsMin:vec3,boundsMax:vec3,light:str})),planarReflections:arr(obj({object:str,height:num,distortion:num}),4),volumetric:nullable(obj({lights:nullable(arr(str,2)),extinction:num,albedo:vec3,anisotropy:num,heightFalloff:num,noise:num,maxDistance:num,emission:vec3})),cameraFx:nullable(obj({flareIntensity:num,flareThreshold:num,vignette:num,chromaticAberration:num,grain:num}))})}),SPEC_LIMITS.states),
  defaultState:str,
  shots:arr(obj({id:str,label:str,position:vec3,target:vec3,fovDeg:num}),SPEC_LIMITS.shots),
  constraints:arr(obj({id:str,description:str,number:nullable(num),numbers:nullable(arr(num,16)),text:nullable(str),unit:str,status:{type:'string',enum:['P','frozen']},sources:arr(source)}),SPEC_LIMITS.constraints),
@@ -130,6 +130,7 @@ async function ask(dir:string,role:string,task:string,facts:object,doc:string,sc
 // ---------- 合并 ----------
 const VALID_PATTERNS=new Set(['panel','plate','grate','concrete','puddle','deck','worn','trim']);
 function sanitizeMaterial(m:any):SpecMaterial{
+ const {attenuationColor,attenuationDistance,...base}=m;
  const rgba=Array.isArray(m.baseColor)&&m.baseColor.length===4?m.baseColor.map((n:any)=>clamp(Number(n),0,1)) as [number,number,number,number]:[0.7,0.74,0.78,1] as [number,number,number,number];
  const surf=m.surface&&(VALID_PATTERNS.has(m.surface.pattern)||/^polyhaven:[a-z0-9_]+$/.test(String(m.surface.pattern)))
   ?{pattern:m.surface.pattern,tilesPerMeter:clamp(Number(m.surface.tilesPerMeter)||0.5,0.01,10)}:null;
@@ -139,7 +140,7 @@ function sanitizeMaterial(m:any):SpecMaterial{
  const hasEmissive=Boolean(m.emissive)&&Number(m.emissiveIntensity)>0;
  const emissiveIntensity=hasEmissive?clamp(Number(m.emissiveIntensity),0,100):0;
  return {
-  ...m,
+  ...base,
   baseColor:rgba,
   metallic:clamp(Number(m.metallic),0,1),
   roughness:clamp(Number(m.roughness),0,1),
@@ -151,6 +152,8 @@ function sanitizeMaterial(m:any):SpecMaterial{
   clearcoat:clamp(Number(m.clearcoat),0,1),
   clearcoatRoughness:clamp(Number(m.clearcoatRoughness),0,1),
   ...(opacity!==undefined?{opacity}:{}),
+  ...(attenuationColor!=null?{attenuationColor}:{}),
+  ...(attenuationDistance!=null?{attenuationDistance}:{}),
   ...(surf?{surface:surf}:m.surface===null?{surface:null}:{}),
  };
 }
@@ -275,6 +278,7 @@ export function mergeStaging(raw:any,frozenLights?:ReturnType<typeof handbookLig
    noise:clamp(Number(p.volumetric.noise)??0.6,0,1),
    maxDistance:clamp(Number(p.volumetric.maxDistance)||75,20,80),
    emission:[0,0,0] as Vec3,
+   ...(p.volumetric.lights!=null?{lights:p.volumetric.lights}:{}),
   }:VOL):null;
   // 动态范围与反差守卫:非冻结表覆盖时,控制环境光在 [0.12, 0.22] 保留戏剧明暗反差,曝光控制在 [0.50, 0.66]!
   if(!hasFrozenLook&&s.id===raw.defaultState){

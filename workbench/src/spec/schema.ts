@@ -4,6 +4,7 @@
  * 生成器参数、材质与光照意图、机位、可程序检查的验收条目。坐标与 scene-foundry 场景一致:右手、米、Z 向上。
  */
 import {RANGE} from '../geometry/constraints';
+import {volumeLightSelection} from './optics';
 
 export const SCENE_SPEC_VERSION='scene-spec-v1';
 export const SPEC_LIMITS={objects:600,families:64,materials:96,lights:48,states:6,shots:12,constraints:200,acceptance:200,styleRefs:16,sources:32,params:48,decals:64};
@@ -22,20 +23,21 @@ export type SpecFamily={id:string;label:string;description:string;priority:'P0'|
 export type SpecMaterial={id:string;label:string;baseColor:[number,number,number,number];metallic:number;roughness:number;emissive:Vec3|null;emissiveIntensity:number;transmission:number;ior:number;thickness:number;clearcoat:number;clearcoatRoughness:number;sources:SpecSource[];
  /** 可选:alpha 混合透明度(0..1)。用于清透玻璃——引擎透射在发光体前会糊成乳白,alpha 混合保持清晰。 */
  opacity?:number|null;
+ attenuationColor?:Vec3;attenuationDistance?:number;
  /** 可选程序化表面:纹样 + 每米贴图周期数(tiles/m)。 */
- surface?:{pattern:'panel'|'plate'|'grate'|'concrete'|'puddle'|'deck'|'worn'|'trim'|`polyhaven:${string}`;tilesPerMeter:number}|null};
+ surface?:{pattern:'panel'|'plate'|'grate'|'concrete'|'puddle'|'deck'|'worn'|'trim'|`polyhaven:${string}`;tilesPerMeter:number;normalStrength?:number}|null};
 export type SpecDecal={id:string;label:string;kind:'stencil'|'hazard'|'puddle';text?:string;color?:Vec3;position:Vec3;rotationDeg:Vec3;size:Vec3;opacity?:number;roughness?:number};
 export type SpecLight={id:string;kind:'directional'|'point'|'spot'|'area';position:Vec3|null;direction:Vec3|null;color:Vec3;intensity:number;range:number|null;innerConeDeg:number|null;outerConeDeg:number|null;width:number|null;height:number|null;castShadow:boolean};
 export type SpecPost={tonemap:'aces'|'agx'|'neutral';exposure:number|'auto';bloom:{threshold:number;intensity:number;radius:number}|null;gtao:boolean;ssr:{maxDistance:number;thickness:number;maxRoughness:number}|null;fog:{color:Vec3;density:number;anisotropy:number;boundsMin:Vec3;boundsMax:Vec3;light:string}|null;planarReflections:{object:string;height:number;distortion:number}[];
  /** 可选:覆盖整个包络的静态反射探针,给金属与光面材质提供环境反射。 */
- reflectionProbe?:{intensity:number;resolution:64|128|256}|null;
+ reflectionProbe?:{intensity:number;resolution:64|128|256;position?:Vec3}|null;
  /** 可选:漫反射全局光照(irradiance-field,延迟渲染)。environment 为天空/环境辐照颜色。 */
  gi?:{environment:Vec3}|null;
  /** 可选:真体积雾(引擎 VolumetricFog + 运行时 3D 密度纹理)。extinction 为每米消光;heightFalloff 为密度随高度指数衰减率(1/m);
   *  noise 为低频噪声幅度 0..1;光柱的遮挡来自 fog.light 的阴影。须同时有 fog(取其 light 与包络)。 */
  /** 可选:相机电影感组件透传(镜头光晕/暗角色差颗粒/景深),键为引擎组件名,值为组件数据。 */
  cameraFx?:{LensFlare?:Record<string,unknown>;LensEffects?:Record<string,unknown>;DepthOfField?:Record<string,unknown>}|null;
- volumetric?:{extinction:number;albedo:Vec3;anisotropy:number;heightFalloff:number;noise:number;maxDistance:number;emission?:Vec3}|null};
+ volumetric?:{extinction:number;albedo:Vec3;anisotropy:number;heightFalloff:number;noise:number;maxDistance:number;emission?:Vec3;lights?:string[]}|null};
 export type SpecLightingState={id:string;label:string;lights:SpecLight[];ambient:{color:Vec3;groundColor?:Vec3|null;intensity:number};background:Vec3;post:SpecPost};
 export type SpecShot={id:string;label:string;position:Vec3;target:Vec3;fovDeg:number};
 export type SpecConstraint={id:string;description:string;value:SpecParamValue;unit:string;status:'P'|'frozen';sources:SpecSource[]};
@@ -78,7 +80,11 @@ export function sceneSpecErrors(value:unknown):string[]{
   if(!Array.isArray(m.baseColor)||m.baseColor.length!==4||!m.baseColor.every(n=>finite(n,0,1)))e.push(`${p} baseColor 须为 RGBA 0..1`);
   for(const [k,lo,hi] of [['metallic',0,1],['roughness',0,1],['emissiveIntensity',0,100],['transmission',0,1],['ior',1,2.5],['thickness',0,10],['clearcoat',0,1],['clearcoatRoughness',0,1]] as const)if(!finite((m as any)[k],lo,hi))e.push(`${p} ${k} 须在 ${lo}..${hi}`);
   if(m.opacity!=null&&!finite(m.opacity,0.02,1))e.push(`${p} opacity 无效`);
+  if(m.attenuationColor!==undefined&&!vec(m.attenuationColor,0,1))e.push(`${p} attenuationColor 无效`);
+  if(m.attenuationDistance!==undefined&&!finite(m.attenuationDistance,.001,10000))e.push(`${p} attenuationDistance 无效`);
+  if((m.attenuationColor!==undefined)!==(m.attenuationDistance!==undefined)||(m.attenuationColor!==undefined&&!(m.transmission>0)))e.push(`${p} 吸收需要透射及完整颜色/距离`);
   if(m.surface!=null&&(!(['panel','plate','grate','concrete','puddle','deck','worn','trim'].includes((m.surface as any).pattern)||/^polyhaven:[a-z0-9_]+$/.test((m.surface as any).pattern))||!finite((m.surface as any).tilesPerMeter,0.01,10)))e.push(`${p} surface 无效`);
+  if(m.surface?.normalStrength!=null&&!finite(m.surface.normalStrength,0,2))e.push(`${p} surface.normalStrength 须在 0..2`);
   if(m.emissive!==null&&!vec(m.emissive,0,1))e.push(`${p} emissive 须为 null 或线性 RGB 0..1`);
   sources(m.sources,p);}
  const families=list<SpecFamily>('families',SPEC_LIMITS.families),familyIds=unique(families,'资产族');
@@ -133,6 +139,8 @@ export function sceneSpecErrors(value:unknown):string[]{
    if(po.ssr!==null&&(!finite(po.ssr?.maxDistance,0.1,200)||!finite(po.ssr?.thickness,0.001,5)||!finite(po.ssr?.maxRoughness,0,1)))e.push(`${p} ssr 无效`);
    if(po.fog!==null&&(!vec(po.fog?.color,0,1)||!finite(po.fog?.density,0,1)||!finite(po.fog?.anisotropy,-1,1)||!vec(po.fog?.boundsMin)||!vec(po.fog?.boundsMax)||!lightIds.has(po.fog?.light)))e.push(`${p} fog 无效(需绑定本状态内存在的灯)`);
    if(po.volumetric!=null&&(po.fog===null||!finite(po.volumetric.extinction,0,2)||!vec(po.volumetric.albedo,0,1)||!finite(po.volumetric.anisotropy,-0.99,0.99)||!finite(po.volumetric.heightFalloff,0,2)||!finite(po.volumetric.noise,0,1)||!finite(po.volumetric.maxDistance,1,1000)||(po.volumetric.emission!=null&&!vec(po.volumetric.emission,0,1))))e.push(`${p} volumetric 无效(须同时有 fog)`);
+   if(po.volumetric!=null){try{volumeLightSelection(st);}catch(error){e.push(`${p} ${String(error)}`);}}
+   if(po.reflectionProbe!=null&&(!finite(po.reflectionProbe.intensity,0,10)||![64,128,256].includes(po.reflectionProbe.resolution)||(po.reflectionProbe.position!=null&&!vec(po.reflectionProbe.position))))e.push(`${p} reflectionProbe 无效`);
    if(po.cameraFx!=null&&(typeof po.cameraFx!=='object'||Object.keys(po.cameraFx).some(k=>!['LensFlare','LensEffects','DepthOfField'].includes(k))))e.push(`${p} cameraFx 只接受 LensFlare/LensEffects/DepthOfField`);
    if(typeof po.gtao!=='boolean')e.push(`${p} gtao 须为布尔`);
    if(!Array.isArray(po.planarReflections))e.push(`${p} planarReflections 须为数组`);

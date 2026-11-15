@@ -1,4 +1,5 @@
 import {repairSpecParameters} from './spec/parameter-repair';
+import {repairSpecAppearance} from './spec/appearance-repair';
 import {VISUAL_SCHEMA as STYLE_SCHEMA,verifiedVisualReview,VISUAL_REVIEW_VERSION,visualReferences} from './spec/visual-review';
 /**
  * 规格模式任务:输入是已规格化的 scene-spec-v1(来自设计文档/文字/照片的规格化步骤),概念图只作风格参照,不当重建目标。
@@ -85,8 +86,14 @@ export async function runSpec({job,dir,stage,command,preview,signal}:any){
  job.plan=await stage('plan',async()=>{const p=specPlan(spec);save(join(dir,'plan.json'),p);save(join(dir,'scene-spec.json'),spec);return p;});
  job.styleImages=styleImages;
  const repaired=await stage('parameters',()=>repairSpecParameters(sourceSpec,join(dir,'parameter-repair'),nodeModels.parameterRepair,signal));spec=repaired.spec;job.parameterResolution=repaired.receipt?{resolved:repaired.receipt.decisions.length,unresolved:repaired.receipt.remaining.unresolved.length,designFill:repaired.receipt.decisions.filter((x:any)=>x.basis==='design_fill').length}:null;save(join(dir,'source-scene-spec.json'),sourceSpec);save(join(dir,'scene-spec.json'),spec);saveJob(job);
+ if(job.sourceJobId){const prior=join(DATA,'runs',job.sourceJobId),review=existsSync(join(prior,'style-review.json'))?read(join(prior,'style-review.json')):null;
+  if(review&&typeof review.overall==='number'&&review.overall<STYLE_PASS.overall){const names=review.screenshots??[],screenshots=names.map((f:string)=>({path:join(prior,'runtime',basename(f)),mime:'image/png'}));
+   const look=await stage('appearance',()=>repairSpecAppearance(spec,{references:styleImages.map((im:any)=>({path:join(UPLOADS,im.file),mime:im.mime})),screenshots,review},join(dir,'appearance-repair'),nodeModels.appearanceRepair,signal));spec=look.spec;job.appearanceRepair={patches:look.receipt.decisions.length,reused:look.receipt.reused,model:look.receipt.model};save(join(dir,'scene-spec.json'),spec);saveJob(job);
+  }
+ }
  await stage('generate',async()=>{
   const r=await prepareSpecProject(project,spec,{id:'spec-'+job.id});
+  spec=r.effectiveSpec;save(join(dir,'scene-spec.json'),spec);job.cameraVisibility=r.cameraVisibility;
   job.generationMethod='spec-pack';job.generationModel=spec.provenance.model?`规格化 ${spec.provenance.model};网格由程序化生成器在 Engine 构建时产出`:'程序化生成器';
   job.specExport={triangles:r.plan.triangles,meshes:r.plan.meshes.length,entities:r.plan.entities.length,instancing:r.plan.instancing,decals:(spec.decals??[]).length,proxies:r.plan.report.proxies.length,unresolved:r.plan.report.unresolved.length,covered:r.plan.report.covered.length,dropped:r.plan.report.dropped.length,errors:r.plan.report.errors.length,deferred:r.world.deferred,parallelWorkers:r.exportStats.parallelWorkers,exportMs:r.exportStats.durationMs,previewMs:0};
   save(join(dir,'spec-export.json'),{...job.specExport,report:r.plan.report});
