@@ -30,6 +30,13 @@ export function firstOpaqueHit(root:Node,o:number[],target:number[],limitFractio
  const diff=sub(target,o),len=Math.hypot(...diff),d=unit(diff);let limit=len*limitFraction,result:null|{id:string;distance:number}=null;
  const visit=(n:Node)=>{if(!box(n,o,d,limit))return;for(const t of n.items??[]){const distance=triangle(t,o,d,limit);if(distance!==null){limit=distance;result={id:t.id,distance};}}for(const c of n.children??[])visit(c);};visit(root);return result;
 }
+/** Per-object crossing parity rejects origins inside closed opaque volumes. Shared
+ * triangle edges are deduplicated by distance; a skew ray avoids axis seams. */
+function containingOpaqueVolumes(root:Node,origin:number[],limit:number){
+ const d=unit([.8123,.1732,.5568]),hits=new Map<string,number[]>();
+ const visit=(n:Node)=>{if(!box(n,origin,d,limit))return;for(const t of n.items??[]){const v=triangle(t,origin,d,limit);if(v!==null){const h=hits.get(t.id)??[];h.push(v);hits.set(t.id,h);}}for(const c of n.children??[])visit(c);};visit(root);
+ return [...hits].filter(([,h])=>h.sort((a,b)=>a-b).filter((v,i,a)=>i===0||v-a[i-1]>.001).length%2===1).map(([id])=>id);
+}
 export function opaqueSceneTree(plan:ExportPlan){
  const triangles:Triangle[]=[];
  for(const e of plan.entities){const mesh=plan.meshes.find(m=>m.key===e.mesh)!,asset=getCachedMeshAsset(mesh);if(!asset)throw Error('CAMERA_GEOMETRY_MISSING '+e.id);
@@ -55,27 +62,27 @@ export function resolveCameraVisibility(spec:SceneSpec,plan:ExportPlan){
    return target.every((v,k)=>v>=lo[k]-.01&&v<=hi[k]+.01)?[{id:e.id,volume:hi.reduce((v,n,k)=>v*(n-lo[k]),1)}]:[];
   }).sort((a,b)=>a.volume-b.volume);const subject=enclosing[0]?.id;
   const distance=Math.hypot(...sub(target,start)),halfHeight=distance*Math.tan(shot.fovDeg*Math.PI/360),radius=Math.min(4,halfHeight*.32);
-  const evaluate=(p:number[])=>{const hits=[];let visible=0;for(const [u,v] of [[0,0],[-1,0],[1,0],[0,-1],[0,1],[-1,-1],[1,1],[-1,1],[1,-1]]){
+  const evaluate=(p:number[])=>{const hits=[];let visible=0;for(const u of [-1,-.5,0,.5,1])for(const v of [-1,-.5,0,.5,1]){
    const aim=target.map((x,k)=>x+right[k]*u*radius+up[k]*v*radius),hit=firstOpaqueHit(root,p,aim,subject?1:.9);if(hit&&hit.id!==subject)hits.push(hit);else visible++;}
    let foregroundClear=0;for(const u of [-.8,-.4,0,.4,.8])for(const v of [-.65,0,.65]){const aim=target.map((x,k)=>x+right[k]*u*halfHeight*16/9+up[k]*v*halfHeight);if(!firstOpaqueHit(root,p,aim,.18))foregroundClear++;}
    return {visible,foregroundClear,blocked:hits,score:visible*100+foregroundClear*10};};
   const before=evaluate(start);let position=start,best=before,shift=0;
-  if(before.visible<8||before.foregroundClear<12)for(const z of [0,.25,.5,.75,1,-.25,-.5])for(const x of [0,-.25,.25,-.5,.5,-1,1])for(const f of [0,.25,.5]){
+  if(before.visible<23||before.foregroundClear<12)for(const z of [0,.25,.5,.75,1,-.25,-.5])for(const x of [0,-.25,.25,-.5,.5,-1,1])for(const f of [0,.25,.5]){
    const p=start.map((v,k)=>v+right[k]*x*maxMove+up[k]*z*maxMove+forward[k]*f*maxMove),m=Math.hypot(...sub(p,start));if(m>maxMove)continue;
    const source=[p[0],-p[2],p[1]];if(source.some((v,k)=>v<spec.bounds.min[k]+.3||v>spec.bounds.max[k]-.3))continue;
    const q=evaluate(p);if(q.score>best.score||(q.score===best.score&&m<shift)){position=p;best=q;shift=m;}}
   shot.position=[position[0],-position[2],position[1]] as Vec3;
-  audit.push({id:shot.id,subject,sourcePosition:spec.shots.find(s=>s.id===shot.id)!.position,effectivePosition:shot.position,target:shot.target,fovDeg:shot.fovDeg,before,after:best,shiftMeters:shift,basis:shift?'design_fill':'source',passed:best.visible>=8&&best.foregroundClear>=12});
+  audit.push({id:shot.id,subject,sourcePosition:spec.shots.find(s=>s.id===shot.id)!.position,effectivePosition:shot.position,target:shot.target,fovDeg:shot.fovDeg,before,after:best,shiftMeters:shift,basis:shift?'design_fill':'source',passed:best.visible>=23&&best.foregroundClear>=12});
  }
  const probe=resolveReflectionPlacement(result,root);if(probe)for(const s of result.lighting.states)if(s.post.reflectionProbe)s.post.reflectionProbe.position=probe.effectivePosition;
- return {spec:result,receipt:{version:'mesh-camera-visibility-v2',method:'9 target-region first-hit subject rays +15 frame foreground rays(first18%); opaque triangles; bounded local camera search',maxMove,decisions:audit,reflectionProbe:probe}};
+ return {spec:result,receipt:{version:'mesh-camera-visibility-v2',method:'25 target-region first-hit subject rays +15 frame foreground rays(first18%); opaque triangles; bounded local camera search',maxMove,decisions:audit,reflectionProbe:probe}};
 }
 /** Probe origin needs open capture space, rather than the arbitrary center of a hero mesh. */
 export function resolveReflectionPlacement(spec:SceneSpec,root:Node){
  if(!spec.lighting.states.some(s=>s.post.reflectionProbe))return null;
  const lo=spec.bounds.min,hi=spec.bounds.max,center=lo.map((v,k)=>(v+hi[k])/2) as Vec3,limit=Math.min(12,Math.max(...hi.map((v,k)=>v-lo[k]))*.4);
  const directions=[];for(const x of [-1,0,1])for(const y of [-1,0,1])for(const z of [-1,0,1])if(x||y||z)directions.push(unit([x,y,z]));
- const clearance=(position:number[])=>{const origin=toEnginePosition(position as Vec3);return Math.min(...directions.map(d=>firstOpaqueHit(root,origin,origin.map((v,k)=>v+d[k]*limit))?.distance??limit));};
+ const clearance=(position:number[])=>{const origin=toEnginePosition(position as Vec3);if(containingOpaqueVolumes(root,origin,Math.hypot(...hi.map((v,k)=>v-lo[k]))*2).length)return 0;return Math.min(...directions.map(d=>firstOpaqueHit(root,origin,origin.map((v,k)=>v+d[k]*limit))?.distance??limit));};
  const before=clearance(center);let position=center,best=before,score=before;
  if(before<1)for(const x of [.25,.5,.75])for(const y of [.25,.5,.75])for(const z of [.25,.5,.75]){
   const p=lo.map((v,k)=>v+(hi[k]-v)*[x,y,z][k]) as Vec3,q=clearance(p),s=q-Math.hypot(...sub(p,center))*.02;if(s>score){position=p;best=q;score=s;}}

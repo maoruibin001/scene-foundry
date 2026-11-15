@@ -85,3 +85,14 @@ test('Skylight 半球反弹 groundColor 导出与巨构大空间自适应射程/
  expect((wLarge.entities.light_extra_spot as any).components.SpotLight).toMatchObject({range:72,castShadow:false});
  expect(wLarge.deferred.map(d=>d.feature)).toEqual(['LightRange:extra_spot','LightShadow:extra_spot']);
 });
+
+
+test('真体积雾不重复叠加解析雾，明确的开放反射采样位置传入 Engine',()=>{
+ const s=sampleSpec(),post=s.lighting.states[0].post;
+ post.fog={color:[.1,.2,.3],density:.004,anisotropy:.6,boundsMin:s.bounds.min,boundsMax:s.bounds.max,light:'key'};
+ post.volumetric={extinction:.01,albedo:[.5,.7,.9],anisotropy:.7,heightFalloff:.03,noise:.4,maxDistance:70};
+ post.reflectionProbe={intensity:.8,resolution:128,position:[-12,-10,8]};
+ const r=emitSpecWorld(s,{worldPackageId:'60fb39fb-420e-4aa5-8189-fd9c4d8369e7'});
+ expect(r.entities.fog).toBeUndefined();expect(r.components).not.toContain('Fog');expect(r.volumetricPlugin).toContain('VolumetricFog');
+ expect((r.entities.hallProbe as any).components.Transform.pos).toEqual([-12,8,10]);
+});

@@ -15,7 +15,7 @@ test('局部修正机位不移动/删掉物体，不改变目标或FOV，原规�
  expect(r.receipt.decisions[0].after.visible).toBeGreaterThanOrEqual(r.receipt.decisions[0].before.visible);expect(r.receipt.decisions[0].shiftMeters).toBeLessThanOrEqual(r.receipt.maxMove);
 });
 test('反射探针原点被近距主体包围时寻找开放空间，保留强度和分辨率',()=>{
- const s=sampleSpec();s.lighting.states[0].post.reflectionProbe={intensity:.7,resolution:128};
+ const s=sampleSpec();s.bounds.max[2]=24;s.lighting.states[0].post.reflectionProbe={intensity:.7,resolution:128};
  const r=resolveCameraVisibility(s,planSpecExport(s)),p=r.receipt.reflectionProbe!;
  expect(p.beforeClearanceMeters).toBeLessThan(1);expect(p.afterClearanceMeters).toBeGreaterThan(1);expect(p.effectivePosition).not.toEqual(p.sourcePosition);
  expect(r.spec.lighting.states[0].post.reflectionProbe?.intensity).toBe(.7);expect(r.spec.lighting.states[0].post.reflectionProbe?.resolution).toBe(128);
