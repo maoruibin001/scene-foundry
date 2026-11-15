@@ -130,6 +130,7 @@ async function ask(dir:string,role:string,task:string,facts:object,doc:string,sc
 // ---------- 合并 ----------
 const VALID_PATTERNS=new Set(['panel','plate','grate','concrete','puddle','deck','worn','trim']);
 function sanitizeMaterial(m:any):SpecMaterial{
+ const {attenuationColor,attenuationDistance,...base}=m;
  const rgba=Array.isArray(m.baseColor)&&m.baseColor.length===4?m.baseColor.map((n:any)=>clamp(Number(n),0,1)) as [number,number,number,number]:[0.7,0.74,0.78,1] as [number,number,number,number];
  const surf=m.surface&&(VALID_PATTERNS.has(m.surface.pattern)||/^polyhaven:[a-z0-9_]+$/.test(String(m.surface.pattern)))
   ?{pattern:m.surface.pattern,tilesPerMeter:clamp(Number(m.surface.tilesPerMeter)||0.5,0.01,10)}:null;
@@ -139,7 +140,7 @@ function sanitizeMaterial(m:any):SpecMaterial{
  const hasEmissive=Boolean(m.emissive)&&Number(m.emissiveIntensity)>0;
  const emissiveIntensity=hasEmissive?clamp(Number(m.emissiveIntensity),0,100):0;
  return {
-  ...m,
+  ...base,
   baseColor:rgba,
   metallic:clamp(Number(m.metallic),0,1),
   roughness:clamp(Number(m.roughness),0,1),
@@ -151,7 +152,8 @@ function sanitizeMaterial(m:any):SpecMaterial{
   clearcoat:clamp(Number(m.clearcoat),0,1),
   clearcoatRoughness:clamp(Number(m.clearcoatRoughness),0,1),
   ...(opacity!==undefined?{opacity}:{}),
-  ...(m.attenuationColor!=null&&m.attenuationDistance!=null?{attenuationColor:m.attenuationColor,attenuationDistance:m.attenuationDistance}:{}),
+  ...(attenuationColor!=null?{attenuationColor}:{}),
+  ...(attenuationDistance!=null?{attenuationDistance}:{}),
   ...(surf?{surface:surf}:m.surface===null?{surface:null}:{}),
  };
 }

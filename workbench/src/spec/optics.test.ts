@@ -4,6 +4,7 @@ import {sampleSpec} from './fixtures';
 import {materialOptions} from './export-pack';
 import {sceneSpecErrors} from './schema';
 import {DEFAULT_STANDARD_PROFILE,validateRenderProfile} from '@forgeax/engine/render';
+import {mergeFamilies} from './normalize-doc';
 import {emitSpecWorld,volumetricFogPlugin,planarReflectionPlugin} from './world-emitter';
 
 test('generated near-horizontal normals are bounded, explicit strength and input bytes preserved',()=>{
@@ -29,6 +30,12 @@ test('absorption preserves author color/distance, rejects incomplete or opaque c
  expect(materialOptions(m)).toMatchObject({attenuationColor:[.2,.5,.8],attenuationDistance:3});
  s.materials[0]=m;expect(sceneSpecErrors(s)).toEqual([]);
  delete s.materials[0]!.attenuationDistance;expect(sceneSpecErrors(s).some(x=>x.includes('吸收需要'))).toBe(true);
+});
+test('nullable model absorption fields do not become invalid opaque values; partial contracts remain errors',()=>{
+ const s=sampleSpec();s.materials=mergeFamilies({materials:[{...s.materials[0],attenuationColor:null,attenuationDistance:null}],families:[]},[]).materials;
+ expect(sceneSpecErrors(s)).toEqual([]);expect(s.materials[0]).not.toHaveProperty('attenuationColor');
+ s.materials=mergeFamilies({materials:[{...s.materials[0],transmission:.8,attenuationColor:[.2,.4,.8],attenuationDistance:null}],families:[]},[]).materials;
+ expect(sceneSpecErrors(s).some(x=>x.includes('吸收需要'))).toBe(true);
 });
 test('single medium supports fixed Engine Point+Spot without duplicated extinction; unsupported mixed sets fail',()=>{
  const st:any={lights:[{id:'arbitrary-a',kind:'point'},{id:'arbitrary-b',kind:'spot'},{id:'sun',kind:'directional'}],post:{fog:{light:'sun'},volumetric:{lights:['arbitrary-b','arbitrary-a']}}};
