@@ -4,6 +4,7 @@
  * 用法:bun src/spec/revise.ts <spec.json> <revision.json> <out.json>
  */
 import {readFileSync,writeFileSync} from 'node:fs';
+import {createHash} from 'node:crypto';
 import {validateSceneSpec,type SceneSpec} from './schema';
 
 export type SpecPatch={target:'sourceLightingMode'|'replaceGeometry'|'material'|'addMaterial'|'family'|'familyParam'|'object'|'addObject'|'addFamily'|'removeObject'|'state'|'post'|'shot'|'light'|'addLight';id:string;state?:string;set:Record<string,unknown>;reason:string};
@@ -36,7 +37,10 @@ export function reviseSpec(spec:SceneSpec,rev:SpecRevision):SceneSpec{
    case 'shot':Object.assign(find(s.shots,p.id,'机位'),p.set);break;
   }
  }
- s.provenance={...s.provenance,method:`${s.provenance.method} + 修订 ${rev.id}`,createdAt:new Date().toISOString()};
+ // The immutable parent and full revision are retained in continuation receipts.
+ // Do not grow a display string until otherwise valid continuations fail validation.
+ const sha=(v:unknown)=>createHash('sha256').update(JSON.stringify(v)).digest('hex');
+ s.provenance={...s.provenance,method:`scene-spec-revision-v1; parent=${sha(spec)}; revision=${sha(rev)}`,createdAt:new Date().toISOString()};
  validateSceneSpec(s);return s;
 }
 

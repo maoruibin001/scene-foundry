@@ -19,3 +19,9 @@ test('continuation receipt binds both source and result digests',()=>{
  expect(validateContinuationReceipt(b,r.spec,r.receipt)).toBe(true);
  expect(()=>validateContinuationReceipt(b,r.spec,{...r.receipt,resultSpecSha256:'0'.repeat(64)})).toThrow('INVALID_SCENE_CONTINUATION_RECEIPT');
 });
+
+test('repeated valid continuations retain bounded provenance and explicit parent receipts',()=>{
+ let s=sampleSpec();s.provenance.method='x'.repeat(200);const original=JSON.stringify(s);
+ for(let i=0;i<30;i++){const base=specDigest(s),r=continueSpec(s,{baseSpecSha256:base,revision:{id:'long-revision-'+i,summary:'no geometry change',patches:[]}});expect(r.spec.provenance.method.length).toBeLessThanOrEqual(200);expect(r.spec.provenance.method).toContain(base);expect(validateContinuationReceipt(s,r.spec,r.receipt)).toBe(true);s=r.spec;}
+ expect(s.objects).toEqual(JSON.parse(original).objects);
+});
