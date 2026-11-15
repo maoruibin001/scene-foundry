@@ -77,6 +77,7 @@ export async function prepareSpecProject(root:string,spec:SceneSpec,options:{id?
   cfg.plugins.push({id:'render-profile',name:'./assets/render-profile.plugin.ts',realm:'build',inject:[]});save(join(game,'forge.json'),cfg);
   save(join(root,'render-profile.json'),profile);
  }
+ mkdirSync(join(assets,'generated'),{recursive:true});
  save(join(assets,'generated/integration-environment.json'),{version:'source-environment-adoption-v1',lightingMode:spec.sourceEnvironment?.lightingMode??'preserve',removeKeys:Object.keys(spec.sourceEnvironment?.entities??{}),entities:world.entities,components:world.components,profile:giState?null:perfProfile,volumetric:!!world.volumetricPlugin});
  if(world.volumetricPlugin)writeFileSync(join(assets,'generated/volumetric-fog.ts'),world.volumetricPlugin);
  const finalWorld=writeInspectionPlugins(root,assets,world.source,world.views);
