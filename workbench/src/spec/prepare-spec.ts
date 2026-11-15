@@ -78,8 +78,8 @@ export async function prepareSpecProject(root:string,spec:SceneSpec,options:{id?
   save(join(root,'render-profile.json'),profile);
  }
  mkdirSync(join(assets,'generated'),{recursive:true});
- save(join(assets,'generated/integration-environment.json'),{version:'source-environment-adoption-v1',lightingMode:spec.sourceEnvironment?.lightingMode??'preserve',removeKeys:Object.keys(spec.sourceEnvironment?.entities??{}),entities:world.entities,components:world.components,profile:giState?null:perfProfile,volumetric:!!world.volumetricPlugin});
- if(world.volumetricPlugin)writeFileSync(join(assets,'generated/volumetric-fog.ts'),world.volumetricPlugin);
+ save(join(source,'integration-environment.json'),{version:'source-environment-adoption-v1',lightingMode:spec.sourceEnvironment?.lightingMode??'preserve',removeKeys:Object.keys(spec.sourceEnvironment?.entities??{}),entities:world.entities,components:world.components,profile:giState?null:perfProfile,volumetric:!!world.volumetricPlugin});
+ if(world.volumetricPlugin)writeFileSync(join(source,'integration-volumetric-fog.ts'),world.volumetricPlugin);
  const finalWorld=writeInspectionPlugins(root,assets,world.source,world.views);
  writeFileSync(join(assets,'ui.plugin.ts'),conceptLookUi(readFileSync(join(assets,'ui.plugin.ts'),'utf8')));
  writeFileSync(join(assets,'world.pack.ts'),finalWorld);

@@ -1,3 +1,4 @@
+import {publishIntegrationPayload} from '../../workbench/src/spec/integration/payload';
 import { mkdirSync, readFileSync, writeFileSync, renameSync, rmSync, cpSync, existsSync, readdirSync, realpathSync } from 'node:fs';
 import { resolve, join, dirname } from 'node:path';
 import { createHash } from 'node:crypto';
@@ -41,7 +42,7 @@ const save=(f:string,v:unknown)=>writeFileSync(f,JSON.stringify(v,null,2)+'\n');
 function specExport(brief:any,staging:string){
   const spec=read(join(root,'source',brief.entry));validateSceneSpec(spec);
   if(existsSync(staging))rmSync(staging,{recursive:true});
-  return writeSpecPack(spec,planSpecExport(spec),staging,{packageId:brief.packageId,sourceKey:brief.sourceKey,name:brief.name},join(root,'source','pbr'));
+  const result=writeSpecPack(spec,planSpecExport(spec),staging,{packageId:brief.packageId,sourceKey:brief.sourceKey,name:brief.name},join(root,'source','pbr'));publishIntegrationPayload(join(root,'source'),staging);return result;
 }
 
 async function main(){

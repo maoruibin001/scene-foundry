@@ -1,9 +1,10 @@
+import {verifiedCandidateEnvironment} from './payload';
 import {readFileSync,writeFileSync,existsSync,cpSync} from 'node:fs';
 import {join} from 'node:path';
 import {AssetGuid} from '@forgeax/engine/pack/guid';
 import {definePackageId} from '@forgeax/engine/pack/source';
 /** Explicit environment payload from the actual pipeline candidate, not a hand-authored game patch. */
-export function candidateEnvironment(candidate:string){const path=join(candidate,'integration-environment.json');if(!existsSync(path))return null;const e=JSON.parse(readFileSync(path,'utf8'));return e.lightingMode==='spec'?e:null;}
+export const candidateEnvironment=verifiedCandidateEnvironment;
 export function environmentWrapperFragment(env:any){
  if(!env)return {imports:'',definition:'',body:''};
  const additions=Object.fromEntries(Object.entries(env.entities).filter(([key])=>!['garden','camera'].includes(key)));
@@ -13,7 +14,7 @@ export function environmentWrapperFragment(env:any){
 }
 export function installEnvironmentSources(game:string,candidate:string,dest:string,revision:string,packageId:string,sceneKey:string,env:any,previous:any){
  if(!env)return null;
- if(env.volumetric){cpSync(join(candidate,'volumetric-fog.ts'),join(dest,'volumetric-fog.ts'));writeFileSync(join(game,'assets/pipeline-revisions/active-effects.ts'),`import {installVolumetricFog} from './${revision}/volumetric-fog.ts';\nexport function installPipelineEffects(ctx:any,root:any){return installVolumetricFog(ctx,root,${JSON.stringify(sceneKey)});}\n`);}
+ if(env.volumetric){cpSync(env.fogSource,join(dest,'volumetric-fog.ts'));writeFileSync(join(game,'assets/pipeline-revisions/active-effects.ts'),`import {installVolumetricFog} from './${revision}/volumetric-fog.ts';\nexport function installPipelineEffects(ctx:any,root:any){return installVolumetricFog(ctx,root,${JSON.stringify(sceneKey)});}\n`);}
  else writeFileSync(join(game,'assets/pipeline-revisions/active-effects.ts'),'export function installPipelineEffects(_ctx:any,_root:any){return ()=>{};}\n');
  const cfg=JSON.parse(readFileSync(join(game,'forge.json'),'utf8'));
  if(cfg.roots.build&&cfg.roots.build!==previous?.buildRoot)throw Error('EXISTING_BUILD_ROOT_NEEDS_COMPOSITION');
