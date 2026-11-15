@@ -10,7 +10,7 @@ import {captureCodexProcess} from '../codex-process';
 import {modelTimeoutPolicy} from '../model-selection';
 import {reconstructionPython} from '../runtime-paths.mjs';
 
-export const NODE_IDS=['families','objects','staging','parameterRepair','styleReview'] as const;
+export const NODE_IDS=['families','objects','staging','parameterRepair','appearanceRepair','styleReview'] as const;
 export const CBC5_MODELS=['hy4flash-dev'] as const;
 export const CBC4_MODELS=['hy4-preview-ioa','hy4std'] as const;
 export type Cbc4Model=typeof CBC4_MODELS[number];
@@ -23,7 +23,7 @@ export function validateNodeModels(value:unknown):NodeModels{
  const input=(value??{}) as Record<string,unknown>;
  for(const k of Object.keys(input))if(!NODE_IDS.includes(k as NodeId))throw Error('未知模型节点: '+k);
  return Object.fromEntries(NODE_IDS.map(id=>{
-  const raw=(input[id]??(id==='styleReview'?{provider:'cbc5',model:'hy4flash-dev',reasoningEffort:'medium'}:id==='parameterRepair'?input.families??defaults:defaults)) as any;
+  const raw=(input[id]??(id==='appearanceRepair'?input.styleReview??{provider:'cbc5',model:'hy4flash-dev',reasoningEffort:'medium'}:id==='styleReview'?{provider:'cbc5',model:'hy4flash-dev',reasoningEffort:'medium'}:id==='parameterRepair'?input.families??defaults:defaults)) as any;
   const efforts=['cbc4','cbc5'].includes(raw?.provider)?['medium','high','xhigh']:['high','xhigh'];
   if(!raw||!['claude10','codex','cbc4','cbc5'].includes(raw.provider)||typeof raw.model!=='string'||!/^[A-Za-z0-9._:/-]{1,120}$/.test(raw.model)||!efforts.includes(raw.reasoningEffort))throw Error('节点 '+id+' 的模型配置无效');
   if(raw.provider==='claude10'&&raw.model!==CLAUDE10_MODEL)throw Error('claude10 模型必须为 '+CLAUDE10_MODEL);
@@ -64,7 +64,7 @@ export function parseCbcResult(stdout:string,model:string){
 }
 export async function callSpecNode(input:NodeRequest,dir:string,selection:NodeModel,schema:any){
  if(input.role==='spec-style-judge'&&selection.provider==='codex'&&process.env.PIPELINE_VISUAL_HOLD_REASON)throw Error('VISUAL_REVIEW_HELD：'+process.env.PIPELINE_VISUAL_HOLD_REASON);
- if(input.role==='spec-style-judge'&&selection.provider==='cbc4')throw Error('VISUAL_ROUTE_UNSUPPORTED：当前 cbc4 路由未通过看图验证，请明确选择 codex6 或 claude10 视觉节点');
+ if(['spec-style-judge','spec-appearance-repair'].includes(input.role)&&selection.provider==='cbc4')throw Error('VISUAL_ROUTE_UNSUPPORTED：当前 cbc4 路由未通过看图验证，请选择 cbc5 或已验证的视觉节点');
  return useModelPermit(input.role,input.signal,()=>callSpecNodeInner(input,dir,selection,schema));
 }
 async function callSpecNodeInner(input:NodeRequest,dir:string,selection:NodeModel,schema:any){

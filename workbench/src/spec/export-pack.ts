@@ -64,7 +64,7 @@ export type ExportEntity={id:string;label:string;mesh:string;pos:Vec3;quat:Quat;
 export type ExportInstanceBatch={key:string;label:string;mesh:string;entityIds:string[];transforms:Float32Array};
 export type ExportDecal={id:string;entityKey:string;label:string;kind:SpecDecal['kind'];text:string;color:Vec3;material:string;pos:Vec3;quat:Quat;scale:Vec3;order:number;opacity:number;roughness:number;normalThreshold:number;colorOpacity:number;normalOpacity:number;roughnessOpacity:number};
 export type ExportReport={unresolved:{object:string;family:string;key:string;input:unknown;reason:string}[];expanded:{object:string;count:number}[];slotFallbacks:{family:string;slot:string;material:string}[];covered:{object:string;family:string;by:string}[];proxies:{object:string;family:string;reason:string}[];dropped:{family:string;key:string;reason:string}[];derived:{object:string;key:string;value:ParamValue}[];errors:string[]};
-export type ExportPlan={meshes:ExportMesh[];entities:ExportEntity[];materials:{key:string;options:Record<string,unknown>;surface?:{pattern:string;tilesPerMeter:number}}[];decals:ExportDecal[];instancing:{batches:number;totalInstances:number;savedEntities:number};instancedBatches:ExportInstanceBatch[];instancedInstances:number;report:ExportReport;triangles:number};
+export type ExportPlan={meshes:ExportMesh[];entities:ExportEntity[];materials:{key:string;options:Record<string,unknown>;surface?:{pattern:string;tilesPerMeter:number;normalStrength?:number}}[];decals:ExportDecal[];instancing:{batches:number;totalInstances:number;savedEntities:number};instancedBatches:ExportInstanceBatch[];instancedInstances:number;report:ExportReport;triangles:number};
 
 export interface ExportPlanTelemetry{
  parallelWorkers:number;
@@ -320,7 +320,7 @@ function prepareExportPlacements(spec:SceneSpec){
  // 质感默认:没有指定表面纹样、不发光、不透光的材质自动套"使用痕迹"纹样(粗糙度/底色变化,去塑料感);
  // 规格写 surface:null 以外的值或 SPEC_DEFAULT_WEAR=0 时不套。
  const wear=(m:SceneSpec['materials'][number])=>process.env.SPEC_DEFAULT_WEAR!=='0'&&m.surface===undefined&&!(m.emissiveIntensity>0)&&!((m.transmission??0)>0.3)&&!((m as any).opacity<1)?{pattern:'worn',tilesPerMeter:0.8}:null;
- const materials=spec.materials.map(m=>{const surface=m.surface??wear(m);return {key:sourceSegment(m.id),options:{...materialOptions(m),...(mirrored.has(m.id)?{planarReflection:true}:{})},...(surface?{surface}:{})};});
+ const materials=spec.materials.map(m=>{const surface=m.surface??wear(m);return {key:sourceSegment(m.id),options:{...materialOptions(m),...(mirrored.has(m.id)?{planarReflection:true}:{})},...(surface?{surface:{...surface,normalStrength:surface.normalStrength??(surface.pattern.startsWith('polyhaven:')?1:Math.max(.12,Math.min(.6,m.roughness)))}}:{})};});
  // 灰模代理压成暗色:它只占位,不应在画面里抢眼(仍保留可见,如实标示缺生成器)。
  materials.push({key:PROXY_MATERIAL,options:{baseColor:[0.06,0.065,0.07,1],metallic:0.3,roughness:0.6}});
 
@@ -788,7 +788,7 @@ export default definePack({
   const channel=(p:string,ch:string,tiles:number)=>({texture:ref('texture/'+p.replace(':','-')+'-'+ch),sampler:ref('sampler/surface-repeat'),coordinates:{transform:{scale:[tiles*2,tiles*2]}}});
   const nonShadowMatKeys=new Set(data.meshes.flatMap((mesh:any)=>Object.entries(mesh.slots??{}).filter(([slot])=>/^(skylight|sky|tubeGlass|glass|pane|window|constraintField|holoGlow)$/i.test(slot)).map(([,mk])=>String(mk))));
   for(const m of data.materials as any[]){
-   const std=Materials.standard({...m.options,...(m.surface?{normalTexture:channel(m.surface.pattern,'normal',m.surface.tilesPerMeter),metallicRoughnessTexture:channel(m.surface.pattern,'mr',m.surface.tilesPerMeter),baseColorTexture:channel(m.surface.pattern,'color',m.surface.tilesPerMeter)}:{})} as any);
+   const std=Materials.standard({...m.options,...(m.surface?{normalTexture:channel(m.surface.pattern,'normal',m.surface.tilesPerMeter),normalScale:[m.surface.normalStrength??1,m.surface.normalStrength??1],metallicRoughnessTexture:channel(m.surface.pattern,'mr',m.surface.tilesPerMeter),baseColorTexture:channel(m.surface.pattern,'color',m.surface.tilesPerMeter)}:{})} as any);
    const noShadow=nonShadowMatKeys.has(m.key)||(m.options?.transmission??0)>0||Boolean(m.options?.renderState?.blend);
    out['material/'+m.key]=noShadow?{...std,passes:std.passes.filter((p:any)=>p.name!=='shadow-caster'&&p.renderState?.tags?.LightMode!=='ShadowCaster')}:std;
   }

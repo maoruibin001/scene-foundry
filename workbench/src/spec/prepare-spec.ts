@@ -14,6 +14,7 @@ import {emitSpecWorld} from './world-emitter';
 import {conceptLookPlugin,conceptLookUi} from './concept-look';
 import {irradianceFieldGi,renderProfilePlugin} from './render-profile';
 import {DEFAULT_STANDARD_PROFILE} from '@forgeax/engine/render';
+import {resolveCameraVisibility} from './camera-visibility';
 
 const W=resolve(import.meta.dirname,'../..'),BASE=resolve(W,'..'),P=join(BASE,'prototype'),ENGINE=join(BASE,'engine');
 const read=(p:string)=>JSON.parse(readFileSync(p,'utf8')),save=(p:string,v:unknown)=>writeFileSync(p,JSON.stringify(v,null,2)+'\n');
@@ -23,8 +24,11 @@ export async function prepareSpecProject(root:string,spec:SceneSpec,options:{id?
  validateSceneSpec(spec);
  const plan=await planSpecExportParallel(spec,{cacheDir:join(root,'.mesh-cache'),concurrency:options.concurrency});
  const exportStats=getExportPlanTelemetry(plan)??{parallelWorkers:0,durationMs:0,uniqueMeshes:plan.meshes.length,workerMeshBuilds:0,meshCacheHits:0,surfaceBuilds:0};
+ const visibility=plan.report.proxies.length?null:resolveCameraVisibility(spec,plan);
+ if(visibility)spec=visibility.spec;
  const game=join(root,'game'),source=join(root,'source'),assets=join(game,'assets');
  for(const p of [source,assets,join(game,'node_modules/@forgeax')])mkdirSync(p,{recursive:true});
+ if(visibility)save(join(root,'camera-visibility.json'),visibility.receipt);
  const pin=read(join(P,'brief.json')),existing=existsSync(join(root,'brief.json'))?read(join(root,'brief.json')):null;
  // 预算按实测三角数留余量;最终是否可用由运行时 FPS 门判定,不在这里猜。
  const brief={...pin,id:options.id??existing?.id??'spec-'+randomUUID(),name:spec.name,semanticBrief:`规格 ${spec.id} 驱动的程序化场景;只验证构建与运行,视觉验收独立进行。`,
@@ -86,7 +90,7 @@ export async function prepareSpecProject(root:string,spec:SceneSpec,options:{id?
  save(join(assets,'scene-audit.json'),{name:spec.name,channelId:brief.packageId,specSha256:sha(JSON.stringify(spec)),camera:{center,radius,height:radius*.4},views:world.views,
   parts:plan.entities.map(e=>({id:e.id,entityId:e.id,bindingKey:e.bindingKey})),entities:[],landmarks,geometry:{nonFlat:true},
   provenance:{kind:'spec-scene-generation',validationKind:'generation',specId:spec.id,engineSha:pin.engineSha,qualityAssessment:'not-run'}});
- return {brief,plan,world,exportStats};
+ return {brief,plan,world,exportStats,effectiveSpec:spec,cameraVisibility:visibility?.receipt??null};
 }
 
 if(import.meta.main){

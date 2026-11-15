@@ -23,7 +23,7 @@ export type SpecMaterial={id:string;label:string;baseColor:[number,number,number
  /** 可选:alpha 混合透明度(0..1)。用于清透玻璃——引擎透射在发光体前会糊成乳白,alpha 混合保持清晰。 */
  opacity?:number|null;
  /** 可选程序化表面:纹样 + 每米贴图周期数(tiles/m)。 */
- surface?:{pattern:'panel'|'plate'|'grate'|'concrete'|'puddle'|'deck'|'worn'|'trim'|`polyhaven:${string}`;tilesPerMeter:number}|null};
+ surface?:{pattern:'panel'|'plate'|'grate'|'concrete'|'puddle'|'deck'|'worn'|'trim'|`polyhaven:${string}`;tilesPerMeter:number;normalStrength?:number}|null};
 export type SpecDecal={id:string;label:string;kind:'stencil'|'hazard'|'puddle';text?:string;color?:Vec3;position:Vec3;rotationDeg:Vec3;size:Vec3;opacity?:number;roughness?:number};
 export type SpecLight={id:string;kind:'directional'|'point'|'spot'|'area';position:Vec3|null;direction:Vec3|null;color:Vec3;intensity:number;range:number|null;innerConeDeg:number|null;outerConeDeg:number|null;width:number|null;height:number|null;castShadow:boolean};
 export type SpecPost={tonemap:'aces'|'agx'|'neutral';exposure:number|'auto';bloom:{threshold:number;intensity:number;radius:number}|null;gtao:boolean;ssr:{maxDistance:number;thickness:number;maxRoughness:number}|null;fog:{color:Vec3;density:number;anisotropy:number;boundsMin:Vec3;boundsMax:Vec3;light:string}|null;planarReflections:{object:string;height:number;distortion:number}[];
@@ -79,6 +79,7 @@ export function sceneSpecErrors(value:unknown):string[]{
   for(const [k,lo,hi] of [['metallic',0,1],['roughness',0,1],['emissiveIntensity',0,100],['transmission',0,1],['ior',1,2.5],['thickness',0,10],['clearcoat',0,1],['clearcoatRoughness',0,1]] as const)if(!finite((m as any)[k],lo,hi))e.push(`${p} ${k} 须在 ${lo}..${hi}`);
   if(m.opacity!=null&&!finite(m.opacity,0.02,1))e.push(`${p} opacity 无效`);
   if(m.surface!=null&&(!(['panel','plate','grate','concrete','puddle','deck','worn','trim'].includes((m.surface as any).pattern)||/^polyhaven:[a-z0-9_]+$/.test((m.surface as any).pattern))||!finite((m.surface as any).tilesPerMeter,0.01,10)))e.push(`${p} surface 无效`);
+  if(m.surface?.normalStrength!=null&&!finite(m.surface.normalStrength,0,2))e.push(`${p} surface.normalStrength 须在 0..2`);
   if(m.emissive!==null&&!vec(m.emissive,0,1))e.push(`${p} emissive 须为 null 或线性 RGB 0..1`);
   sources(m.sources,p);}
  const families=list<SpecFamily>('families',SPEC_LIMITS.families),familyIds=unique(families,'资产族');
