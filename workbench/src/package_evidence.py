@@ -16,9 +16,9 @@ def write_spec_evidence(archive,root,source,script):
     for name in SPEC_FILES:
         file=source/name
         if file.is_file() and not file.is_symlink(): archive.write(file,name)
-    for name in ['parameter-repair','visual-reviews']:
-        for file in sorted((source/name).rglob('*.json')):
-            if file.is_file() and not file.is_symlink() and file.resolve().is_relative_to(source): archive.write(file,file.relative_to(source))
+    for name in ['parameter-repair','visual-reviews','judge']:
+        for file in sorted((source/name).rglob('*')):
+            if file.suffix.lower() in ['.json','.png','.jpg','.jpeg','.webp'] and file.is_file() and not file.is_symlink() and file.resolve().is_relative_to(source): archive.write(file,file.relative_to(source))
     provenance=source/'parameter-repair/parameter-resolution.json'
     if provenance.is_file():
         origin=json.loads(provenance.read_text()).get('sourceCallDir')
