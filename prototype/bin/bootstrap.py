@@ -27,6 +27,8 @@ for name,url,key in [('engine',None,'engineSha'),('scene-generator','https://git
   installed=json.loads((path/'packages/engine/package.json').read_text())
   if recorded.get('engineCommit')!=brief['engineSha'] or recorded.get('integrity')!=release['integrity'] or installed.get('version')!=release['version']:
    raise SystemExit('engine: existing directory is not the pinned release; not modified')
+  # Capture uses the Chromium build matching the Engine's own Playwright; install it (idempotent) instead of the system browser.
+  run(['node','node_modules/playwright/cli.js','install','chromium'],path)
   continue
  if not path.exists():
   run(['git','clone','--filter=blob:none','--no-checkout',url,str(path)],root)
@@ -37,8 +39,10 @@ for name,url,key in [('engine',None,'engineSha'),('scene-generator','https://git
  run(['git','diff','--quiet','HEAD'],path)
  run(['bun','install','--frozen-lockfile'],path)
  run(['bun','run','build:vendor'],path)
-link=root/'game/node_modules/@forgeax/engine';link.parent.mkdir(parents=True,exist_ok=True)
 expected=(root.parent/'engine/packages/engine').resolve()
-if not link.exists():link.symlink_to(expected,target_is_directory=True)
-if link.resolve()!=expected:raise SystemExit('Existing Engine type-resolution link points elsewhere; not modified')
+# The prototype game and the workbench (spec generators run there under test) resolve the same pinned Engine.
+for link in [root/'game/node_modules/@forgeax/engine',root.parent/'workbench/node_modules/@forgeax/engine']:
+ link.parent.mkdir(parents=True,exist_ok=True)
+ if not link.exists():link.symlink_to(expected,target_is_directory=True)
+ if link.resolve()!=expected:raise SystemExit(f'Existing Engine type-resolution link {link} points elsewhere; not modified')
 print('Exact dependencies prepared. Run bun run generate, build, verify, preview.')

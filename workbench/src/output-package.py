@@ -1,10 +1,13 @@
 from pathlib import Path
 import json,sys,zipfile,hashlib,tempfile,os
+sys.dont_write_bytecode=True
+from package_evidence import write_spec_evidence
 root=Path(sys.argv[1]).resolve(); descriptor=json.loads(sys.stdin.read()); best=descriptor['best']; source=(root/best['folder']).resolve()
 if not source.is_relative_to(root): raise SystemExit('output outside job')
 output=root/('output-'+best['distManifestDigest'][:16]+'.zip')
 fd,tmp=tempfile.mkstemp(prefix='.output-',suffix='.zip',dir=root);os.close(fd)
 with zipfile.ZipFile(tmp,'w',zipfile.ZIP_DEFLATED,compresslevel=3) as z:
+    write_spec_evidence(z,root,source,Path(__file__))
     for name in ['project/game/assets','project/game/dist','project/source','project/evidence','runtime','materials']:
         folder=source/name
         if not folder.is_dir():continue
@@ -18,4 +21,6 @@ with zipfile.ZipFile(tmp,'w',zipfile.ZIP_DEFLATED,compresslevel=3) as z:
     checks={i.filename:hashlib.sha256(z.read(i.filename)).hexdigest() for i in z.infolist()}
     z.writestr('manifest.sha256.json',json.dumps(checks,indent=2))
 os.replace(tmp,output)
-print(json.dumps({'file':output.name,'bytes':output.stat().st_size}))
+receipt={'file':output.name,'bytes':output.stat().st_size,'sha256':hashlib.sha256(output.read_bytes()).hexdigest(),'packagerSha256':hashlib.sha256(Path(__file__).read_bytes()).hexdigest()}
+(root/'output-package-receipt.json').write_text(json.dumps(receipt,indent=2))
+print(json.dumps(receipt))

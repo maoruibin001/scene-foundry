@@ -1,9 +1,12 @@
 /** One UI, with explicit worker/file namespaces. A mode switch loads a new page. */
 export function currentSceneKind(pathname=globalThis.location?.pathname??'/'){
+ if(pathname==='/spec'||pathname.startsWith('/spec/'))return 'spec';
  return pathname==='/voxel'||pathname.startsWith('/voxel/')?'voxel':'ordinary';
 }
 export function scenePath(path,kind=currentSceneKind()){
- if(kind!=='voxel'||typeof path!=='string')return path;
+ if(typeof path!=='string')return path;
+ if(kind==='spec'){if(path.startsWith('/api/spec-workbench/')||path.startsWith('/spec/'))return path;if(path.startsWith('/api/'))return '/api/spec-workbench/'+path.slice(5);if(path.startsWith('/files/')||path.startsWith('/process/'))return '/spec'+path;return path;}
+ if(kind!=='voxel')return path;
  if(path.startsWith('/api/voxel/')||path.startsWith('/voxel/'))return path;
  if(path.startsWith('/api/'))return '/api/voxel/'+path.slice(5);
  if(path.startsWith('/files/')||path.startsWith('/process/'))return '/voxel'+path;
