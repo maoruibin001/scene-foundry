@@ -5,7 +5,7 @@ import {reconstructionPython} from '../runtime-paths.mjs';
 import {recordingSink} from '../recording-sink.mjs';
 import {captureShutdown,closeCaptureResources} from '../capture-shutdown.mjs';
 import {createBrowserCapture} from '../../../engine/packages/engine/dist/facades/devkit.mjs';
-import {readFile,writeFile} from 'node:fs/promises';
+import {readFile,writeFile,mkdir} from 'node:fs/promises';
 import {createHash} from 'node:crypto';
 import {join} from 'node:path';
 import {fileURLToPath} from 'node:url';
@@ -17,6 +17,7 @@ import {capturePlan} from './capture-plan.mjs';
 const [root,url,output]=process.argv.slice(2),browser=createBrowserCapture(root);let session,sink;
 const shutdown=captureShutdown(()=>closeCaptureResources(session,sink,message=>console.log(message),{outputDir:output,releaseMedia:async()=>{if(!session?.page||session.page.isClosed())return null;return session.page.evaluate(()=>{document.dispatchEvent(new Event('scene-capture-release'));return JSON.parse(document.documentElement.dataset.sceneCaptureReleased??'null');});}}));
 try{
+ await mkdir(output,{recursive:true});
  const audit=JSON.parse(await readFile(join(root,'assets/scene-audit.json'),'utf8'));
  const plan=capturePlan(audit.views.length),timings=[],recordingFrame=captureFrame(audit.views[0]);
  const timed=async(name,fn)=>{const t={name,startedAt:Date.now(),status:'running'};timings.push(t);const persist=()=>writeFile(join(output,'capture-timing.json'),JSON.stringify({plan,timings},null,2));await persist();console.log('开始 '+name);try{const result=await fn();t.status='passed';return result;}catch(e){t.status='failed';t.error=String(e);throw e;}finally{t.endedAt=Date.now();t.durationMs=t.endedAt-t.startedAt;await persist();console.log(name+' '+t.status+' '+t.durationMs+'ms');}};
