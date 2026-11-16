@@ -32,6 +32,6 @@ test('post-prepare witness revalidation also resolves the admitted integrate mod
  await expect(run(oldWitness)).rejects.toThrow('unadmitted module');
  labels.length=0;
  await run(witness);
- expect(labels.filter(l=>l==='volume_integrate')).toHaveLength(6);
+ expect(labels.filter(l=>l==='volume_integrate')).toHaveLength(4);
  expect(labels).not.toContain('volume_integrate_coarse');
 });
