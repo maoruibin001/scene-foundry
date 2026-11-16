@@ -1,3 +1,29 @@
+# 体积雾深度重建：隔离真实验证与当前交付
+
+当前状态：**v2 标记区域粗台阶修复已通过同场景真实对照，完整大厅已回接原游戏并通过正常入口流程；性能未通过，按用户要求暂缓。尚未合入 main，未更新共享 SDK 或在线生成服务。**
+
+## 当前可复核结果
+
+- 固定同场景、hero / near、1920×1168、DPR1，保留原光柱、雾、模型、材质和机位。v2 通过共同 witness 的 shader 注册修正后正常启动，实际提交的 shader 与私有 SDK 补丁匹配。
+- 最后有效配对：原版 hero / near 为 25.24 / 24.05 FPS，v2 为 20.88 / 20.12 FPS。粗雾台阶改善，但性能退步，不能称性能验收通过，也不能保证全屏 60 FPS。
+- v3 / v4 / v5 性能实验没有进入当前交付；源码已撤回到 v2，实验与撤回提交均保留。用户要求先完成场景，性能后续专项处理。
+- 私有 SDK：`engine-volume-depth-20261116/continued/engine-private`；版本仍为 0.5.0-rc.1 加本地两文件补丁，不是官方 Engine 新版本。共享安装保持原 SHA。
+- 原游戏通过通用管线接续 `reviewed-hall-r3`：124 对象材质、灯光与效果回接，132/132 实体装配。正常 `project play` 24 步、15 机位、32 PNG，硬件后端，console/page/input/layout 无错误。原交互和脚本保留。
+- 原生 dev verify 曾因 live-not-ready 失败，不能记为通过；独立的 project play 通过。用户浏览采用正常 `project preview` 已构建产物。
+- 历史评分 78 / 68 / 57 和原任务 needs_review 状态保留；本次 Engine / 游戏回接没有新增视觉评分，不宣称已重新过 70 分门。
+
+## 当前入口与证据
+
+- 最新管线浏览：<http://127.0.0.1:55472/#records>。只读模式不探测模型、不占协调器、不恢复或创建任务。
+- 当前游戏：<http://localhost:19786/>。官方预览绑定 localhost，不能改写为仅监听失败的 IPv4 地址。
+- 同站证据：<http://127.0.0.1:55472/files/diagnostics/hall-game-complete-20261116/index.html>。
+- 主证据目录：`/Users/maoruibin/extensions/github/critical-zerog/v42-evidence/pipeline-adoption-20261115/expert-repair-20261116/engine-volume-depth-20261116/continued`。
+- `original-build-identity.json`、`original-play-report.json`（report 内）、`original-adoption-receipt.json`、`game-preservation-audit.json`、`latest-observer-verified.json` 分别保留构建来源、实际流程、管线回接、旧工作保护和浏览边界。
+
+尚未完成：最终美术定稿、全厅净空/穿插验收、完整零重力/破坏/疏散玩法；控制室部分布景仍 TRIAL，core-top 检查机位过曝，A14-top 机位贴墙。现有装配完整不能替代这些验收。
+
+## 早期验证记录（历史快照，不代表当前交付状态）
+
 # 体积雾深度重建：隔离候选与真实验证
 
 状态：**未验收，不合入 main**。本轮不修改共享 Engine、在线任务、原场景或历史评分。

@@ -1,4 +1,5 @@
 import {radiometryAudit,replayRadiometry} from './spec/radiometry';
+import {viewOnly,viewOnlyRequestAllowed,observerBootstrap} from './view-only';
 import {photometricContinuity} from './spec/photometric-continuity';
 import {lightingSemantics} from './spec/lighting-semantics';
 import {continueSpec} from './spec/continuation';
@@ -67,6 +68,7 @@ const previewProxies=createPreviewFpsProxyRegistry({scriptSource:readFileSync(jo
 const processRoutes=createProcessRoutes(DATA,join(ROOT,'public/process'));
 const voxelProcessRoutes=createProcessRoutes(DATA,join(ROOT,'public/process'),'/api/voxel/process/media');
 const FOLLOWER=process.env.PIPELINE_FOLLOWER_UPSTREAM;
+const VIEW_ONLY=viewOnly(),BOOTSTRAP=observerBootstrap();
 const batches=join(DATA,'batches');mkdirSync(batches,{recursive:true});
 const json=(x:any,status=200)=>Response.json(x,{status});
 let stateMeta:any=null,stateMetaAt=0;
@@ -77,8 +79,12 @@ async function selectedSettings(raw:any,level=complexityOf(undefined)){if(PROVID
 function currentProfile(record:any){return profile(record.policy??DEFAULT_POLICY,settingsOf(record),record.matchingLevel??record.cases?.[0]?.matchingLevel??'detailed',undefined,record.sceneKind,record.pipelinePlan);}
 
 async function resumeJob(id:string,automatic=false,modelOverride?:any,extendProductionWindow=false,extra:any={}){const next=await dispatchRecovery(id,{getJob,listJobs,isExecuting,resolveSettings:source=>selectedSettings(modelOverride??settingsOf(source)),create:(source,info,modelSettings,cp)=>createJob(generationInput(source),{extendProductionWindow:!automatic&&extendProductionWindow,reuseCheckpoint:cp,reusePlanFrom:['observation','plan'].includes(info.mode)?source.id:null,reuseRefinementOutput:['refinement-output','iteration-output'].includes(info.mode)?freezeSavedRefinement(source):null,reuseSceneFrom:['iteration-output','repair-attempt'].includes(info.mode)?source.id:['refinement','refinement-output'].includes(info.mode)?source.reuseSceneFrom:info.mode==='scene'?(info.sceneSourceJobId??source.id):null,refineScene:['refinement','refinement-output','iteration-output','repair-attempt'].includes(info.mode),refinementMode:info.mode==='repair-attempt'?'general':source.refinementMode,reuseAssessmentFrom:info.mode==='assessment'?id:null,recaptureRuntime:source.recaptureRuntime===true,recoverySourceJobId:id,automaticRecoveryFrom:automatic?id:null,automaticResumeCount:automatic?(source.automaticResumeCount??0)+1:source.automaticResumeCount??0,executionSettings:source.executionSettings??DEFAULT_EXECUTION_SETTINGS,attempt:(source.attempt??1)+1,retryRoot:source.retryRoot??id,policy:source.policy,modelSettings,validationKind:info.mode==='assessment'?'assessment-continuation':'manual-continuation',...automaticContinuationOptions(source,automatic),...(info.mode==='spatial-repair'?spatialRecoveryOptions(source,listJobs()):{}),...extra})});return next;}
-if(PROVIDER==='codex-cli'&&!executionHeld())await initializeCodexRoute();
-if(!FOLLOWER){claimCoordinator();if(!executionHeld()){references.recover();recover();startScheduling();}versions.importLegacy(listJobs());for(const j of listJobs())if(!j.pipelineVersion){j.pipelineVersion=versionRef(versions.get(versionOf(j)));save(join(runDir(j.id),'job.json'),j);}}const activeVersion=ensureCurrentVersion();const server=Bun.serve({hostname:'127.0.0.1',port:Number(process.env.PORT??19774),maxRequestBodySize:21*1024*1024,idleTimeout:60,async fetch(req){const mounted=voxelRequest(req);req=mounted.request;const u=new URL(req.url);try{
+if(BOOTSTRAP.initializeModels&&PROVIDER==='codex-cli'&&!executionHeld())await initializeCodexRoute();
+if(!FOLLOWER&&BOOTSTRAP.claimCoordinator){claimCoordinator();if(!executionHeld()){references.recover();recover();startScheduling();}versions.importLegacy(listJobs());for(const j of listJobs())if(!j.pipelineVersion){j.pipelineVersion=versionRef(versions.get(versionOf(j)));save(join(runDir(j.id),'job.json'),j);}}const activeVersion=VIEW_ONLY?versions.list()[0]:ensureCurrentVersion();if(!activeVersion)throw Error("VIEW_ONLY_REQUIRES_EXISTING_VERSION");const server=Bun.serve({hostname:'127.0.0.1',port:Number(process.env.PORT??19774),maxRequestBodySize:21*1024*1024,idleTimeout:60,async fetch(req){const mounted=voxelRequest(req);req=mounted.request;const u=new URL(req.url);try{
+ if(VIEW_ONLY&&!viewOnlyRequestAllowed(req.method))return json({error:'VIEW_ONLY：此入口只浏览最新场景与历史证据，不启动、重试或修改任务。'},403);
+ if(VIEW_ONLY&&req.method==='GET'&&u.pathname==='/api/models')return json({models:[],defaults:null,source:'只读浏览实例，不探测模型路由'});
+ if(req.method==='GET'&&u.pathname==='/api/game-deliveries'){const path=join(DATA,'game-deliveries.json');return json({viewOnly:VIEW_ONLY,items:(existsSync(path)?read(path).items??[]:[]).filter((d:any)=>mounted.namespaced?d.sceneKind==='voxel':d.sceneKind!=='voxel')});}
+
  if(FOLLOWER&&req.method!=='GET'&&req.method!=='HEAD'){
   if(req.headers.get('origin')&&req.headers.get('origin')!==u.origin)return json({error:'跨站写入被拒绝'},403);
   const upstream=new URL(u.pathname+u.search,FOLLOWER),headers=new Headers(req.headers);headers.set('origin',upstream.origin);headers.delete('host');
@@ -187,5 +193,5 @@ if(!FOLLOWER){claimCoordinator();if(!executionHeld()){references.recover();recov
  if(req.method==='GET'&&['/','/app.js','/scene-context.js','/scene-preview.js','/reference-guidance.js','/history-scene-ui.js','/voxel-ui.js','/pipeline-plan-ui.js','/delivery-ui.js','/request.js','/criteria-ui.js','/versions-ui.js','/history-ui.js','/timing-ui.js','/production-timing-ui.js','/diagnosis-ui.js','/round-audit-ui.js','/judge-issues-ui.js','/spatial-status.js','/recovery-ui.js','/reference-ui.js','/score-history-ui.js','/score-comparison.js','/scheduler-ui.js','/style.css'].includes(u.pathname))return new Response(Bun.file(join(ROOT,'public',u.pathname==='/'?'index.html':u.pathname.slice(1))),{headers:{'Cache-Control':'no-cache','Cross-Origin-Opener-Policy':'same-origin','Cross-Origin-Embedder-Policy':'require-corp'}});
  return json({error:'未找到'},404);
  }catch(e){return json({error:String(e)},400)}}});
-const automaticResumer=new AutomaticResumer(join(DATA,'automatic-recovery-requests-v2.json'),{list:listJobs,executing:isExecuting,resume:job=>resumeJob(job.id,true)});if(!FOLLOWER&&!executionHeld())automaticResumer.start();
+const automaticResumer=new AutomaticResumer(join(DATA,'automatic-recovery-requests-v2.json'),{list:listJobs,executing:isExecuting,resume:job=>resumeJob(job.id,true)});if(!FOLLOWER&&BOOTSTRAP.resumeAutomatically&&!executionHeld())automaticResumer.start();
 console.log('SCENE_WORKBENCH '+server.url);process.on('SIGINT',()=>{previewProxies.close();stop();server.stop();process.exit(0)});process.on('SIGTERM',()=>{previewProxies.close();stop();server.stop();process.exit(0)});
