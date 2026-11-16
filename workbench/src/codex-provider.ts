@@ -54,10 +54,11 @@ export function cliReceipt(log:string,model:string,effort=CODEX_EFFORT,expectedP
  if(selected!==model||provider!==expectedProvider||cliReasoningEffort!==effort)throw Error('MODEL_ROUTE_UNVERIFIED：Codex CLI 未确认所选模型与供应商');
  return {requestedModel:model,cliModel:selected,returnedModel:null,routeEvidence:'official Codex CLI execution header; server does not echo model',provider:'codex-cli',authentication:expectedProvider==='openai'?'chatgpt-subscription':'launcher-provider',cliProvider:provider,cliSandbox:log.match(/^sandbox: (.+)$/m)?.[1]?.trim()??null,cliVersion:log.match(/^OpenAI Codex (.+)$/m)?.[1]??null,id:log.match(/^session id: (.+)$/m)?.[1]??null,usage:{cliReportedTokens:Number(log.match(/tokens used\s*\n([\d,]+)/)?.[1]?.replaceAll(',','')??0)},requestedReasoning:effort,cliReasoningEffort};
 }
-export async function callCodex(input:{system:string;text:string;images?:{path:string;mime:string}[];role:string;signal?:AbortSignal;modelSettings?:ModelSettings;recoveryAttempt?:number;recoveryRemainingMs?:number;reencodeImages?:boolean;tools?:CodexToolKit},dir:string,model:string,schema:any,execution?:{executable:string;route:CodexRoute}){
+export async function callCodex(input:{system:string;text:string;images?:{path:string;mime:string}[];role:string;signal?:AbortSignal;modelSettings?:ModelSettings;recoveryAttempt?:number;recoveryRemainingMs?:number;reencodeImages?:boolean;tools?:CodexToolKit},dir:string,model:string,schema:any,execution?:{executable:string;route:CodexRoute;selectionLauncher?:{path:string;sha256:string}}){
  assertRoleTools(input.role,input.tools);const inputSize=assertCodexInputSize(input,schema);input=withToolContinuation(input);schema=input.tools?.outputSchema??schema;
  input.signal?.throwIfAborted();const verified=validateCodexImages(input.images),images=input.reencodeImages?reencodedImages(verified,join(dir,input.role+'-reencoded-images')):verified;
  const executable=execution?.executable??CODEX_BIN,baseRoute=execution?.route??activeRoute;
+ if(execution?.selectionLauncher&&createHash('sha256').update(readFileSync(execution.selectionLauncher.path)).digest('hex')!==execution.selectionLauncher.sha256)throw Error('CODEX_ROUTE_CHANGED：评委选择启动器已改变');
  if(!baseRoute)throw Error('CODEX_ROUTE_UNVERIFIED：启动器路由尚未初始化');assertLauncherUnchanged(executable,baseRoute);const route=execution?.route??routeForModel(model)!;
  if(!codexLogin(model))throw Error('PROVIDER_NOT_CONFIGURED：请检查本地 Codex CLI 登录状态和启动器配置');
  const effort=input.modelSettings?.reasoningEffort??CODEX_EFFORT,timeoutPolicy=modelTimeoutPolicy(effort,input.role,input.recoveryAttempt,input.recoveryRemainingMs,input.tools?.version),{timeoutMs}=timeoutPolicy;
@@ -68,7 +69,7 @@ export async function callCodex(input:{system:string;text:string;images?:{path:s
  const worker=input.tools?CODEX_WORKER_INSTRUCTIONS.replace('不使用工具、网络、终端或文件读写，不修改环境，不调用其他代理。','只允许调用本次 scene_feedback 的专用反馈工具；不使用网络、终端、通用文件读写或其他代理，不修改环境。')+'\n'+input.tools.instructions:CODEX_WORKER_INSTRUCTIONS;
  writeFileSync(workerPath,worker);const workerInstructionsSha256=createHash('sha256').update(worker).digest('hex');
  writeFileSync(schemaPath,JSON.stringify(schema));const started=Date.now();
- writeFileSync(join(dir,input.role+'-input-receipt.json'),JSON.stringify({executable,executionRoute:routeSummary(route),requestedModel:model,requestedReasoning:effort,reasoningSummary:'auto',timeoutMs,images,inputSize,workerInstructionsSha256,toolsContract:input.tools?.version??null,startedAt:new Date(started).toISOString(),schemaSha256:createHash('sha256').update(JSON.stringify(schema)).digest('hex')},null,2));
+ writeFileSync(join(dir,input.role+'-input-receipt.json'),JSON.stringify({executable,selectionLauncher:execution?.selectionLauncher??null,executionRoute:routeSummary(route),requestedModel:model,requestedReasoning:effort,reasoningSummary:'auto',timeoutMs,images,inputSize,workerInstructionsSha256,toolsContract:input.tools?.version??null,startedAt:new Date(started).toISOString(),schemaSha256:createHash('sha256').update(JSON.stringify(schema)).digest('hex')},null,2));
  const toolServer=input.tools?serveCodexTools(input.tools,input.signal,join(dir,input.role+'-tool-calls.jsonl'),input.reencodeImages?(b:string)=>losslessPngReencode(Buffer.from(b,'base64')).toString('base64'):undefined):null;
  const args=[executable,'exec',...routeArguments(route),'--ignore-user-config','--ephemeral','--sandbox','read-only','--skip-git-repo-check','--model',model,'-c',`model_reasoning_effort="${effort}"`,'-c','model_reasoning_summary="auto"','-c','web_search="disabled"',...(toolServer?.args??[]),'--output-schema',schemaPath,'-o',output,...images.flatMap(i=>['--image',i.path]),'-'];
  try{
@@ -76,7 +77,7 @@ export async function callCodex(input:{system:string;text:string;images?:{path:s
   if(timedOut&&trace.timeoutReason==='stalled')throw Error('PROVIDER_STALLED：Codex 连续 '+Math.round(timeoutPolicy.stallMs!/60000)+' 分钟没有任何输出（连接卡住），已在 '+Math.round(trace.durationMs/1000)+' 秒处停止；按临时连接故障重新发起当前调用');
   if(timedOut)throw Error('PROVIDER_TIMEOUT：Codex 本次调用在 '+Math.round(trace.durationMs/1000)+' 秒后超时（'+trace.timeoutReason+'）；交由自动恢复处理');
   if(code!==0)throw Error('PROVIDER_CODEX_FAILED：'+log.slice(-1800));
-  const receipt={executable,...cliReceipt(log,model,effort,route.providerId),executionRoute:routeSummary(route),workerInstructionsSha256,toolsContract:input.tools?.version??null,reasoningSummary:'auto',timeoutMs,role:input.role,durationMs:Date.now()-started,stopReason:'completed'};
+  const receipt={executable,selectionLauncher:execution?.selectionLauncher??null,...cliReceipt(log,model,effort,route.providerId),executionRoute:routeSummary(route),workerInstructionsSha256,toolsContract:input.tools?.version??null,reasoningSummary:'auto',timeoutMs,role:input.role,durationMs:Date.now()-started,stopReason:'completed'};
   if(!existsSync(output)||!readFileSync(output,'utf8').trim())throw Error('PROVIDER_EMPTY_OUTPUT：Codex 已退出但没有返回完整输出；按执行中断自动恢复');
   const text=readFileSync(output,'utf8');return {text,receipt};
  }catch(error){

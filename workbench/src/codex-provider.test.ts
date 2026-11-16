@@ -14,10 +14,11 @@ test('per-call subscription route does not require or mutate the global generati
  const dir=mkdtempSync(join(tmpdir(),'per-judge-route-'));try{
   const bin=join(dir,'fixture-codex'),img=join(dir,'original.png'),log=join(dir,'argv.json'),out=join(dir,'result');writeFileSync(img,Buffer.from([137,80,78,71,13,10,26,10,1]));
   const script=`#!/usr/bin/env python3\nimport sys,json\na=sys.argv[1:];open(${JSON.stringify(log)},'w').write(json.dumps(a));sys.stdin.read();open(a[a.index('-o')+1],'w').write('{"ok":true}');sys.stderr.write('OpenAI Codex v0.test\\nmodel: gpt-fixture\\nprovider: openai\\nreasoning effort: medium\\nsandbox: read-only\\ntokens used\\n123\\n')\n`;
-  writeFileSync(bin,script);chmodSync(bin,0o755);mkdirSync(out);const route=routeFromConfig({model_provider:'openai'},createHash('sha256').update(script).digest('hex')),before=codexRouteInfo();
-  const r=await callCodex({system:'s',text:'t',role:'spec-style-judge',images:[{path:img,mime:'image/png'}],modelSettings:{model:'gpt-fixture',reasoningEffort:'medium'}},out,'gpt-fixture',{type:'object'},{executable:bin,route});
+  writeFileSync(bin,script);chmodSync(bin,0o755);mkdirSync(out);const alias=join(dir,'selection-alias'),aliasText='#!/bin/sh\nexec codex --yolo --model gpt-fixture \"$@\"\n';writeFileSync(alias,aliasText);const selectionLauncher={path:alias,sha256:createHash('sha256').update(aliasText).digest('hex')};const route=routeFromConfig({model_provider:'openai'},createHash('sha256').update(script).digest('hex')),before=codexRouteInfo();
+  const r=await callCodex({system:'s',text:'t',role:'spec-style-judge',images:[{path:img,mime:'image/png'}],modelSettings:{model:'gpt-fixture',reasoningEffort:'medium'}},out,'gpt-fixture',{type:'object'},{executable:bin,route,selectionLauncher});
+  expect(r.receipt.selectionLauncher).toEqual(selectionLauncher);
   expect(JSON.parse(r.text)).toEqual({ok:true});expect(r.receipt.executable).toBe(bin);expect(r.receipt.cliModel).toBe('gpt-fixture');expect(r.receipt.cliSandbox).toBe('read-only');expect(codexRouteInfo()).toEqual(before);
-  const args=JSON.parse(readFileSync(log,'utf8'));expect(args[args.indexOf('--image')+1]).toBe(img);expect(args).toContain('--ignore-user-config');expect(args).toContain('model_provider="openai"');
+  const args=JSON.parse(readFileSync(log,'utf8'));expect(args[args.indexOf('--image')+1]).toBe(img);expect(args).toContain('--ignore-user-config');expect(args).toContain('model_provider="openai"');expect(args).not.toContain('--yolo');writeFileSync(alias,'changed');await expect(callCodex({system:'s',text:'t',role:'spec-style-judge'},out,'gpt-fixture',{type:'object'},{executable:bin,route,selectionLauncher})).rejects.toThrow('CODEX_ROUTE_CHANGED');
  }finally{rmSync(dir,{recursive:true,force:true});}
 });
 test('CLI route mismatch is rejected, no fabricated returned model',()=>{

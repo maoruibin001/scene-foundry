@@ -8,7 +8,7 @@ import {verifiedVisualReview,VISUAL_SCHEMA} from './visual-review';
 import {VISUAL_PANEL_VERSION,VISUAL_PANEL_LAUNCHERS} from './visual-panel-config';
 import type {NodeRequest} from './node-models';
 
-type Member={id:string;executable:string;model:string;reasoningEffort:string;route:CodexRoute};
+type Member={id:string;executable:string;model:string;reasoningEffort:string;route:CodexRoute;selectionLauncher?:{path:string;sha256:string}};
 const sha=(b:string|Buffer)=>createHash('sha256').update(b).digest('hex');
 const save=(p:string,v:unknown)=>writeFileSync(p,JSON.stringify(v,null,2)+'\n');
 /** config/read reports the account default model, not the wrapper's --model.
@@ -21,13 +21,17 @@ export function subscriptionLauncherSelection(source:string){
 /** Configuration/auth checks make no inference request and never read credentials. */
 export async function freezeVisualPanel():Promise<Member[]>{
  const members:Member[]=[];
+ const executable=Bun.which('codex');if(!executable)throw Error('VISUAL_PANEL_LAUNCHER_MISSING: official codex');
+ const route=await discoverCodexRoute(executable,codexEnvironment());
+ if(route.providerId!=='openai'||route.definition)throw Error('VISUAL_PANEL_SUBSCRIPTION_REQUIRED: official codex');
  for(const id of VISUAL_PANEL_LAUNCHERS){
-  const executable=Bun.which(id);if(!executable)throw Error('VISUAL_PANEL_LAUNCHER_MISSING: '+id);
-  const selection=subscriptionLauncherSelection(readFileSync(executable,'utf8')),route=await discoverCodexRoute(executable,codexEnvironment());
-  if(route.providerId!=='openai'||route.definition)throw Error('VISUAL_PANEL_SUBSCRIPTION_REQUIRED: '+id);
+  const launcher=Bun.which(id);if(!launcher)throw Error('VISUAL_PANEL_LAUNCHER_MISSING: '+id);
+  const bytes=readFileSync(launcher),selection=subscriptionLauncherSelection(bytes.toString());
   const login=Bun.spawnSync([executable,'login','status'],{env:codexEnvironment(),timeout:5000});
   if(login.exitCode!==0||!/Logged in using ChatGPT/.test(new TextDecoder().decode(login.stdout)+new TextDecoder().decode(login.stderr)))throw Error('VISUAL_PANEL_SUBSCRIPTION_LOGIN_REQUIRED: '+id);
-  members.push({id,executable,...selection,route});
+  // These audited wrappers only choose model/effort plus --yolo. Resolve the same
+  // subscription CLI directly so the visual node's read-only sandbox cannot be overridden.
+  members.push({id,executable,...selection,route,selectionLauncher:{path:launcher,sha256:sha(bytes)}});
  }
  if(new Set(members.map(m=>m.model)).size!==members.length)throw Error('VISUAL_PANEL_DUPLICATE_MODELS：不同启动器指向同一模型，不能冒充独立评委');
  return members;
@@ -53,13 +57,13 @@ export async function runVisualPanel(input:NodeRequest,dir:string,options:{membe
  const images=source.map((im,index)=>{const path=join(imageDir,String(index)+(im.mime==='image/png'?'.png':'.jpg'));copyFileSync(im.path,path);if(sha(readFileSync(path))!==im.sha256)throw Error('VISUAL_PANEL_IMAGE_CHANGED');return {path,mime:im.mime};});
  const inputReceipt={version:VISUAL_PANEL_VERSION,sourceImages:source,transmittedImages:validateCodexImages(images),transformation:'none-original-file-bytes',systemSha256:sha(input.system),textSha256:sha(input.text),schemaSha256:sha(JSON.stringify(VISUAL_SCHEMA))};
  save(join(dir,'input.json'),inputReceipt);save(join(dir,'request.json'),{system:input.system,text:input.text});
- const results:any[]=members.map(m=>({id:m.id,model:m.model,reasoningEffort:m.reasoningEffort,status:'pending',route:routeSummary(m.route),file:m.id+'/review.json'}));
+ const results:any[]=members.map(m=>({id:m.id,model:m.model,reasoningEffort:m.reasoningEffort,status:'pending',route:routeSummary(m.route),selectionLauncher:m.selectionLauncher??null,file:m.id+'/review.json'}));
  const manifest=()=>save(join(dir,'panel.json'),{version:VISUAL_PANEL_VERSION,status:'running',aggregation:'highest-valid-overall',members:results,startedAt});
  const startedAt=new Date().toISOString();manifest();
  await Promise.all(members.map(async(m,i)=>{
   const folder=join(dir,m.id);mkdirSync(folder,{recursive:true});const started=Date.now();results[i].status='running';manifest();
   try{
-   const r=await useModelPermit('spec-style-judge:'+sha(dir).slice(0,12)+':'+m.id,input.signal,()=>(options.call??callCodex)({...input,images,modelSettings:{model:m.model,reasoningEffort:m.reasoningEffort}},folder,m.model,VISUAL_SCHEMA,{executable:m.executable,route:m.route}));
+   const r=await useModelPermit('spec-style-judge:'+sha(dir).slice(0,12)+':'+m.id,input.signal,()=>(options.call??callCodex)({...input,images,modelSettings:{model:m.model,reasoningEffort:m.reasoningEffort}},folder,m.model,VISUAL_SCHEMA,{executable:m.executable,route:m.route,selectionLauncher:m.selectionLauncher}));
    save(join(folder,'raw-response.json'),{text:r.text});save(join(folder,'route.json'),r.receipt);
    if(r.receipt.cliProvider!=='openai'||r.receipt.authentication!=='chatgpt-subscription'||r.receipt.cliModel!==m.model||r.receipt.cliReasoningEffort!==m.reasoningEffort||r.receipt.cliSandbox!=='read-only')throw Error('VISUAL_PANEL_EXECUTION_UNVERIFIED：实际模型、订阅或只读执行不符');
    for(const im of inputReceipt.transmittedImages)if(sha(readFileSync(im.path))!==im.sha256)throw Error('VISUAL_PANEL_IMAGE_CHANGED');
