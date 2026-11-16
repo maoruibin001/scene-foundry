@@ -1,8 +1,21 @@
 import type {} from '@forgeax/engine/app';
 import type {Plugin} from '@forgeax/engine/plugin';
+import {RenderRecordingWindow,recordingBitrate} from './capture-telemetry';
 import audit from './scene-audit.json';
 export default {name:'scene/ui',inject:['gameHost'],apply(ctx){ctx.effect(()=>{
- const channel=new BroadcastChannel('forgeax-scene-'+audit.channelId),sources=new Set<string>();channel.onmessage=e=>{if(e.data?.specSha256!==audit.specSha256)return;sources.add(e.data.sourceId);document.documentElement.dataset.sceneAudit=JSON.stringify({...e.data,ambiguousSource:sources.size>1});};
+ const windowMetrics=new RenderRecordingWindow(),partsByRevision:Record<number,any[]>={};let lastState:any=null;
+ const submitted=()=>document.querySelector('canvas')?.forgeaxFrameProgress?.submitted;
+ const submittedEvent=(e:Event)=>windowMetrics.submitted((e as CustomEvent).detail);
+ document.addEventListener('forgeax:frame-submitted',submittedEvent,true);
+ const completedEvent=(e:Event)=>{const f=(e as CustomEvent).detail;if(Number.isSafeInteger(f?.frameId))document.documentElement.dataset.forgeaxFrameCompleted=String(f.frameId);};document.addEventListener('forgeax:frame-completed',completedEvent,true);
+ const channel=new BroadcastChannel('forgeax-scene-'+audit.channelId),sources=new Set<string>();channel.onmessage=e=>{
+  if(e.data?.specSha256!==audit.specSha256)return;sources.add(e.data.sourceId);
+  if(e.data.parts){partsByRevision[e.data.partsRevision]=e.data.parts;document.documentElement.dataset.scenePartsAudit=JSON.stringify({revision:e.data.partsRevision,parts:e.data.parts});}
+  const {parts,frameTimes,...light}=e.data,frame=submitted();
+  lastState={...light,updateFrames:e.data.frames,frames:frame?.frameId??null,frameCounterSource:'engine-render-submit',ambiguousSource:sources.size>1,at:performance.timeOrigin+performance.now()};
+  document.documentElement.dataset.sceneAudit=JSON.stringify(lastState);windowMetrics.observe(lastState);
+  if(windowMetrics.active)document.documentElement.dataset.sceneRecordingObservedUntil=String(lastState.at-windowMetrics.startAt);
+ };
  const hud=document.createElement('section');hud.id='scene-hud';hud.dataset.sceneUi='recording-controls';
  const fpsStyle=document.createElement('style');fpsStyle.textContent='html:has(#scene-hud[hidden]) #forgeax-fps{display:none!important}';document.head.append(fpsStyle);
  hud.style.cssText='pointer-events:auto;position:fixed;left:20px;top:20px;color:#f5f6ec;background:#123735e8;padding:15px 22px;border-left:3px solid #b9e8b8;border-radius:5px;font:14px/1.8 system-ui;z-index:20';
@@ -11,8 +24,27 @@ export default {name:'scene/ui',inject:['gameHost'],apply(ctx){ctx.effect(()=>{
  const record=document.createElement('button');record.textContent='开始录屏';record.style.cssText='margin-left:12px;padding:5px 10px;cursor:pointer';hud.append(record);
  const download=document.createElement('a');download.textContent='保存录屏';download.download='scene-tour.webm';download.hidden=true;download.style.cssText='margin-left:12px;color:#b9e8b8';hud.append(download);
  (ctx.gameHost?.uiRoot??document.body).append(hud);let recorder:MediaRecorder|undefined,objectUrl:string|undefined;let chunks:BlobPart[]=[];
- const toggleRecording=()=>{if(recorder?.state==='recording'){recorder.stop();record.textContent='开始录屏';return;}const canvas=document.querySelector('canvas');if(!canvas)throw Error('Canvas missing');chunks=[];download.hidden=true;const fps=30,requestedBitsPerSecond=Math.min(24000000,Math.max(8000000,Math.round(canvas.width*canvas.height*fps*.35)));const activeRecorder=new MediaRecorder(canvas.captureStream(fps),{mimeType:'video/webm;codecs=vp8',videoBitsPerSecond:requestedBitsPerSecond});document.documentElement.dataset.sceneRecordingQuality=JSON.stringify({version:'scene-recording-quality-v1',width:canvas.width,height:canvas.height,fps,mimeType:activeRecorder.mimeType,requestedBitsPerSecond,reportedBitsPerSecond:activeRecorder.videoBitsPerSecond});recorder=activeRecorder;recorder.ondataavailable=e=>{if(e.data.size)chunks.push(e.data)};recorder.onstop=()=>{activeRecorder.stream.getTracks().forEach(t=>t.stop());if(objectUrl)URL.revokeObjectURL(objectUrl);const blob=new Blob(chunks,{type:'video/webm'});download.dataset.bytes=String(blob.size);if(!blob.size){record.textContent='录屏失败：无画面数据';return;}objectUrl=URL.createObjectURL(blob);download.href=objectUrl;download.hidden=false;};delete document.documentElement.dataset.sceneRecordingStartedAt;document.documentElement.dataset.sceneRecordingStartRequestedAt=String(performance.timeOrigin+performance.now());recorder.onstart=()=>{document.documentElement.dataset.sceneRecordingStartedAt=String(performance.timeOrigin+performance.now());};recorder.start(1000);record.textContent='停止录屏';};
+ const releaseMedia=()=>{if(recorder){recorder.ondataavailable=null;recorder.onstop=null;recorder.onstart=null;if(recorder.state==='recording')recorder.stop();recorder.stream.getTracks().forEach(t=>t.stop());}if(objectUrl)URL.revokeObjectURL(objectUrl);objectUrl=undefined;chunks=[];recorder=undefined;download.removeAttribute('href');download.hidden=true;};
+ let released=false;
+ const releaseCapture=()=>{if(released)return;released=true;releaseMedia();channel.postMessage({action:'capture-observation-stop'});channel.close();document.removeEventListener('forgeax:frame-submitted',submittedEvent,true);document.removeEventListener('forgeax:frame-completed',completedEvent,true);document.documentElement.dataset.sceneCaptureReleased=JSON.stringify({version:'scene-capture-release-v1',chunks:chunks.length,objectUrlActive:!!objectUrl,recorderActive:!!recorder,channelClosed:true,at:performance.timeOrigin+performance.now()});};
+ document.addEventListener('scene-capture-release',releaseCapture);
+ const toggleRecording=()=>{
+  if(recorder?.state==='recording'){windowMetrics.finish(performance.timeOrigin+performance.now());recorder.stop();record.textContent='开始录屏';return;}
+  if(released)throw Error('Capture resources already released');const canvas=document.querySelector('canvas');if(!canvas)throw Error('Canvas missing');releaseMedia();download.hidden=true;
+  const fps=30,requestedBitsPerSecond=recordingBitrate(canvas.width,canvas.height,fps),activeRecorder=new MediaRecorder(canvas.captureStream(fps),{mimeType:'video/webm;codecs=vp8',videoBitsPerSecond:requestedBitsPerSecond});
+  document.documentElement.dataset.sceneRecordingQuality=JSON.stringify({version:'scene-recording-quality-v1',width:canvas.width,height:canvas.height,fps,mimeType:activeRecorder.mimeType,requestedBitsPerSecond,reportedBitsPerSecond:activeRecorder.videoBitsPerSecond});
+  recorder=activeRecorder;recorder.ondataavailable=e=>{if(e.data.size)chunks.push(e.data)};
+  recorder.onstop=()=>{
+   activeRecorder.stream.getTracks().forEach(t=>t.stop());if(objectUrl)URL.revokeObjectURL(objectUrl);
+   const blob=new Blob(chunks,{type:'video/webm'});chunks=[];download.dataset.bytes=String(blob.size);if(!blob.size){record.textContent='录屏失败：无画面数据';return;}
+   objectUrl=URL.createObjectURL(blob);download.href=objectUrl;download.hidden=false;
+   document.documentElement.dataset.sceneRecordingMetrics=JSON.stringify(windowMetrics.snapshot());
+   document.documentElement.dataset.sceneRecordingObservations=JSON.stringify({version:'recording-pose-window-v1',recordingStartedAt:windowMetrics.startAt,observations:windowMetrics.observations,partsByRevision});
+  };
+  delete document.documentElement.dataset.sceneRecordingStartedAt;delete document.documentElement.dataset.sceneRecordingMetrics;delete document.documentElement.dataset.sceneRecordingObservations;document.documentElement.dataset.sceneRecordingObservedUntil='0';document.documentElement.dataset.sceneRecordingStartRequestedAt=String(performance.timeOrigin+performance.now());
+  recorder.onstart=()=>{const at=performance.timeOrigin+performance.now();windowMetrics.begin(at,submitted());document.documentElement.dataset.sceneRecordingStartedAt=String(at);};recorder.start(1000);record.textContent='停止录屏';
+ };
  record.onclick=toggleRecording;
  const keys=(e:KeyboardEvent)=>{if(e.repeat)return;if(e.code==='KeyH'||e.code==='F1'){e.preventDefault();hud.hidden=!hud.hidden;}if(e.code==='KeyR'){e.preventDefault();toggleRecording();}};document.addEventListener('keydown',keys);
- return()=>{channel.close();if(recorder?.state==='recording')recorder.stop();if(objectUrl)URL.revokeObjectURL(objectUrl);hud.remove();fpsStyle.remove();document.removeEventListener('keydown',keys);};
+ return()=>{releaseCapture();hud.remove();fpsStyle.remove();document.removeEventListener('keydown',keys);document.removeEventListener('scene-capture-release',releaseCapture);};
 },'scene/ui');}} satisfies Plugin;

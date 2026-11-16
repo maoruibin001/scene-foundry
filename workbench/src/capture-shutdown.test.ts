@@ -39,3 +39,13 @@ test('an authoritative Engine close requires its actual closedAt receipt',async(
  await expect(closeCaptureResources({report:()=>report,close:async()=>{}},null)).rejects.toThrow('CAPTURE_CLOSE_UNCONFIRMED');
  await closeCaptureResources({report:()=>report,close:async()=>{report.closedAt=new Date().toISOString();}},null);
 });
+test('close timeout preserves exact phase and only the capture process tree instead of passing the gate',async()=>{
+ const dir=mkdtempSync(join(tmpdir(),'capture-close-diag-'));try{
+ await expect(closeCaptureResources({close:()=>new Promise(()=>{})},null,()=>{},{timeoutMs:15,outputDir:dir})).rejects.toThrow('CAPTURE_CLEANUP_TIMEOUT');
+ const d=JSON.parse(readFileSync(join(dir,'capture-close-diag.json'),'utf8'));expect(d.phaseAtTimeout).toBe('session');expect(d.closedAt).toBeNull();expect(d.sinkCloseMs).toBeNumber();expect(d.processTree.some((p:any)=>p.pid===process.pid)).toBe(true);
+ }finally{rmSync(dir,{recursive:true,force:true});}
+});
+test('media references must be released and the SDK still owns actual closure',async()=>{
+ let closed=false;const d=await closeCaptureResources({page:{isClosed:()=>false},close:async()=>{closed=true;}},null,()=>{},{releaseMedia:async()=>({chunks:0,objectUrlActive:false,recorderActive:false,channelClosed:true})});expect(closed).toBe(true);expect(d.mediaReleaseMs).toBeNumber();
+ closed=false;await expect(closeCaptureResources({page:{isClosed:()=>false},close:async()=>{closed=true;}},null,()=>{},{releaseMedia:async()=>({chunks:1})})).rejects.toThrow('MEDIA_RELEASE');expect(closed).toBe(true);
+});

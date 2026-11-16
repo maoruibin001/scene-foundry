@@ -118,6 +118,7 @@ export function prepare(job:any,plan:any,recipe:any){
  const cfg=read(join(PROTO,'game/forge.json'));cfg.id=brief.id;cfg.name=plan.name;save(join(game,'forge.json'),cfg);save(join(game,'package.json'),{name:'generated-scene',private:true,type:'module',packageManager:'pnpm@12.15.0'});
  if(!lstatSync(join(game,'node_modules/@forgeax/engine'),{throwIfNoEntry:false}))symlinkSync(join(ENGINE,'packages/engine'),join(game,'node_modules/@forgeax/engine'),'dir');
  let world=readFileSync(join(PROTO,'game/assets/world.pack.ts'),'utf8').replace('const pos=[20,10,20] as const;',`const pos=${JSON.stringify([c[0]+r/Math.sqrt(2),c[1]+h,c[2]+r/Math.sqrt(2)])} as const;`).replace('[0,5,0]',JSON.stringify(c));writeFileSync(join(assets,'world.pack.ts'),world);
+ writeFileSync(join(assets,'capture-telemetry.ts'),readFileSync(join(ROOT,'src/native/capture-telemetry.ts')));
  writeFileSync(join(assets,'camera.plugin.ts'),readFileSync(join(ROOT,'src/camera-v3.txt')));
  writeFileSync(join(assets,'ui.plugin.ts'),readFileSync(join(ROOT,'src/ui-v3.txt')));
  save(join(assets,'scene-audit.json'),{name:plan.name,channelId:brief.packageId,specSha256:SPEC.sha256,camera:b,parts:recipe.objects.map((o:any)=>({id:o.id,entityId:o.entityId})),entities:recipe.semanticEntities,landmarks:recipe.objects.filter((o:any)=>o.role!=='ground').map((o:any)=>({id:o.id,entityId:o.entityId,position:[o.position[0],o.position[2]+o.size[2]/2,-o.position[1]],size:o.size,role:o.role}))});

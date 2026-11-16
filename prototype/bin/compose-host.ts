@@ -10,6 +10,14 @@ import { join, relative } from 'node:path';
 export const HOST_PACKAGE_ID = '5ce7e000-0000-7000-8000-000000000001';
 const camel = (id: string) => id.replace(/-(\w)/g, (_, c) => c.toUpperCase());
 
+/** The same migration is used when refreshing controls in a copied saved project. */
+export function composePluginSource(source:string,id:string){
+ if((source.match(/^export default \{/gm)??[]).length!==1)throw Error('compose-host: plugin must have one default plugin export');
+ const usesScene=/defaultSceneRoot/.test(source);source=source.replace(/^export default \{/m,`export const ${camel(id)}={`);
+ if(usesScene){source=source.replace(/(?:ctx\.gameHost|host)\??\.defaultSceneRoot/g,'ctx.gameScene.root').replace(/inject:\s*\[([^\]]*)\]/,(_,l)=>`inject:[${l},'gameScene']`);source="import type {} from './scene-refs.ts';\n"+source;}
+ return source;
+}
+
 export async function composeHost(game: string, engineRoot: string) {
   const configPath = join(game, 'forge.json'), cfg = JSON.parse(readFileSync(configPath, 'utf8'));
   if (cfg.schemaVersion === '3.0.0') return cfg.roots;
@@ -23,13 +31,8 @@ export async function composeHost(game: string, engineRoot: string) {
   for (const p of cfg.plugins) {
     const file = join(game, p.name), name = camel(p.id);
     let source = readFileSync(file, 'utf8');
-    if ((source.match(/^export default \{/gm) ?? []).length !== 1) throw new Error('compose-host: ' + p.name + ' must have one default plugin export');
-    source = source.replace(/^export default \{/m, `export const ${name}={`);
     const usesScene = /defaultSceneRoot/.test(source);
-    if (usesScene) {
-      source = source.replace(/(?:ctx\.gameHost|host)\??\.defaultSceneRoot/g, 'ctx.gameScene.root').replace(/inject:\s*\[([^\]]*)\]/, (_, l) => `inject:[${l},'gameScene']`);
-      source = "import type {} from './scene-refs.ts';\n" + source;
-    }
+    source=composePluginSource(source,p.id);
     writeFileSync(file, source);
     entries['plugin/' + p.id] = { kind: 'plugin', module: { specifier: './' + relative(assets, file), export: name } };
     if (p.realm === 'frontend') frontend = guid('plugin/' + p.id);

@@ -45,7 +45,7 @@ export async function prepareSpecProject(root:string,spec:SceneSpec,options:{id?
 
  const world=emitSpecWorld(spec,{worldPackageId:'60fb39fb-420e-4aa5-8189-fd9c4d8369e7',stateId:options.stateId});
  save(join(root,'lighting-export.json'),{version:'spec-lighting-v1',state:options.stateId??spec.lighting.defaultState,components:world.components,planarReflection:world.planar,deferred:world.deferred});
- copyFileSync(join(W,'src/camera-v3.txt'),join(assets,'camera.plugin.ts'));copyFileSync(join(W,'src/ui-v3.txt'),join(assets,'ui.plugin.ts'));
+ copyFileSync(join(W,'src/native/capture-telemetry.ts'),join(assets,'capture-telemetry.ts'));copyFileSync(join(W,'src/camera-v3.txt'),join(assets,'camera.plugin.ts'));copyFileSync(join(W,'src/ui-v3.txt'),join(assets,'ui.plugin.ts'));
  writeFileSync(join(assets,'concept-look.plugin.ts'),conceptLookPlugin(world.entities));cfg.plugins.push({id:'concept-look',name:'./assets/concept-look.plugin.ts',realm:'engine',inject:['world','gameHost']});save(join(game,'forge.json'),cfg);
  if(world.planarPlugin){
   writeFileSync(join(assets,'planar-reflection.plugin.ts'),world.planarPlugin);
