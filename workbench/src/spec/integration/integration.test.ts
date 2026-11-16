@@ -50,7 +50,16 @@ it('refuses a changed binary and leaves the existing game untouched',async()=>{
  await expect(adoptCandidate(request)).rejects.toThrow('CANDIDATE_MESH_DRIFT');expect(readFileSync(join(f.game,'assets/original.pack.ts'),'utf8')).toBe(f.original);expect(existsSync(join(f.game,'assets/original.pipeline-base.ts'))).toBe(false);
  }finally{rmSync(f.root,{recursive:true,force:true});}
 });
-import {environmentWrapperFragment} from './environment-adoption';
+import {environmentWrapperFragment,installEnvironmentSources} from './environment-adoption';
+import {AssetGuid} from '@forgeax/engine/pack/guid';import {definePackageId} from '@forgeax/engine/pack/source';
+it('render profile has its own deterministic pack identity and build root',()=>{
+ const root=mkdtempSync(join(tmpdir(),'pipeline-profile-pack-'));try{
+  const revision='r1',dest=join(root,'assets/pipeline-revisions',revision),packageId='019fb7ce-1100-7000-8000-000000000001';mkdirSync(dest,{recursive:true});writeFileSync(join(root,'forge.json'),JSON.stringify({roots:{engine:'old'}}));
+  const guid=installEnvironmentSources(root,'unused',dest,revision,packageId,'scene/old',{volumetric:false,profile:{tonemap:true}},null);
+  const distinct=AssetGuid.format(AssetGuid.derive(definePackageId(packageId),'package/render-profile'));
+  expect(distinct).not.toBe(packageId);expect(readFileSync(join(dest,'render-profile.pack.ts'),'utf8')).toContain('definePackageId('+JSON.stringify(distinct)+')');expect(guid).toBe(AssetGuid.format(AssetGuid.derive(definePackageId(distinct),'plugin/render-profile')));expect(JSON.parse(readFileSync(join(root,'forge.json'),'utf8')).roots.build).toBe(guid);
+ }finally{rmSync(root,{recursive:true,force:true});}
+});
 it('adopts explicit pipeline lighting and camera effects without replacing geometry or camera transforms',()=>{
  const x=environmentWrapperFragment({removeKeys:['oldSky'],components:['Camera','Name','Transform','SpotLight','Skylight'],entities:{camera:{components:{Camera:{exposure:.8},Transform:{pos:[1,2,3]},Name:{value:'capture'}}},ambient:{components:{Skylight:{intensity:.1}}}}});
  expect(x.body).toContain('ENV_WOULD_REMOVE_GEOMETRY');expect(x.body).toContain('"exposure":0.8');expect(x.body).not.toContain('"pos"');expect(x.definition).toContain('RenderComponents');

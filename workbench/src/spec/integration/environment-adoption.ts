@@ -18,7 +18,10 @@ export function installEnvironmentSources(game:string,candidate:string,dest:stri
  else writeFileSync(join(game,'assets/pipeline-revisions/active-effects.ts'),'export function installPipelineEffects(_ctx:any,_root:any){return ()=>{};}\n');
  const cfg=JSON.parse(readFileSync(join(game,'forge.json'),'utf8'));
  if(cfg.roots.build&&cfg.roots.build!==previous?.buildRoot)throw Error('EXISTING_BUILD_ROOT_NEEDS_COMPOSITION');
- const guid=AssetGuid.format(AssetGuid.derive(definePackageId(packageId),'plugin/render-profile'));
- writeFileSync(join(dest,'render-profile.pack.ts'),`import type {} from '@forgeax/engine/devkit/plugin-build';\nimport type {Plugin} from '@forgeax/engine/plugin';\nimport {definePack,definePackageId} from '@forgeax/engine/pack/source';\nimport {ok} from '@forgeax/engine/types';\nexport const pipelineRenderProfile={name:'pipeline/render-profile',provide:['devkitAppOptions'],apply(ctx){ctx.provide('devkitAppOptions',{standardProfile:${JSON.stringify(env.profile)}} as any);}} satisfies Plugin;\nexport default definePack({schemaVersion:'2.0.0',packageId:definePackageId(${JSON.stringify(packageId)}),plugins:true,build:()=>ok({'plugin/render-profile':{kind:'plugin',module:{specifier:'./render-profile.pack.ts',export:'pipelineRenderProfile'}}})});\n`);
+ // Each ScriptablePack owns a root GUID as well as its emitted asset GUIDs.
+ // A second file with the mesh pack's packageId collides before any asset loads.
+ const profilePackageId=AssetGuid.format(AssetGuid.derive(definePackageId(packageId),'package/render-profile'));
+ const guid=AssetGuid.format(AssetGuid.derive(definePackageId(profilePackageId),'plugin/render-profile'));
+ writeFileSync(join(dest,'render-profile.pack.ts'),`import type {} from '@forgeax/engine/devkit/plugin-build';\nimport type {Plugin} from '@forgeax/engine/plugin';\nimport {definePack,definePackageId} from '@forgeax/engine/pack/source';\nimport {ok} from '@forgeax/engine/types';\nexport const pipelineRenderProfile={name:'pipeline/render-profile',provide:['devkitAppOptions'],apply(ctx){ctx.provide('devkitAppOptions',{standardProfile:${JSON.stringify(env.profile)}} as any);}} satisfies Plugin;\nexport default definePack({schemaVersion:'2.0.0',packageId:definePackageId(${JSON.stringify(profilePackageId)}),plugins:true,build:()=>ok({'plugin/render-profile':{kind:'plugin',module:{specifier:'./render-profile.pack.ts',export:'pipelineRenderProfile'}}})});\n`);
  cfg.roots.build=guid;writeFileSync(join(game,'forge.json'),JSON.stringify(cfg,null,2)+'\n');return guid;
 }
