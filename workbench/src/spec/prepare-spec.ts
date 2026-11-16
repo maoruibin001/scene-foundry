@@ -65,12 +65,11 @@ export async function prepareSpecProject(root:string,spec:SceneSpec,options:{id?
   writeFileSync(join(assets,'projected-decals.plugin.ts'),projectedDecalPlugin(plan.decals));
   cfg.plugins.push({id:'projected-decals',name:'./assets/projected-decals.plugin.ts',realm:'engine',inject:['world','gameHost','assets']});save(join(game,'forge.json'),cfg);
  }
- // 保留体积光的轮廓采样质量:旧 low/tile16 的1/8雾缓冲产生大块深度边界，TAA无法补回。
- // 使用SDK细网格与8邻域重建，保持48层深度与光照档32；像素预算由预览单独显式选择。
+ // 性能档(引擎会话 2026-11-06 建议):体积雾低画质、光照档 32;ProjectedDecal 与漫反射 GI 均要求 deferred 管线。
  const hasDecals=(spec.decals?.length??0)>0;
  const activePost=spec.lighting.states.find(s=>s.id===(options.stateId??spec.lighting.defaultState))!.post;
  const requiresDeferred=hasDecals||activePost.gtao||Boolean(activePost.ssr);
- const perfProfile={...DEFAULT_STANDARD_PROFILE,...(requiresDeferred?{renderPath:'deferred' as const}:{}),...(process.env.SPEC_RENDER_PATH?{renderPath:process.env.SPEC_RENDER_PATH}:{}),lightCount:32,volumetricFog:{quality:'high',depth:48,tileSize:4}};
+ const perfProfile={...DEFAULT_STANDARD_PROFILE,...(requiresDeferred?{renderPath:'deferred' as const}:{}),...(process.env.SPEC_RENDER_PATH?{renderPath:process.env.SPEC_RENDER_PATH}:{}),lightCount:32,volumetricFog:{quality:'low',depth:48,tileSize:16}};
  // 漫反射 GI:渲染器配置只能在构建期由 build 插件给出;默认 profile + 延迟渲染 + irradiance-field。
  const giState=spec.lighting.states.find(s=>s.id===(options.stateId??spec.lighting.defaultState))!.post.gi;
  if(!giState){
