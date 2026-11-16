@@ -14,3 +14,12 @@ test('constant optical transport at one depth preserves energy with fewer ray ev
  expect(r.fullPixels).toBe(0);expect(r.integrations).toBe(w*h/64);expect(Math.max(...r.result.map((v,n)=>Math.abs(v-shade(n%w,Math.floor(n/w),30))))).toBeLessThan(1e-12);
 });
 test('invalid depth is rejected instead of inventing optical transport',()=>{expect(()=>adaptiveResolve(1,1,new Float64Array([NaN]),fog)).toThrow();});
+
+test('dense fallback jobs preserve every optical result across odd extents, thin objects and a subsequent zero-job frame',()=>{
+ for(const [w,h]of [[33,23],[1,1],[16,16]]){
+  const depths=Float64Array.from({length:w*h},(_,i)=>(i%w===11||i===0)?12:90),optics=(x:number,y:number,d:number)=>fog(x,y,d)+x*.0001+y*.0002;
+  const inline=adaptiveResolve(w,h,depths,optics),dense=adaptiveResolve(w,h,depths,optics,true);
+  expect([...dense.result]).toEqual([...inline.result]);expect(new Set(dense.jobs).size).toBe(dense.fullPixels);expect(dense.jobs.every(n=>n>=0&&n<w*h)).toBe(true);
+  const next=adaptiveResolve(w,h,new Float64Array(w*h).fill(20),fog,true);expect(next.jobs).toHaveLength(0);expect(next.fullPixels).toBe(0);
+ }
+});

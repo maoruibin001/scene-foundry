@@ -40,6 +40,8 @@ var<private> volume_owner : u32;
 @group(0) @binding(6) var density : texture_3d<f32>;
 @group(0) @binding(7) var density_sampler : sampler;
 @group(0) @binding(8) var coarse_volume : texture_storage_2d<rgba16float, read>;
+@group(0) @binding(30) var<storage, read_write> fallback_jobs : array<vec2<u32>>;
+@group(0) @binding(31) var<storage, read_write> fallback_count : atomic<u32>;
 @group(0) @binding(9) var temporal_seed : texture_storage_2d<rgba16float, write>;
 @group(0) @binding(10) var<storage, read> light_data : array<DirectLightSlot, 256>;
 @group(0) @binding(11) var<uniform> cluster_uniform : ClusterUniform;
@@ -355,9 +357,6 @@ fn integrate_volume_ray(uv : vec2<f32>) -> vec4<f32> {
     let ray_step = (interval_end - interval_start) / f32(ray_step_count);
     for (var step = 0u; step < ray_step_count; step = step + 1u) {
       let segment_start = interval_start + f32(step) * ray_step;
-      // The remaining ordered segments are all occluded too. Their original
-      // clamped length is zero; avoid walking the rest of the 96-step loop.
-      if (segment_start >= clipped_far) { break; }
       let segment_length = clamp(clipped_far - segment_start, 0.0, ray_step);
       if (segment_length > 0.0) {
         // Near a punctual source, inverse-square falloff and the spot cone
@@ -427,14 +426,11 @@ fn integrate_volume_ray(uv : vec2<f32>) -> vec4<f32> {
             mix(1.0, shadow_visibility, volume_spot_shadow_intensity()),
             mode == 2u || mode == 3u,
             );
-            // WGSL select evaluates both operands. Evaluate only the selected
-            // optical lighting path, preserving the original selected value.
-            var radiance = vec3<f32>(0.0);
-            if (mode == 3u) {
-              radiance = volume_light_radiance_pair(world_position, visibility);
-            } else {
-              radiance = volume_light_radiance(world_position) * visibility;
-            }
+            let radiance = select(
+            volume_light_radiance(world_position) * visibility,
+            volume_light_radiance_pair(world_position, visibility),
+            mode == 3u,
+            );
             let sigma = sigma_scale * density_value;
             extinction += sigma;
             source += radiance * volume_params.albedo.xyz * phase * VOLUME_LIGHT_PHASE_SCALE *
@@ -492,7 +488,7 @@ fn matched_optics(uv : vec2<f32>) -> vec4<f32> {
   if (weight > 1e-5) { return sum / weight; }
   // A thin foreground pixel may not occur at ANY coarse center. Reintegrate
   // with its own observed depth. Never borrow background fog or invent vacuum.
-  return integrate_volume_ray(uv);
+  return vec4<f32>(0.0, 0.0, 0.0, -1.0);
 }
 
 @compute @workgroup_size(8, 8, 1)
@@ -509,5 +505,22 @@ fn volume_integrate(@builtin(global_invocation_id) id : vec3<u32>) {
   if (any(id.xy >= size)) { return; }
   let uv = (vec2<f32>(id.xy) + vec2<f32>(0.5)) / vec2<f32>(size);
   let result = matched_optics(uv);
-  textureStore(resolved, id.xy, result);
+  if (result.a >= 0.0) {
+    textureStore(resolved, id.xy, result);
+  } else {
+    let job = atomicAdd(&fallback_count, 1u);
+    fallback_jobs[job] = id.xy;
+  }
+}
+
+// Dense jobs keep the large optical integration program off the ordinary
+// full-screen classification path. Every missing pixel is integrated once.
+@compute @workgroup_size(8, 8, 1)
+fn volume_integrate_fallback(@builtin(global_invocation_id) id : vec3<u32>, @builtin(num_workgroups) groups : vec3<u32>) {
+  let job = id.y * (groups.x * 8u) + id.x;
+  if (job >= atomicLoad(&fallback_count)) { return; }
+  let pixel = fallback_jobs[job];
+  let size = textureDimensions(resolved);
+  let uv = (vec2<f32>(pixel) + vec2<f32>(0.5)) / vec2<f32>(size);
+  textureStore(resolved, pixel, integrate_volume_ray(uv));
 }
