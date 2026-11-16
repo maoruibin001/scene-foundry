@@ -6,6 +6,7 @@ import {callSpecNode,validateNodeModels} from './spec/node-models';
 import {VISUAL_SCHEMA,verifiedVisualReview,visualReferences} from './spec/visual-review';
 import {STYLE_SYSTEM,styleGate} from './spec-run';
 import {specReviewRuntime} from './spec/review-runtime';
+import {VISUAL_PANEL_MODEL,VISUAL_PANEL_SELECTION} from './spec/visual-panel-config';
 const active=new Set<string>();
 /** A user-requested assessment of existing immutable output; never rebuilds or replaces the output. */
 export function startSpecReview(id:string,selection:unknown){
@@ -13,8 +14,8 @@ export function startSpecReview(id:string,selection:unknown){
  const {runtime,diagnosticOnly}=specReviewRuntime(job,runDir(id));
  if(active.has(id))throw Error('该场景已有视觉评审进行中');
  const refs=visualReferences<any>(job.styleImages??[]);
- const model=validateNodeModels({styleReview:selection}).styleReview;
- if(model.provider==='cbc4')throw Error('VISUAL_ROUTE_UNSUPPORTED：cbc4 当前未通过看图验证');
+ const model=validateNodeModels({styleReview:selection??VISUAL_PANEL_SELECTION}).styleReview;
+ if(model.model!==VISUAL_PANEL_MODEL)throw Error('VISUAL_ROUTE_UNSUPPORTED：请选择 codex1 / codex2 / codex3 联合评审');
  active.add(id);const reviewId=randomUUID(),dir=join(runDir(id),'visual-reviews',reviewId);mkdirSync(dir,{recursive:true});
  job.visualReviewState={id:reviewId,status:'running',model,startedAt:new Date().toISOString()};saveJob(job);
  void (async()=>{try{
@@ -26,7 +27,7 @@ export function startSpecReview(id:string,selection:unknown){
   const input=images.map((im,i)=>({index:i,sha256:digest(readFileSync(im.path)),mime:im.mime}));
   save(join(dir,'input.json'),{distManifestDigest:dist,images:input,model});
   const result=await callSpecNode({role:'spec-style-judge',system:STYLE_SYSTEM,text:JSON.stringify({scene:JSON.parse(readFileSync(join(runDir(id),'scene-spec.json'),'utf8')).name,conceptImages:refs.map((im:any)=>im.caption??im.name),screenshots:shots,shotLabels:JSON.parse(readFileSync(join(runDir(id),'project/game/assets/scene-audit.json'),'utf8')).views.map((v:any)=>v.name)}),images,signal:AbortSignal.timeout(240000)},dir,model,VISUAL_SCHEMA);
-  const value=verifiedVisualReview(JSON.parse(result.text),images.length),gate=styleGate(value);
+  const value=verifiedVisualReview(JSON.parse(result.text),images.length);if(value.panel)value.panel.basePath=`visual-reviews/${reviewId}`;const gate=styleGate(value);
   if(digest(readFileSync(join(runDir(id),'project/game/dist/forgeax-dist.json')))!==dist)throw Error('评审期间输出发生变化');
   const receipt={...value,id:reviewId,model,route:result.receipt,distManifestDigest:dist,input,diagnosticOnly,runtimeStatus:job.status,completedAt:new Date().toISOString()};save(join(dir,'review.json'),receipt);
   if(diagnosticOnly){const current=getJob(id);current.visualReviews??=[];current.visualReviews.push({id:reviewId,file:`visual-reviews/${reviewId}/review.json`,overall:value.overall,distManifestDigest:dist,diagnosticOnly:true});current.diagnosticVisualReview={...value,file:`visual-reviews/${reviewId}/review.json`,diagnosticOnly:true};current.visualReviewState={id:reviewId,status:'completed',model,diagnosticOnly:true};saveJob(current);event(current,'diagnostic-visual-review','仅评审保留画面，运行与交付失败状态未更改');return;}

@@ -9,6 +9,7 @@ import {callClaude10,CLAUDE10_MODEL,claude10Message} from '../claude10-provider'
 import {captureCodexProcess} from '../codex-process';
 import {modelTimeoutPolicy} from '../model-selection';
 import {reconstructionPython} from '../runtime-paths.mjs';
+import {VISUAL_PANEL_MODEL,VISUAL_PANEL_SELECTION} from './visual-panel-config';
 
 export const NODE_IDS=['families','objects','staging','parameterRepair','styleReview'] as const;
 export const CBC5_MODELS=['hy4flash-dev'] as const;
@@ -23,7 +24,8 @@ export function validateNodeModels(value:unknown):NodeModels{
  const input=(value??{}) as Record<string,unknown>;
  for(const k of Object.keys(input))if(!NODE_IDS.includes(k as NodeId))throw Error('未知模型节点: '+k);
  return Object.fromEntries(NODE_IDS.map(id=>{
-  const raw=(input[id]??(id==='styleReview'?{provider:'cbc5',model:'hy4flash-dev',reasoningEffort:'medium'}:id==='parameterRepair'?input.families??defaults:defaults)) as any;
+  const raw=(input[id]??(id==='styleReview'?VISUAL_PANEL_SELECTION:id==='parameterRepair'?input.families??defaults:defaults)) as any;
+  if(raw?.model===VISUAL_PANEL_MODEL){if(id!=='styleReview'||raw.provider!==VISUAL_PANEL_SELECTION.provider||raw.reasoningEffort!==VISUAL_PANEL_SELECTION.reasoningEffort)throw Error('联合评审只能用于视觉节点且配置必须冻结');return [id,{...VISUAL_PANEL_SELECTION}];}
   const efforts=(['cbc4','cbc5'].includes(raw?.provider)||raw?.provider==='codex'&&raw?.model==='gpt-6-luna')?['medium','high','xhigh']:['high','xhigh'];
   if(!raw||!['claude10','codex','cbc4','cbc5'].includes(raw.provider)||typeof raw.model!=='string'||!/^[A-Za-z0-9._:/-]{1,120}$/.test(raw.model)||!efforts.includes(raw.reasoningEffort))throw Error('节点 '+id+' 的模型配置无效');
   if(raw.provider==='claude10'&&raw.model!==CLAUDE10_MODEL)throw Error('claude10 模型必须为 '+CLAUDE10_MODEL);
@@ -64,7 +66,8 @@ export function parseCbcResult(stdout:string,model:string){
 }
 export async function callSpecNode(input:NodeRequest,dir:string,selection:NodeModel,schema:any){
  if(input.role==='spec-style-judge'&&selection.provider==='codex'&&process.env.PIPELINE_VISUAL_HOLD_REASON)throw Error('VISUAL_REVIEW_HELD：'+process.env.PIPELINE_VISUAL_HOLD_REASON);
- if(input.role==='spec-style-judge'&&selection.provider==='cbc4')throw Error('VISUAL_ROUTE_UNSUPPORTED：当前 cbc4 路由未通过看图验证，请明确选择 codex6 或 claude10 视觉节点');
+ if(input.role==='spec-style-judge'&&selection.model===VISUAL_PANEL_MODEL){const {runVisualPanel}=await import('./visual-panel');return runVisualPanel(input,dir);}
+ if(input.role==='spec-style-judge'&&['cbc4','cbc5'].includes(selection.provider))throw Error('VISUAL_ROUTE_UNSUPPORTED：视觉评审已改用 codex1 / codex2 / codex3 原图联合评审');
  return useModelPermit(input.role,input.signal,()=>callSpecNodeInner(input,dir,selection,schema));
 }
 async function callSpecNodeInner(input:NodeRequest,dir:string,selection:NodeModel,schema:any){

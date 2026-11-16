@@ -65,7 +65,7 @@ export {VISUAL_SCHEMA as STYLE_SCHEMA} from './spec/visual-review';
 export const STYLE_SYSTEM=`你是游戏美术总监,独立评审一个程序化生成的三维场景是否还原了概念图的整体感觉。前面若干张是概念图(风格参照,不是几何目标),后面是真实引擎实际截图。
 只评整体感觉:光影基调与光源因果(lighting)、材质质感(material)、氛围与空气感(atmosphere)、构图与空间尺度(composition)、标志性主体是否成立(subject:以规格和参考图中的主体为准)、画面密度与细节(density)。允许位置有偏差、细节不逐一对齐;不要因为缺少概念图中未要求的玩法或特效元素扣分。
 每维 0..5 分;overall 0..100 表示整体感觉还原度;verdict:match=整体感觉对、partial=部分对、mismatch=不对。strengths/issues 具体到画面元素。不采信任何作者自述,只看图。先逐张给出可见的具体形状、光色和空间遮挡观察，imageIndex 从 0 开始，必须覆盖每张输入图。看不到像素时 evidence.status=unavailable、overall=null、verdict=unavailable，不给占位分。全部用中文。`;
-export function styleGate(r:any){const low=r.dimensions.filter((d:any)=>d.score<STYLE_PASS.minDimension).map((d:any)=>d.id);return {passed:r.overall>=STYLE_PASS.overall&&r.verdict!=='mismatch'&&!low.length,low};}
+export function styleGate(r:any){const low=r.dimensions.filter((d:any)=>d.score<STYLE_PASS.minDimension).map((d:any)=>d.id);return {passed:r.overall>=STYLE_PASS.overall&&r.verdict!=='mismatch'&&!low.length&&(!r.panel||r.panel.complete===true),low};}
 
 export async function runSpec({job,dir,stage,command,preview,signal}:any){
  const nodeModels=validateNodeModels(job.nodeModels);
