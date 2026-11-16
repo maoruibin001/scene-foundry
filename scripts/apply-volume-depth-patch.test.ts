@@ -15,6 +15,27 @@ test('coarse and depth resolve use the same admitted module but retain distinct 
  const source={};const coarse=compute({},source,'volume_integrate_coarse'),resolve=compute({},source,'volume_integrate');expect(labels).toEqual(['volume_integrate','volume_integrate']);expect(owner.compute.size).toBe(2);expect(coarse.module).toBe(resolve.module);
 });
 
+test('dense fallback graph resets each frame and orders job production before consumption',()=>{
+ const ops=JSON.parse(readFileSync(join(patch,'runtime-replacements.json'),'utf8'));
+ const source=ops.find((o:any)=>o.new.startsWith('function addVolumetricFogPasses(')).new.split('\n\n// src/pipeline/')[0];
+ const addPasses=new Function('VOLUME_PACKING_Z','return ('+source+'\n)')(4),calls:any[]=[];
+ const graph=Object.fromEntries(['addComputePass','addCopyPass','addRasterPass'].map(kind=>[kind,(name:string,descriptor:any)=>{calls.push({kind,name,...descriptor});return {ok:true};}]));
+ const result=addPasses(graph,{resources:{extent:{width:33,height:23,depth:48},resolvedExtent:{width:33,height:23},coarseExtent:{width:5,height:3},fallbackJobs:'jobs',fallbackCount:'count'},linearHdr:{view:'hdr'}});
+ expect(result.ok).toBe(true);
+ const names=calls.map(c=>c.name);expect(names.indexOf('volume-fallback-reset')).toBeLessThan(names.indexOf('volume-integrate'));expect(names.indexOf('volume-integrate')).toBeLessThan(names.indexOf('volume-integrate-fallback'));expect(names.indexOf('volume-integrate-fallback')).toBeLessThan(names.indexOf('volume-temporal'));
+ const reset=calls.find(c=>c.name==='volume-fallback-reset'),writes:any[]=[];
+ for(let frame=0;frame<2;frame++)reset.encodeDirect(null,{runtime:{device:{queue:{writeBuffer:(buffer:any,offset:number,bytes:Uint32Array)=>{writes.push({buffer,offset,bytes:[...bytes]});return {unwrap:()=>{}};}}}}},{buffer:(id:string)=>{expect(id).toBe('count');return {unwrap:()=>'actual-count-buffer'};}});
+ expect(writes).toEqual([{buffer:'actual-count-buffer',offset:0,bytes:[0]},{buffer:'actual-count-buffer',offset:0,bytes:[0]}]);
+ expect(calls.find(c=>c.name==='volume-integrate').accesses).toContainEqual({resource:'jobs',usage:'storage-write'});expect(calls.find(c=>c.name==='volume-integrate-fallback').accesses).toContainEqual({resource:'jobs',usage:'storage-read'});
+});
+
+test('fallback uses two storage buffers without adding sampled textures or duplicating bindings',()=>{
+ const ops=JSON.parse(readFileSync(join(patch,'runtime-replacements.json'),'utf8')),source=ops.find((o:any)=>o.new.startsWith('computeEntries.volume_integrate_coarse')).new.split('function computeDescriptor')[0];
+ const entries:any={volume_integrate:[{binding:8,storageTexture:{access:'write-only'}}]};new Function('computeEntries','VOLUME_RESOLVED_FORMAT',source)(entries,'rgba16float');
+ expect(entries.volume_integrate_coarse[0].storageTexture.access).toBe('write-only');
+ for(const label of ['volume_integrate','volume_integrate_fallback']){expect(entries[label].map((b:any)=>b.binding)).toEqual([8,30,31]);expect(entries[label][0].storageTexture.access).toBe('read-only');expect(entries[label].slice(1).every((b:any)=>b.buffer.type==='storage')).toBe(true);}
+});
+
 test('post-prepare witness revalidation also resolves the admitted integrate module',async()=>{
  const ops=JSON.parse(readFileSync(join(patch,'runtime-replacements.json'),'utf8'));
  const witnessOp=ops.find((o:any)=>o.new.startsWith('function witness('));expect(witnessOp).toBeDefined();
