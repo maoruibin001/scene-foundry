@@ -39,7 +39,7 @@ var<private> volume_owner : u32;
 @group(0) @binding(5) var froxel_sampler : sampler;
 @group(0) @binding(6) var density : texture_3d<f32>;
 @group(0) @binding(7) var density_sampler : sampler;
-@group(0) @binding(8) var history_seed : texture_storage_2d<rgba16float, write>;
+@group(0) @binding(8) var coarse_volume : texture_storage_2d<rgba16float, read>;
 @group(0) @binding(9) var temporal_seed : texture_storage_2d<rgba16float, write>;
 @group(0) @binding(10) var<storage, read> light_data : array<DirectLightSlot, 256>;
 @group(0) @binding(11) var<uniform> cluster_uniform : ClusterUniform;
@@ -451,66 +451,57 @@ fn integrate_volume_ray(uv : vec2<f32>) -> vec4<f32> {
   return result;
 }
 
-// Scene Foundry isolated SDK patch: v1. Keep shadow/froxel quality unchanged.
-// Resolve optical transport on the actual depth lattice. Flat 8x8 tiles share
-// four corner integrations; every depth-discontinuous tile resolves all pixels.
-// In particular a one-pixel rod participates in the min/max test, even when it
-// was absent from every old low-resolution sample. No vacuum/foreign-depth fill.
-var<workgroup> tile_min_depth : atomic<u32>;
-var<workgroup> tile_max_depth : atomic<u32>;
-var<workgroup> tile_corners : array<vec4<f32>, 4>;
+// Scene Foundry v2: retain coarse transport, reject depths before interpolation,
+// and evaluate a real ray only when no nearby coarse sample owns this depth.
 
-fn resolve_scene_distance(pixel : vec2<u32>, size : vec2<u32>) -> f32 {
-  let uv = (vec2<f32>(pixel) + vec2<f32>(0.5)) / vec2<f32>(size);
+fn matched_scene_distance(uv : vec2<f32>) -> f32 {
+  let size = textureDimensions(scene_depth);
+  let pixel = min(vec2<u32>(uv * vec2<f32>(size)), size - vec2<u32>(1u));
   let value = textureLoad(scene_depth, vec2<i32>(pixel), 0);
   if (value <= 0.0) { return max(volume_set.scene.optics.x, 1.0); }
-  let world = reconstruct_world(uv, value);
-  let distance_to_camera = distance(world, volume_view.cameraPos.xyz);
-  return clamp(distance_to_camera, 0.0, 1e8);
+  return distance(reconstruct_world(uv, value), volume_view.cameraPos.xyz);
+}
+
+fn matched_optics(uv : vec2<f32>) -> vec4<f32> {
+  let size = textureDimensions(coarse_volume);
+  let position = uv * vec2<f32>(size) - vec2<f32>(0.5);
+  let base = vec2<i32>(floor(position));
+  let fraction = fract(position);
+  let target_depth = matched_scene_distance(uv);
+  let tolerance = max(0.025, target_depth * 0.005);
+  var sum = vec4<f32>(0.0);
+  var weight = 0.0;
+  for (var j = 0i; j < 2i; j += 1i) {
+    for (var i = 0i; i < 2i; i += 1i) {
+      let pixel = clamp(base + vec2<i32>(i, j), vec2<i32>(0), vec2<i32>(size) - vec2<i32>(1));
+      let source_uv = (vec2<f32>(pixel) + vec2<f32>(0.5)) / vec2<f32>(size);
+      let source_depth = matched_scene_distance(source_uv);
+      let spatial = select(1.0 - fraction.x, fraction.x, i == 1i) * select(1.0 - fraction.y, fraction.y, j == 1i);
+      if (abs(source_depth - target_depth) <= tolerance) {
+        sum += textureLoad(coarse_volume, pixel) * spatial;
+        weight += spatial;
+      }
+    }
+  }
+  if (weight > 1e-5) { return sum / weight; }
+  // A thin foreground pixel may not occur at ANY coarse center. Reintegrate
+  // with its own observed depth. Never borrow background fog or invent vacuum.
+  return integrate_volume_ray(uv);
 }
 
 @compute @workgroup_size(8, 8, 1)
-fn volume_integrate(
-  @builtin(global_invocation_id) id : vec3<u32>,
-  @builtin(local_invocation_index) local_index : u32,
-  @builtin(workgroup_id) group : vec3<u32>,
-) {
+fn volume_integrate_coarse(@builtin(global_invocation_id) id : vec3<u32>) {
   let size = textureDimensions(resolved);
-  let valid_pixel = all(id.xy < size);
-  let pixel = min(id.xy, size - vec2<u32>(1u));
-  if (local_index == 0u) {
-    atomicStore(&tile_min_depth, bitcast<u32>(1e8));
-    atomicStore(&tile_max_depth, 0u);
-  }
-  workgroupBarrier();
-  let depth = resolve_scene_distance(pixel, size);
-  atomicMin(&tile_min_depth, bitcast<u32>(depth));
-  atomicMax(&tile_max_depth, bitcast<u32>(depth));
-  workgroupBarrier();
-  let minimum = bitcast<f32>(atomicLoad(&tile_min_depth));
-  let maximum = bitcast<f32>(atomicLoad(&tile_max_depth));
-  let discontinuous = maximum - minimum > max(0.025, minimum * 0.005);
-  var result = vec4<f32>(0.0, 0.0, 0.0, 1.0);
-  if (discontinuous) {
-    if (valid_pixel) {
-      result = integrate_volume_ray((vec2<f32>(pixel) + vec2<f32>(0.5)) / vec2<f32>(size));
-    }
-  } else if (local_index < 4u) {
-    let corner = vec2<u32>((local_index % 2u) * 7u, (local_index / 2u) * 7u);
-    let position = min(group.xy * 8u + corner, size - vec2<u32>(1u));
-    tile_corners[local_index] = integrate_volume_ray((vec2<f32>(position) + vec2<f32>(0.5)) / vec2<f32>(size));
-  }
-  // Every invocation, including a partial border tile, reaches both barriers.
-  workgroupBarrier();
-  if (!valid_pixel) { return; }
-  if (!discontinuous) {
-    let fraction = vec2<f32>(id.xy % vec2<u32>(8u)) / 7.0;
-    result = mix(mix(tile_corners[0], tile_corners[1], fraction.x),
-                 mix(tile_corners[2], tile_corners[3], fraction.x), fraction.y);
-  }
+  if (any(id.xy >= size)) { return; }
+  let uv = (vec2<f32>(id.xy) + vec2<f32>(0.5)) / vec2<f32>(size);
+  textureStore(resolved, id.xy, integrate_volume_ray(uv));
+}
+
+@compute @workgroup_size(8, 8, 1)
+fn volume_integrate(@builtin(global_invocation_id) id : vec3<u32>) {
+  let size = textureDimensions(resolved);
+  if (any(id.xy >= size)) { return; }
+  let uv = (vec2<f32>(id.xy) + vec2<f32>(0.5)) / vec2<f32>(size);
+  let result = matched_optics(uv);
   textureStore(resolved, id.xy, result);
-  if (volume_set.scene.optics.w < 0.5) {
-    textureStore(history_seed, id.xy, result);
-    textureStore(temporal_seed, id.xy, result);
-  }
 }

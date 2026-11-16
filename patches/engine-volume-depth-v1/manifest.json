@@ -1,5 +1,5 @@
 {
-  "id": "engine-volume-depth-v1",
+  "id": "engine-volume-depth-v2",
   "base": "@forgeax/engine@0.5.0-rc.1",
   "files": [
     {
@@ -10,8 +10,7 @@
     {
       "path": "node_modules/@forgeax/engine/node_modules/@forgeax/engine-render/dist/chunk-RJMIUFAJ.mjs",
       "before": "c0622e8077982ffa3f877e0fe965e852aa9b216686bc79856dc5291940cb6cec",
-      "old": "function deriveVolumetricFogResolvedExtent(surface, froxelTileSize = 4) {\n  const resolveTileSize = froxelTileSize === 4 ? 8 : Math.max(1, froxelTileSize);\n  return deriveVolumetricFogExtent(surface, 1, resolveTileSize);\n}",
-      "new": "function deriveVolumetricFogResolvedExtent(surface, froxelTileSize = 4) {\n  // Optical reconstruction owns screen-depth pixels; shadow froxels remain coarse.\n  return { width: Math.max(1, Math.ceil(surface.width)), height: Math.max(1, Math.ceil(surface.height)), depth: 1 };\n}"
+      "replacements": "runtime-replacements.json"
     }
   ]
 }
