@@ -355,6 +355,9 @@ fn integrate_volume_ray(uv : vec2<f32>) -> vec4<f32> {
     let ray_step = (interval_end - interval_start) / f32(ray_step_count);
     for (var step = 0u; step < ray_step_count; step = step + 1u) {
       let segment_start = interval_start + f32(step) * ray_step;
+      // The remaining ordered segments are all occluded too. Their original
+      // clamped length is zero; avoid walking the rest of the 96-step loop.
+      if (segment_start >= clipped_far) { break; }
       let segment_length = clamp(clipped_far - segment_start, 0.0, ray_step);
       if (segment_length > 0.0) {
         // Near a punctual source, inverse-square falloff and the spot cone
@@ -424,11 +427,14 @@ fn integrate_volume_ray(uv : vec2<f32>) -> vec4<f32> {
             mix(1.0, shadow_visibility, volume_spot_shadow_intensity()),
             mode == 2u || mode == 3u,
             );
-            let radiance = select(
-            volume_light_radiance(world_position) * visibility,
-            volume_light_radiance_pair(world_position, visibility),
-            mode == 3u,
-            );
+            // WGSL select evaluates both operands. Evaluate only the selected
+            // optical lighting path, preserving the original selected value.
+            var radiance = vec3<f32>(0.0);
+            if (mode == 3u) {
+              radiance = volume_light_radiance_pair(world_position, visibility);
+            } else {
+              radiance = volume_light_radiance(world_position) * visibility;
+            }
             let sigma = sigma_scale * density_value;
             extinction += sigma;
             source += radiance * volume_params.albedo.xyz * phase * VOLUME_LIGHT_PHASE_SCALE *
