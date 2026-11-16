@@ -52,6 +52,16 @@ it('refuses a changed binary and leaves the existing game untouched',async()=>{
 });
 import {environmentWrapperFragment,installEnvironmentSources} from './environment-adoption';
 import {AssetGuid} from '@forgeax/engine/pack/guid';import {definePackageId} from '@forgeax/engine/pack/source';
+import {definePack} from '@forgeax/engine/pack/source';import * as RenderComponents from '@forgeax/engine/render';
+it('merges normalized base component declarations by name and refuses schema drift',()=>{
+ const base=definePack({schemaVersion:'2.0.0',packageId:definePackageId('019fb7ce-1100-7000-8000-000000000001'),sceneComponents:[RenderComponents.Camera],build:()=>({ok:true,value:{}})} as any);
+ const x=environmentWrapperFragment({removeKeys:[],components:['Camera','Skylight'],entities:{camera:{components:{Camera:{}}}}});
+ const code=new Bun.Transpiler({loader:'ts'}).transformSync('return ({'+x.definition+'});');
+ const create=new Function('base','RenderComponents',code),merged=create(base,RenderComponents);
+ expect(merged.sceneComponents.map((c:any)=>c.name)).toEqual(['Camera','Skylight']);
+ expect(()=>definePack({...base,...merged})).not.toThrow();
+ const drift={...base,sceneComponents:[{name:'Camera',fields:{incompatible:'f32'}}]};expect(()=>create(drift,RenderComponents)).toThrow('ENV_COMPONENT_SCHEMA_CONFLICT');
+});
 it('render profile has its own deterministic pack identity and build root',()=>{
  const root=mkdtempSync(join(tmpdir(),'pipeline-profile-pack-'));try{
   const revision='r1',dest=join(root,'assets/pipeline-revisions',revision),packageId='019fb7ce-1100-7000-8000-000000000001';mkdirSync(dest,{recursive:true});writeFileSync(join(root,'forge.json'),JSON.stringify({roots:{engine:'old'}}));
