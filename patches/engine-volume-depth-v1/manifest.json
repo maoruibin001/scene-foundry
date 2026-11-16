@@ -1,5 +1,5 @@
 {
-  "id": "engine-volume-depth-v3",
+  "id": "engine-volume-depth-v2",
   "base": "@forgeax/engine@0.5.0-rc.1",
   "files": [
     {
@@ -11,11 +11,6 @@
       "path": "node_modules/@forgeax/engine/node_modules/@forgeax/engine-render/dist/chunk-RJMIUFAJ.mjs",
       "before": "c0622e8077982ffa3f877e0fe965e852aa9b216686bc79856dc5291940cb6cec",
       "replacements": "runtime-replacements.json"
-    },
-    {
-      "path": "node_modules/@forgeax/engine/node_modules/@forgeax/engine-shader/src/volume/volume-composite.wgsl",
-      "before": "72774dc88a82b51f3b5646bada576a33a845c4b7684a10971a488e266db6c818",
-      "replacement": "volume-composite.wgsl"
     }
   ]
 }
