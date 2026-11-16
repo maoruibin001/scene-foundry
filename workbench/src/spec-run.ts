@@ -121,6 +121,8 @@ export async function runSpec({job,dir,stage,command,preview,signal}:any){
   saveJob(job);job.previewUrl=await preview(job.id);saveJob(job);const output=join(dir,'runtime');mkdirSync(output,{recursive:true});
   await command(['node',join(ROOT,'src/geometry/capture.mjs'),join(project,'game'),job.previewUrl,output],600000);
   const result=read(join(output,'runtime.json'));if(result.distManifestDigest!==report.distManifestDigest)throw Error('运行证据与构建摘要不一致');
+  const closed=read(join(output,'run.json'));if(!closed.closedAt)throw Error('CAPTURE_CLOSE_UNCONFIRMED：缺少真实 Engine closedAt');
+  result.hard.captureClosed=true;result.captureClosedAt=closed.closedAt;
   result.buildEvidence=job.stages.build.status==='passed';save(join(output,'runtime.json'),result);job.runtime=result;return result;
  });
  // 可选资产核对在真实预览之后运行，失败只留下报告，不能阻断已有出图。

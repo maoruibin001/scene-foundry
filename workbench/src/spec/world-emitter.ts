@@ -7,6 +7,7 @@ import {FogModeValue} from '@forgeax/engine/render';
 import {areaLightQuaternion} from '../geometry/area-lights';
 import {toEnginePosition,toEngineScale} from './export-pack';
 import type {SceneSpec,SpecLight,SpecLightingState,Vec3} from './schema';
+import {boundSpotIlluminance,placeReflectionProbe,type OpticalMesh} from './optical-export';
 
 const TONEMAP={aces:4,agx:5,neutral:6} as const;
 const ANTIALIAS_SMAA=4,BLOOM_ENABLED=1,AO_GTAO=1;
@@ -27,7 +28,7 @@ export function buildFogComponent(f:NonNullable<SpecLightingState['post']['fog']
  return {color,density,heightFalloff,maxOpacity,mode:FogModeValue.exp,near,far};
 }
 
-export type WorldEmit={source:string;planarPlugin:string|null;volumetricPlugin:string|null;planar:{object:string;height:number;distortion:number}|null;entities:Record<string,unknown>;components:string[];views:any[];deferred:{feature:string;reason:string}[]};
+export type WorldEmit={source:string;planarPlugin:string|null;volumetricPlugin:string|null;planar:{object:string;height:number;distortion:number}|null;entities:Record<string,unknown>;components:string[];views:any[];deferred:{feature:string;reason:string}[];opticalAudit:any};
 
 function lightEntity(l:SpecLight,shadowDistance=70){
  const pos=l.position?toEnginePosition(l.position):undefined;
@@ -35,7 +36,7 @@ function lightEntity(l:SpecLight,shadowDistance=70){
   case 'directional':return {component:'DirectionalLight',value:{Name:{value:l.id},DirectionalLight:{direction:norm(dir(l.direction!)),color:l.color,intensity:l.intensity,castShadow:l.castShadow,...(l.castShadow?{shadowDistance,mapSize:2048,cascadeCount:2,shadowFilter:2,staggerCascades:true}:{})}}};
   case 'point':return {component:'PointLight',value:{Name:{value:l.id},Transform:{pos},PointLight:{color:l.color,intensity:l.intensity,range:l.range??10}}};
   case 'spot':return {component:'SpotLight',value:{Name:{value:l.id},Transform:{pos},SpotLight:{direction:norm(dir(l.direction!)),color:l.color,intensity:l.intensity,range:l.range??20,innerConeDeg:l.innerConeDeg??20,outerConeDeg:l.outerConeDeg??30,castShadow:l.castShadow,
-   ...(l.castShadow?{mapSize:512,nearPlane:.1,farPlane:l.range??20,pcfKernelSize:3}:{})}}};
+   ...(l.castShadow?{mapSize:1024,nearPlane:.25,farPlane:l.range??20,pcfKernelSize:3}:{})}}};
   case 'area':{
    // 引擎矩形面光沿局部 +Z 发光;up 取世界上方,发光方向接近竖直时改取 +X。
    const d=norm(dir(l.direction!)),up=Math.abs(d[1])>.95?[1,0,0]:[0,1,0];
@@ -44,7 +45,7 @@ function lightEntity(l:SpecLight,shadowDistance=70){
  }
 }
 
-export function emitSpecWorld(spec:SceneSpec,opts:{worldPackageId:string;stateId?:string}):WorldEmit{
+export function emitSpecWorld(spec:SceneSpec,opts:{worldPackageId:string;stateId?:string;opticalMeshes?:OpticalMesh[]}):WorldEmit{
  const state:SpecLightingState|undefined=spec.lighting.states.find(s=>s.id===(opts.stateId??spec.lighting.defaultState));
  if(!state)throw Error('SPEC_LIGHTING_STATE_MISSING '+(opts.stateId??spec.lighting.defaultState));
  // 采集契约最多 6 个机位:对齐概念图的构图优先,其余按规格顺序;未导出的机位写进 deferred。
@@ -52,14 +53,18 @@ export function emitSpecWorld(spec:SceneSpec,opts:{worldPackageId:string;stateId
  const ranked=[...spec.shots].sort((a,b)=>Number(concept(b))-Number(concept(a))||spec.shots.indexOf(a)-spec.shots.indexOf(b));
  const shots=ranked.slice(0,MAX_CAPTURE_VIEWS),shot=shots[0],post=state.post,deferred:WorldEmit['deferred']=ranked.slice(MAX_CAPTURE_VIEWS).map(s=>({feature:'Shot:'+s.id,reason:`采集最多 ${MAX_CAPTURE_VIEWS} 个机位`}));
  const components=new Set(['Camera','Skylight','Name','Transform']);
+ const opticalAudit:any={version:'spec-optical-export-v1',lights:[],ssr:null,probePlacement:null,rangeBudget:null};
+ const probe=post.reflectionProbe===null?null:post.reflectionProbe??(post.ssr||spec.materials.some(m=>m.metallic>=.6)?{intensity:1,resolution:128}:null);
+ const probePlacement=probe?(opts.opticalMeshes?.length?placeReflectionProbe(shots.map(s=>toEnginePosition(s.position)),opts.opticalMeshes):{position:toEnginePosition(shot.position),method:'authored-camera-no-surface-verification'}):null;
+ opticalAudit.probePlacement=probePlacement;
  const camera:Record<string,unknown>={Name:{value:'Recording camera'},Transform:{pos:toEnginePosition(shot.position)},
   Camera:{fov:shot.fovDeg*Math.PI/180,aspect:16/9,near:.1,far:1000,clearColor:[...state.background,1],antialias:ANTIALIAS_SMAA,tonemap:TONEMAP[post.tonemap],
    ...(post.exposure==='auto'?{exposureMode:1,exposure:1}:{exposureMode:0,exposure:post.exposure}),
    ...(post.bloom?{bloom:BLOOM_ENABLED,bloomThreshold:post.bloom.threshold,bloomIntensity:post.bloom.intensity,bloomRadius:post.bloom.radius}:{})}};
  if(post.gtao){camera.AmbientOcclusion={algorithm:AO_GTAO,radius:.6,intensity:1.2,directLightingStrength:.4};components.add('AmbientOcclusion');}
- if(post.ssr){camera.ScreenSpaceReflection=post.ssr;components.add('ScreenSpaceReflection');}
+ if(post.ssr){camera.ScreenSpaceReflection={...post.ssr,maxRoughness:Math.min(.28,post.ssr.maxRoughness)};opticalAudit.ssr={requested:post.ssr.maxRoughness,resolved:Math.min(.28,post.ssr.maxRoughness)};components.add('ScreenSpaceReflection');}
  for(const [k,v] of Object.entries(post.cameraFx??{}))if(v){camera[k]=v;components.add(k);}
- if(post.reflectionProbe)components.add('ReflectionProbe');
+ if(probe)components.add('ReflectionProbe');
  // 引擎每台相机只有一个平面反射平面:取第一项,其余写进 deferred。目标纹理由插件在运行时创建。
  const [planar,...extraPlanar]=post.planarReflections;
  for(const p of extraPlanar)deferred.push({feature:'PlanarReflection:'+p.object,reason:'引擎每台相机只支持一个平面反射平面'});
@@ -69,7 +74,8 @@ export function emitSpecWorld(spec:SceneSpec,opts:{worldPackageId:string;stateId
   if(!post.volumetric)deferred.push({feature:'VolumetricFog',reason:'规格未开 volumetric;只用解析高度雾 Fog,无体积光柱'});}
  const volumetricPlugin=post.fog&&post.volumetric?volumetricFogPlugin({mode:process.env.SPEC_VOLFOG_MODE,lightKey:'light_'+post.fog.light.replace(/[^A-Za-z0-9_]/g,'_'),boundsMin:post.fog.boundsMin,boundsMax:post.fog.boundsMax,...post.volumetric}):null;
  const span=Math.max(spec.bounds.max[0]-spec.bounds.min[0],spec.bounds.max[1]-spec.bounds.min[1],spec.bounds.max[2]-spec.bounds.min[2]);
- const maxRange=Math.max(24,Math.min(90,Math.round(span*0.9)));
+ const diagonal=Math.hypot(...spec.bounds.max.map((v,k)=>v-spec.bounds.min[k]));
+ const maxRange=Math.max(24,Math.min(160,Math.ceil(diagonal)));opticalAudit.rangeBudget={span,diagonal,maxRange};
  const shadowDistance=Math.max(70,Math.min(180,Math.ceil(span*1.5)));
  const groundColor:Vec3=state.ambient.groundColor??(state.ambient.color.map((c,i)=>Math.min(1,Number((c*[0.42,0.46,0.54][i]!).toFixed(4)))) as Vec3);
  const entities:Record<string,unknown>={
@@ -78,17 +84,18 @@ export function emitSpecWorld(spec:SceneSpec,opts:{worldPackageId:string;stateId
   ambient:{components:{Name:{value:'Ambient'},Skylight:{color:state.ambient.color,groundColor,intensity:state.ambient.intensity}}},
   ...(fog?{fog:{components:fog}}:{}),
   // 静态反射探针覆盖整个包络,盒投影;金属环、核心球与湿地面映出大厅本身而不是空背景。
-  ...(post.reflectionProbe?{hallProbe:{components:{Name:{value:'Hall reflection probe'},Transform:{pos:toEnginePosition(spec.bounds.min.map((v,k)=>(v+spec.bounds.max[k])/2) as Vec3)},ReflectionProbe:{halfExtents:toEngineScale(spec.bounds.max.map((v,k)=>(v-spec.bounds.min[k])/2) as Vec3),priority:0,boxProjection:true,intensity:post.reflectionProbe.intensity,resolution:post.reflectionProbe.resolution,updateIntent:0,invalidationVersion:1}}}}:{}),
+  ...(probe?{environmentProbe:{components:{Name:{value:'Interior reflection probe'},Transform:{pos:probePlacement!.position},ReflectionProbe:{halfExtents:toEngineScale(spec.bounds.max.map((v,k)=>Math.max(Math.abs(v-[probePlacement!.position[0],-probePlacement!.position[2],probePlacement!.position[1]][k]),Math.abs(spec.bounds.min[k]-[probePlacement!.position[0],-probePlacement!.position[2],probePlacement!.position[1]][k]))) as Vec3),priority:0,boxProjection:true,intensity:probe.intensity,resolution:probe.resolution,updateIntent:0,invalidationVersion:1}}}}:{}),
  };
  // 引擎 0.5 的 irradiance-field GI 不接受矩形面光(ray-reference-invalid: analytic area lights are not admitted);
  // 开 GI 时把面光换成同位置同朝向的宽角聚光灯,强度按面积折算,并记入 deferred。
  // SPEC_GI_KEEP_AREA=1:验收用,保留面光进 GI 场景(sf.1 起引擎把面光排除出 GI 而不是整帧失败)。
  const lights=post.gi&&process.env.SPEC_GI_KEEP_AREA!=='1'?state.lights.map(l=>{if(l.kind!=='area')return l;deferred.push({feature:'RectAreaLight:'+l.id,reason:'GI 不接受面光,已换成宽角聚光灯'});return {...l,kind:'spot' as const,intensity:l.intensity*(l.width??1)*(l.height??1)*4,innerConeDeg:50,outerConeDeg:80,castShadow:false};}):state.lights;
- // 自适应大空间光照预算:随场景跨度 span 扩展射程上限(24m..90m)与方向光阴影距离(70m..180m),
+ // 自适应大空间光照预算:按三维包络对角线扩展射程上限(24m..160m)与方向光阴影距离(70m..180m),
  // 允许方向光与最多 2 盏聚光投影(兼顾顶部核心光柱与远端背光门);超出部分截断并记入 deferred。SPEC_LIGHT_BUDGET=0 关闭。
  const budget=process.env.SPEC_LIGHT_BUDGET!=='0';let spotShadows=0;
- const budgeted=budget?lights.map(l=>{let o=l;if(o.kind!=='directional'&&(o.range??0)>maxRange){deferred.push({feature:'LightRange:'+o.id,reason:`射程 ${o.range}m 截到 ${maxRange}m(光照预算)`});o={...o,range:maxRange};}
-  if(o.castShadow&&o.kind!=='directional'){if(o.kind==='spot'&&spotShadows++<2)return o;deferred.push({feature:'LightShadow:'+o.id,reason:'只保留方向光与最多 2 盏聚光投影(光照预算)'});o={...o,castShadow:false};}return o;}):lights;
+ const guarded=lights.map(l=>{const r=boundSpotIlluminance(l,shot.target,opts.opticalMeshes??[]);if(r.audit)opticalAudit.lights.push(r.audit);return r.light;});
+ const budgeted=budget?guarded.map(l=>{let o=l;if(o.kind!=='directional'&&(o.range??0)>maxRange){deferred.push({feature:'LightRange:'+o.id,reason:`射程 ${o.range}m 截到 ${maxRange}m(光照预算)`});o={...o,range:maxRange};}
+  if(o.castShadow&&o.kind!=='directional'){if(o.kind==='spot'&&spotShadows++<2)return o;deferred.push({feature:'LightShadow:'+o.id,reason:'只保留方向光与最多 2 盏聚光投影(光照预算)'});o={...o,castShadow:false};}return o;}):guarded;
  budgeted.forEach(l=>{const e=lightEntity(l,shadowDistance);components.add(e.component);entities['light_'+l.id.replace(/[^A-Za-z0-9_]/g,'_')]={components:e.value};});
  if(spec.sourceEnvironment&&spec.sourceEnvironment.lightingMode!=='spec'){
   // Existing native environment is an exclusive source, never mixed with guessed staging.
@@ -120,7 +127,7 @@ export default definePack({
  build(){return ok({'scene/main':{kind:'scene',entities}});},
 });
 `;
- return {source,entities,components:list,views,deferred,planar:planar??null,planarPlugin:planar?planarReflectionPlugin(planar):null,volumetricPlugin};
+ return {source,entities,components:list,views,deferred,planar:planar??null,planarPlugin:planar?planarReflectionPlugin(planar):null,volumetricPlugin,opticalAudit};
 }
 
 /** 运行时给录制相机挂平面反射:规格平面 z=height(Z 向上)→ 引擎平面 y=height,法线 +Y,距离 -height。 */

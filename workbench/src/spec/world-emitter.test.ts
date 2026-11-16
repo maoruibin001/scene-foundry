@@ -17,7 +17,7 @@ test('世界导出:灯光按类型成组件、后处理挂在相机、平面反�
  expect((w.entities['light_spot-a'.replace('-','_')] as any).components.Transform.pos).toEqual([0,16,12]);
  expect(w.planar).toEqual({object:'CORE_001',height:0,distortion:0.02});
  expect(w.planarPlugin).toContain("inject:['world','gameHost','executionBootstrapHost']");
- expect(w.deferred.map(d=>d.feature)).toEqual(['PlanarReflection:CORE_001','LightRange:spot-a']);
+ expect(w.deferred.map(d=>d.feature)).toEqual(['PlanarReflection:CORE_001']);
  expect(w.views[0].position).toEqual([0,1.65,25]);
 });
 
@@ -52,7 +52,7 @@ test('Fog 导出固定 FogModeValue.exp 并钳制非法范围(杜绝 near >= far
 });
 
 test('Skylight 半球反弹 groundColor 导出与巨构大空间自适应射程/阴影预算',()=>{
- // 1) 小包络场景(跨度 26m):默认按比例推导非黑 groundColor,射程上限保持 24m
+ // 1) 小包络场景(跨度 26m):默认推导非黑 groundColor,三维跨度预算不截断有效的30m射程
  const small=sampleSpec();
  small.bounds={min:[-12,-13,-2],max:[12,13,18]};
  small.lighting.states[0]!.ambient={color:[0.6,0.75,0.95],intensity:0.55};
@@ -60,7 +60,7 @@ test('Skylight 半球反弹 groundColor 导出与巨构大空间自适应射程/
  const wSmall=emitSpecWorld(small,{worldPackageId:'60fb39fb-420e-4aa5-8189-fd9c4d8369e7'});
  const skySmall=(wSmall.entities.ambient as any).components.Skylight;
  expect(skySmall.groundColor).toEqual([0.252,0.345,0.513]);
- expect((wSmall.entities.light_spot_small as any).components.SpotLight.range).toBe(24);
+ expect((wSmall.entities.light_spot_small as any).components.SpotLight.range).toBe(30);
 
  // 2) 巨构大厅(跨度 80m):显式 groundColor 透传,maxRange 扩展至 72m,shadowDistance 扩展至 120m(mapSize 2048),允许最多 2 盏聚光投影
  const large=sampleSpec();
@@ -81,9 +81,9 @@ test('Skylight 半球反弹 groundColor 导出与巨构大空间自适应射程/
  // 52m 与 48m 聚光灯在 72m 上限内不被截断,且前 2 盏聚光保留投影
  expect((wLarge.entities.light_core_shaft as any).components.SpotLight).toMatchObject({range:52,castShadow:true});
  expect((wLarge.entities.light_portal_back as any).components.SpotLight).toMatchObject({range:48,castShadow:true});
- // 第 3 盏聚光投影被预算降级,且 85m 射程截到 72m
- expect((wLarge.entities.light_extra_spot as any).components.SpotLight).toMatchObject({range:72,castShadow:false});
- expect(wLarge.deferred.map(d=>d.feature)).toEqual(['LightRange:extra_spot','LightShadow:extra_spot']);
+ // 第3盏聚光投影被预算降级，三维包络预算保留85m射程
+ expect((wLarge.entities.light_extra_spot as any).components.SpotLight).toMatchObject({range:85,castShadow:false});
+ expect(wLarge.deferred.map(d=>d.feature)).toEqual(['LightShadow:extra_spot']);
 });
 
 test('adopted native lighting is exclusive and camera values survive without guessed ambient',()=>{

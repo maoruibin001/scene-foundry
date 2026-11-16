@@ -8,7 +8,9 @@ import {copyFileSync,existsSync,lstatSync,mkdirSync,readFileSync,symlinkSync,wri
 import {createHash,randomUUID} from 'node:crypto';
 import {join,resolve} from 'node:path';
 import {writeInspectionPlugins} from '../geometry/prepare';
-import {getExportPlanTelemetry,pbrAssets,planSpecExportParallel,projectedDecalPlugin,toEnginePosition} from './export-pack';
+import {getCachedMeshAsset,getExportPlanTelemetry,pbrAssets,planSpecExportParallel,projectedDecalPlugin,toEnginePosition} from './export-pack';
+import {transformedOpticalMesh} from './optical-export';
+import {REFLECTION_COMPONENT_BOOTSTRAP} from '../geometry/reflection-probes';
 import {ensurePbr} from './pbr-library';
 import {validateSceneSpec,type SceneSpec} from './schema';
 import {emitSpecWorld} from './world-emitter';
@@ -43,8 +45,12 @@ export async function prepareSpecProject(root:string,spec:SceneSpec,options:{id?
  save(join(game,'package.json'),{name:'spec-scene',private:true,type:'module',packageManager:'pnpm@12.15.0'});
  if(!lstatSync(join(game,'node_modules/@forgeax/engine'),{throwIfNoEntry:false}))symlinkSync(join(ENGINE,'packages/engine'),join(game,'node_modules/@forgeax/engine'),'dir');
 
- const world=emitSpecWorld(spec,{worldPackageId:'60fb39fb-420e-4aa5-8189-fd9c4d8369e7',stateId:options.stateId});
- save(join(root,'lighting-export.json'),{version:'spec-lighting-v1',state:options.stateId??spec.lighting.defaultState,components:world.components,planarReflection:world.planar,deferred:world.deferred});
+ const opticalMeshes=plan.entities.flatMap(e=>{const mesh=plan.meshes.find(m=>m.key===e.mesh)!,opaque=Object.values(mesh.slots).some(key=>{const m=plan.materials.find(m=>m.key===key);return m&&!m.options.renderState&&!(Number(m.options.transmission)>0)&&!(Number(m.options.emissiveIntensity)>0);});const asset=getCachedMeshAsset(mesh);return opaque&&asset?[transformedOpticalMesh(e,asset)]:[];});
+ const world=emitSpecWorld(spec,{worldPackageId:'60fb39fb-420e-4aa5-8189-fd9c4d8369e7',stateId:options.stateId,opticalMeshes});
+ save(join(root,'optical-export-audit.json'),world.opticalAudit);
+ const reflectionProbeCount=Object.values(world.entities).filter((e:any)=>e.components?.ReflectionProbe).length;
+ if(reflectionProbeCount){writeFileSync(join(assets,'reflection-components.plugin.ts'),REFLECTION_COMPONENT_BOOTSTRAP);cfg.plugins.push({id:'reflection-components',name:'./assets/reflection-components.plugin.ts',realm:'engine',inject:['world']});save(join(game,'forge.json'),cfg);}
+ save(join(root,'lighting-export.json'),{version:'spec-lighting-v1',state:options.stateId??spec.lighting.defaultState,components:world.components,planarReflection:world.planar,deferred:world.deferred,opticalAudit:world.opticalAudit});
  copyFileSync(join(W,'src/native/capture-telemetry.ts'),join(assets,'capture-telemetry.ts'));copyFileSync(join(W,'src/camera-v3.txt'),join(assets,'camera.plugin.ts'));copyFileSync(join(W,'src/ui-v3.txt'),join(assets,'ui.plugin.ts'));
  writeFileSync(join(assets,'concept-look.plugin.ts'),conceptLookPlugin(world.entities));cfg.plugins.push({id:'concept-look',name:'./assets/concept-look.plugin.ts',realm:'engine',inject:['world','gameHost']});save(join(game,'forge.json'),cfg);
  if(world.planarPlugin){
@@ -91,7 +97,7 @@ export async function prepareSpecProject(root:string,spec:SceneSpec,options:{id?
   return {id:e.id,role:'subject',position:center,size};});
  const b=spec.bounds,center=toEnginePosition(b.min.map((v,k)=>(v+b.max[k])/2) as any),radius=Math.hypot(...b.max.map((v,k)=>v-b.min[k]))/2;
  save(join(assets,'scene-audit.json'),{name:spec.name,channelId:brief.packageId,specSha256:sha(JSON.stringify(spec)),camera:{center,radius,height:radius*.4},views:world.views,
-  parts:plan.entities.map(e=>({id:e.id,entityId:e.id,bindingKey:e.bindingKey})),entities:[],landmarks,geometry:{nonFlat:true},
+  parts:plan.entities.map(e=>({id:e.id,entityId:e.id,bindingKey:e.bindingKey})),entities:[],landmarks,geometry:{nonFlat:true},reflectionProbeCount,
   provenance:{kind:'spec-scene-generation',validationKind:'generation',specId:spec.id,engineSha:pin.engineSha,qualityAssessment:'not-run'}});
  return {brief,plan,world,exportStats};
 }

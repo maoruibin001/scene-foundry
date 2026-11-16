@@ -1,4 +1,5 @@
 import {bindingGeometryIssues} from './binding-geometry';
+import {bindWorldSurfaceVariants} from './surface-mapping';
 import {bindDimensionalAliases} from './parameter-binding';
 /**
  * 规格 → 引擎场景 pack。网格在导出期跨 Bun Worker 线程并行生成并缓存到内存与 .mesh-cache,
@@ -302,7 +303,7 @@ export function materialOptions(m:SpecMaterial){
   // 清透玻璃:alpha 混合 + 不写深度 + 双面;透射关闭(两者互斥,透射会把后方发光体模糊成乳白)。
   ...(m.opacity!=null&&m.opacity<1?{baseColor:[m.baseColor[0],m.baseColor[1],m.baseColor[2],m.opacity],renderState:{blend:{color:{srcFactor:'src-alpha',dstFactor:'one-minus-src-alpha',operation:'add'},alpha:{srcFactor:'one',dstFactor:'one-minus-src-alpha',operation:'add'}},depthWriteEnabled:false,cullMode:'none'}}
    :m.transmission>0?{transmission:m.transmission,ior:m.ior,thickness:m.thickness}:{}),
-  ...(m.clearcoat>0?{clearcoat:m.clearcoat,clearcoatRoughness:m.clearcoatRoughness,staticSwitches:{clearcoat:true}}:{})};
+  ...(m.clearcoat>0?{clearcoat:m.clearcoat,clearcoatRoughness:m.clearcoatRoughness}:{})};
 }
 
 type PendingPlacement=
@@ -504,6 +505,8 @@ function finalizeExportPlan(
   };
  });
  const triangles=entities.reduce((n,e)=>n+(meshes.get(e.mesh)?.triangles??0),0);
+ const mapping=bindWorldSurfaceVariants([...meshes.values()],materials,m=>COOKED_MESH_CACHE.get(m));
+ for(const change of mapping)report.derived.push({object:change.mesh,key:'surfaceMapping:'+change.slot,value:JSON.stringify(change)});
  return {meshes:[...meshes.values()],entities,materials,decals,instancing,instancedBatches,instancedInstances,report,triangles};
 }
 
@@ -796,10 +799,11 @@ export default definePack({
   }
   if(patterns.length||Object.keys(pbr).length)out['sampler/surface-repeat']={kind:'sampler',magFilter:'linear',minFilter:'linear',mipmapFilter:'linear',addressModeU:'repeat',addressModeV:'repeat',maxAnisotropy:8};
   // 生成器 UV 为盒投影 scale 0.5(每 2 米一个 UV 单位),按 tilesPerMeter 换算贴图缩放。
-  const channel=(p:string,ch:string,tiles:number)=>({texture:ref('texture/'+p.replace(':','-')+'-'+ch),sampler:ref('sampler/surface-repeat'),coordinates:{transform:{scale:[tiles*2,tiles*2]}}});
+  const channel=(p:string,ch:string,tiles:number,world=false)=>({texture:ref('texture/'+p.replace(':','-')+'-'+ch),sampler:ref('sampler/surface-repeat'),coordinates:{transform:{scale:world?[1,1]:[tiles*2,tiles*2]}}});
   const nonShadowMatKeys=new Set(data.meshes.flatMap((mesh:any)=>Object.entries(mesh.slots??{}).filter(([slot])=>/^(skylight|sky|tubeGlass|glass|pane|window|constraintField|holoGlow)$/i.test(slot)).map(([,mk])=>String(mk))));
   for(const m of data.materials as any[]){
-   const std=Materials.standard({...m.options,...(m.surface?{normalTexture:channel(m.surface.pattern,'normal',m.surface.tilesPerMeter),metallicRoughnessTexture:channel(m.surface.pattern,'mr',m.surface.tilesPerMeter),baseColorTexture:channel(m.surface.pattern,'color',m.surface.tilesPerMeter)}:{})} as any);
+   const tex=(ch:string)=>channel(m.surface.pattern,ch,m.surface.tilesPerMeter,Boolean(m.options?.triplanar));
+   const std=Materials.standard({...m.options,...(m.surface?{normalTexture:tex('normal'),metallicRoughnessTexture:tex('mr'),occlusionTexture:tex('mr'),baseColorTexture:tex('color')}:{})} as any);
    const noShadow=nonShadowMatKeys.has(m.key)||(m.options?.transmission??0)>0||Boolean(m.options?.renderState?.blend);
    out['material/'+m.key]=noShadow?{...std,passes:std.passes.filter((p:any)=>p.name!=='shadow-caster'&&p.renderState?.tags?.LightMode!=='ShadowCaster')}:std;
   }

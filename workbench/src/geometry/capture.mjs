@@ -21,6 +21,7 @@ try{
  const audit=JSON.parse(await readFile(join(root,'assets/scene-audit.json'),'utf8'));
  const plan=capturePlan(audit.views.length),timings=[],recordingFrame=captureFrame(audit.views[0]);
  const timed=async(name,fn)=>{const t={name,startedAt:Date.now(),status:'running'};timings.push(t);const persist=()=>writeFile(join(output,'capture-timing.json'),JSON.stringify({plan,timings},null,2));await persist();console.log('开始 '+name);try{const result=await fn();t.status='passed';return result;}catch(e){t.status='failed';t.error=String(e);throw e;}finally{t.endedAt=Date.now();t.durationMs=t.endedAt-t.startedAt;await persist();console.log(name+' '+t.status+' '+t.durationMs+'ms');}};
+ await timed('录屏解码环境预检',()=>promisify(execFile)(reconstructionPython(),['-c','import cv2,numpy,PIL'],{timeout:10000,maxBuffer:4096}));
  session=await timed('打开引擎',()=>browser.open({browser:captureBrowserExecutable(),backend:'auto',serverUrl:url,headless:true,...recordingFrame,requireUi:true,outputDir:output}));if(shutdown.ready())throw Error('采集已被终止');const page=session.page,errors=[];
  page.on('pageerror',e=>errors.push(String(e)));page.on('console',m=>{if(m.type()==='error')errors.push(m.text())});
  await page.locator('#scene-hud').waitFor({state:'visible'});const reflectionWarmup=await waitForReflections(page,audit);if(reflectionWarmup)await writeFile(join(output,'reflection-warmup.json'),JSON.stringify(reflectionWarmup,null,2));await timed('with-ui.png',()=>session.capture(undefined,{output:join(output,'with-ui.png'),requireUi:true,timeoutMs:plan.frameTimeoutMs}));
