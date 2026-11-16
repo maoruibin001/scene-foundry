@@ -18,5 +18,9 @@
   {
     "old": "function computeDescriptor(context, entry3, label) {",
     "new": "computeEntries.volume_integrate_coarse = computeEntries.volume_integrate;\ncomputeEntries.volume_integrate = computeEntries.volume_integrate.map(entry => entry.binding===8 ? {binding:8,visibility:4,storageTexture:{access:\"read-only\",format:VOLUME_RESOLVED_FORMAT,viewDimension:\"2d\"}} : entry);\nfunction computeDescriptor(context, entry3, label) {"
+  },
+  {
+    "old": "function computeProgram(context, source, label) {\n  const owner = programsFor(context);\n  const current2 = witness(context, source, label);\n  let entry3 = owner.compute.get(label);\n  if (entry3 === void 0 || !sameWitness(entry3, current2)) {\n    entry3 = current2;\n    owner.compute.set(label, entry3);\n  }\n  return entry3;\n}\n",
+    "new": "function computeProgram(context, source, label) {\n  const owner = programsFor(context);\n  // Both optical entry points belong to the one admitted integrate module.\n  const current2 = witness(context, source, label === \"volume_integrate_coarse\" ? \"volume_integrate\" : label);\n  let entry3 = owner.compute.get(label);\n  if (entry3 === void 0 || !sameWitness(entry3, current2)) {\n    entry3 = current2;\n    owner.compute.set(label, entry3);\n  }\n  return entry3;\n}\n"
   }
 ]
