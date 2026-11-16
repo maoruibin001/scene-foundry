@@ -52,7 +52,7 @@ test('one noninteractive badge per preview listens to the actual canvas and rele
 });
 
 
-test('narrow previews fold only the precise scene HUD; button and H-key changes stay synchronized while wide previews remain open',()=>{
+test('all previews start with folded legacy controls; toggles and H stay synchronized',()=>{
  const hud:any={hidden:false},b=browser({width:455,hud}),handle=installPreviewFps(b.win);
  const button=b.elements.find(e=>e.tag==='button');expect(hud.hidden).toBe(true);expect(button.textContent).toBe('操作说明 ▾');expect(button.getAttribute('aria-expanded')).toBe('false');
  button.onclick();expect(hud.hidden).toBe(false);expect(button.getAttribute('aria-expanded')).toBe('true');
@@ -61,6 +61,19 @@ test('narrow previews fold only the precise scene HUD; button and H-key changes 
  hud.hidden=true;b.tick();expect(button.getAttribute('aria-expanded')).toBe('false');expect(hud.hidden).toBe(true);
  b.tick();expect(hud.hidden).toBe(true);button.onclick();b.tick();expect(hud.hidden).toBe(false);expect(button.getAttribute('aria-expanded')).toBe('true');
  handle.dispose();expect(button.removed).toBe(true);expect(hud.hidden).toBe(false);
- const wideHud:any={hidden:false},wide=browser({width:1000,hud:wideHud}),wideHandle=installPreviewFps(wide.win);expect(wideHud.hidden).toBe(false);expect(wide.elements.find(e=>e.tag==='button').getAttribute('aria-expanded')).toBe('true');wideHandle.dispose();
+ const wideHud:any={hidden:false},wide=browser({width:1000,hud:wideHud}),wideHandle=installPreviewFps(wide.win);expect(wideHud.hidden).toBe(true);expect(wide.elements.find(e=>e.tag==='button').getAttribute('aria-expanded')).toBe('false');wideHandle.dispose();
  const absent=browser({width:455});const absentHandle=installPreviewFps(absent.win);expect(absent.elements.filter(e=>e.tag==='button')).toHaveLength(0);absentHandle.dispose();
+});
+
+test('pixel budgets preserve authored limits, native opt-out and restore on disposal',async()=>{
+ const {installPreviewResolution,previewPixelBudget}=await import('../public/preview-fps.js');
+ expect(previewPixelBudget('smooth')).toEqual({width:1600,height:900});expect(previewPixelBudget('native')).toBeNull();
+ const attrs=new Map<string,string>([['data-forgeax-render-width-limit','1800'],['data-forgeax-render-height-limit','1000']]);
+ const canvas:any={getAttribute:(n:string)=>attrs.get(n)??null,setAttribute:(n:string,v:string)=>attrs.set(n,v),removeAttribute:(n:string)=>attrs.delete(n)};
+ const elements:any[]=[],ui:any={append:(e:any)=>elements.push(e)};
+ const doc:any={querySelector:()=>ui,createElement:()=>({dataset:{},style:{},setAttribute(){},append(){},remove(){}})};
+ const handle=installPreviewResolution({document:doc});handle.sync(canvas);expect(attrs.get('data-forgeax-render-width-limit')).toBe('1800');
+ const select=elements[0];select.value='smooth';select.onchange();expect(attrs.get('data-forgeax-render-width-limit')).toBe('1600');expect(attrs.get('data-forgeax-render-height-limit')).toBe('900');
+ select.value='native';select.onchange();expect(attrs.get('data-forgeax-render-width-limit')).toBe('1800');
+ select.value='smooth';select.onchange();handle.dispose();expect(attrs.get('data-forgeax-render-width-limit')).toBe('1800');expect(attrs.get('data-forgeax-render-height-limit')).toBe('1000');
 });

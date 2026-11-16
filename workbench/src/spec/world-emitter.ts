@@ -3,14 +3,14 @@
  * 再整体序列化进一个 definePack。规格内容实例挂在实体 'garden' 下,沿用现有相机插件与采集脚本的绑定名。
  * 平面反射的目标纹理只能运行时创建,由 planarReflectionPlugin 挂到录制相机;体积雾需要密度纹理,暂写入 deferred,不静默丢弃。
  */
-import {FogModeValue} from '@forgeax/engine/render';
+import {ANTIALIAS_TAA,FogModeValue} from '@forgeax/engine/render';
 import {areaLightQuaternion} from '../geometry/area-lights';
 import {toEnginePosition,toEngineScale} from './export-pack';
 import type {SceneSpec,SpecLight,SpecLightingState,Vec3} from './schema';
 import {boundSpotIlluminance,placeReflectionProbe,type OpticalMesh} from './optical-export';
 
 const TONEMAP={aces:4,agx:5,neutral:6} as const;
-const ANTIALIAS_SMAA=4,BLOOM_ENABLED=1,AO_GTAO=1;
+const BLOOM_ENABLED=1,AO_GTAO=1;
 /** 与 geometry/capture-plan.mjs 的机位上限一致。 */
 export const MAX_CAPTURE_VIEWS=6;
 /** 方向向量只换轴,不平移。 */
@@ -58,7 +58,7 @@ export function emitSpecWorld(spec:SceneSpec,opts:{worldPackageId:string;stateId
  const probePlacement=probe?(opts.opticalMeshes?.length?placeReflectionProbe(shots.map(s=>toEnginePosition(s.position)),opts.opticalMeshes):{position:toEnginePosition(shot.position),method:'authored-camera-no-surface-verification'}):null;
  opticalAudit.probePlacement=probePlacement;
  const camera:Record<string,unknown>={Name:{value:'Recording camera'},Transform:{pos:toEnginePosition(shot.position)},
-  Camera:{fov:shot.fovDeg*Math.PI/180,aspect:16/9,near:.1,far:1000,clearColor:[...state.background,1],antialias:ANTIALIAS_SMAA,tonemap:TONEMAP[post.tonemap],
+  Camera:{fov:shot.fovDeg*Math.PI/180,aspect:16/9,near:.1,far:1000,clearColor:[...state.background,1],antialias:ANTIALIAS_TAA,tonemap:TONEMAP[post.tonemap],
    ...(post.exposure==='auto'?{exposureMode:1,exposure:1}:{exposureMode:0,exposure:post.exposure}),
    ...(post.bloom?{bloom:BLOOM_ENABLED,bloomThreshold:post.bloom.threshold,bloomIntensity:post.bloom.intensity,bloomRadius:post.bloom.radius}:{})}};
  if(post.gtao){camera.AmbientOcclusion={algorithm:AO_GTAO,radius:.6,intensity:1.2,directLightingStrength:.4};components.add('AmbientOcclusion');}

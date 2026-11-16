@@ -1,5 +1,5 @@
 import {test,expect} from 'bun:test';
-import {FogModeValue} from '@forgeax/engine/render';
+import {ANTIALIAS_TAA,FogModeValue} from '@forgeax/engine/render';
 import {buildFogComponent,emitSpecWorld} from './world-emitter';
 import {planSpecExport} from './export-pack';
 import {sampleSpec} from './fixtures';
@@ -13,7 +13,7 @@ test('世界导出:灯光按类型成组件、后处理挂在相机、平面反�
  const w=emitSpecWorld(s,{worldPackageId:'60fb39fb-420e-4aa5-8189-fd9c4d8369e7'});
  expect(w.components).toEqual(expect.arrayContaining(['AmbientOcclusion','DirectionalLight','RectAreaLight','ScreenSpaceReflection','SpotLight']));
  const cam=(w.entities.camera as any).components;
- expect(cam.Camera.tonemap).toBe(4);expect(cam.Camera.bloom).toBe(1);expect(cam.ScreenSpaceReflection.maxDistance).toBe(20);
+ expect(cam.Camera.antialias).toBe(ANTIALIAS_TAA);expect(cam.Camera.tonemap).toBe(4);expect(cam.Camera.bloom).toBe(1);expect(cam.ScreenSpaceReflection.maxDistance).toBe(20);
  expect((w.entities['light_spot-a'.replace('-','_')] as any).components.Transform.pos).toEqual([0,16,12]);
  expect(w.planar).toEqual({object:'CORE_001',height:0,distortion:0.02});
  expect(w.planarPlugin).toContain("inject:['world','gameHost','executionBootstrapHost']");
