@@ -37,7 +37,7 @@ export function uiHandler(publicDir:string, upstream:string, productionTiming?:(
         const body=await response.json(),sourceUrl=body.url;
         try{
           previewProxies??=createPreviewFpsProxyRegistry({scriptSource:readFileSync(resolve(root,'preview-fps.js'),'utf8')});
-          body.url=await previewProxies.wrapURL(sourceUrl);body.sourceUrl=sourceUrl;body.liveFps=true;
+          if(body.liveFps!==true){body.url=await previewProxies.wrapURL(sourceUrl);body.sourceUrl=sourceUrl;body.liveFps=true;}
         }catch{body.liveFps=false;body.fpsWarning='实时帧率暂不可用，已保留原场景预览地址。';}
         const previewHeaders=new Headers(response.headers);previewHeaders.delete('Content-Length');previewHeaders.delete('Content-Encoding');previewHeaders.set('Cache-Control','no-store');
         return Response.json(body,{status:response.status,headers:previewHeaders});

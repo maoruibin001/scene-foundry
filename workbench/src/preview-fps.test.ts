@@ -77,3 +77,8 @@ test('pixel budgets preserve authored limits, native opt-out and restore on disp
  select.value='native';select.onchange();expect(attrs.get('data-forgeax-render-width-limit')).toBe('1800');
  select.value='smooth';select.onchange();handle.dispose();expect(attrs.get('data-forgeax-render-width-limit')).toBe('1800');expect(attrs.get('data-forgeax-render-height-limit')).toBe('1000');
 });
+
+test('new native disclosure controls keep their own state and do not get a second fold button',()=>{
+ const hud:any={hidden:false,dataset:{sceneCollapsible:'true'}},b=browser({width:1200,hud}),handle=installPreviewFps(b.win);
+ expect(hud.hidden).toBe(false);expect(b.elements.filter(e=>e.tag==='button')).toHaveLength(0);handle.dispose();
+});
