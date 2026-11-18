@@ -6,8 +6,10 @@
  * - concrete 混凝土:颗粒与斑驳
  * 贴图值是因子的乘数(glTF 语义):底色 0.55..1、粗糙度 0.35..1,材质标量决定整体量级。
  */
-export type SurfacePattern='panel'|'plate'|'grate'|'concrete';
-export const SURFACE_PATTERNS:readonly SurfacePattern[]=['panel','plate','grate','concrete'];
+import {bakeScifiTrimMaps} from './trim-kit.ts';
+
+export type SurfacePattern='panel'|'plate'|'grate'|'concrete'|'puddle'|'deck'|'worn'|'trim';
+export const SURFACE_PATTERNS:readonly SurfacePattern[]=['panel','plate','grate','concrete','puddle','deck','worn','trim'];
 export type SurfaceMaps={size:number;normal:Uint8Array;metallicRoughness:Uint8Array;baseColor:Uint8Array};
 
 const hash=(x:number,y:number,s:number)=>{let h=(x*374761393+y*668265263+s*982451653)|0;h=Math.imul(h^(h>>>13),1274126177);return ((h^(h>>>16))>>>0)/4294967295;};
@@ -37,6 +39,32 @@ function sample(p:SurfacePattern,u:number,v:number):[number,number,number]{
   const h=smooth(0.006,0.02,seam)*0.7+0.3+dia,wet=smooth(0.55,0.68,fbm(u,v,21));
   return [h,1-0.62*wet,1-0.25*wet-0.12*(1-grime)];
  }
+ if(p==='worn'){
+  // 使用痕迹金属:低频污渍斑(粗糙度 +)、细长划痕(粗糙度 -,底色亮)、竖向流痕、微颗粒——打碎均匀高光,去塑料感。
+  const blot=fbm(u,v,51),fine=hash(Math.floor(u*512),Math.floor(v*512),53);
+  const sc=Math.abs(((u*37+v*3.1+noise(u,v,8,57)*0.6)%1)-0.5)<0.012&&noise(u,v,16,59)>0.55?1:0;
+  const sc2=Math.abs(((u*2.3-v*41+noise(u,v,8,61)*0.6+100)%1)-0.5)<0.01&&noise(u,v,16,63)>0.6?1:0;
+  const streak=noise(u*9,0,36,67)*smooth(0.2,1,fbm(u,v*0.3,69));
+  const rough=0.7+0.35*smooth(0.3,0.8,blot)+0.15*(fine-0.5)-0.45*Math.max(sc,sc2)+0.25*streak;
+  const col=0.9+0.1*(1-blot)-0.18*streak+0.25*Math.max(sc,sc2)+0.06*(fine-0.5);
+  return [0.5+0.04*(fine-0.5)-0.05*Math.max(sc,sc2),rough,col];
+ }
+ if(p==='deck'){
+  // 甲板钢地:一个周期 4×4 块 1m 板,板缝 + 四角铆钉 + 每块随机二选一(菱形防滑纹 / 细横纹),
+  // 低频积水斑(粗糙度乘数 0.3)与潮湿区交错,底色有板间明暗差与污渍——对照概念图 01 前景地面的密集高频细节。
+  const pu=(u*4)%1,pv=(v*4)%1,iu=Math.floor(u*4),iv=Math.floor(v*4),seam=Math.min(pu,1-pu,pv,1-pv),tone=hash(iu,iv,41);
+  let h=smooth(0.006,0.018,seam)*0.75+0.25;
+  for(const cu of [0.06,0.94])for(const cv of [0.06,0.94]){const d=Math.hypot(pu-cu,pv-cv);if(d<0.022)h=Math.max(h,1-d/0.022*0.5);}
+  if(seam>0.03){if(tone>0.45){const a=Math.abs(((u*160+v*160)%1)-0.5),b=Math.abs(((u*160-v*160+100)%1)-0.5);if(a<0.1&&b<0.3)h+=0.12;}
+   else if(Math.abs(((v*96)%1)-0.5)<0.12)h+=0.08;}
+  const w=smooth(0.5,0.62,fbm(u*0.5,v*0.5,31)*0.65+fbm(u,v,37)*0.35);
+  return [h,1-0.7*w,(0.78+0.22*tone)*(1-0.3*w)*(0.85+0.15*grime)];
+ }
+ if(p==='puddle'){
+  // 湿地砖:2×2 方板 + 细缝;低频积水斑(粗糙度乘数 0.35,反射清楚)与潮湿区(1.0)交错,底色积水处更深。法线几乎平,避免反射闪烁。
+  const pu=(u*2)%1,pv=(v*2)%1,seam=Math.min(pu,1-pu,pv,1-pv),w=smooth(0.48,0.6,fbm(u*0.5,v*0.5,31)*0.7+fbm(u,v,37)*0.3);
+  return [smooth(0.004,0.012,seam)*0.4+0.6,1-0.65*w,1-0.35*w-0.1*(1-grime)];
+ }
  if(p==='grate'){
   const gu=(u*24)%1,gv=(v*24)%1,hole=gu>0.18&&gu<0.82&&gv>0.18&&gv<0.82;
   return [hole?0.1:1,0.7+0.3*grime,hole?0.35:1-0.2*(1-grime)];
@@ -46,7 +74,8 @@ function sample(p:SurfacePattern,u:number,v:number):[number,number,number]{
 }
 
 export function surfaceMaps(p:SurfacePattern,size=256):SurfaceMaps{
- const H=new Float32Array(size*size),normal=new Uint8Array(size*size*4),mr=new Uint8Array(size*size*4),bc=new Uint8Array(size*size*4),strength=p==='concrete'?2:6;
+ if(p==='trim')return bakeScifiTrimMaps(size);
+ const H=new Float32Array(size*size),normal=new Uint8Array(size*size*4),mr=new Uint8Array(size*size*4),bc=new Uint8Array(size*size*4),strength=p==='concrete'?2:p==='puddle'?1.5:p==='deck'?3:p==='worn'?1:6;
  for(let y=0;y<size;y++)for(let x=0;x<size;x++){const [h,r,c]=sample(p,x/size,y/size),i=y*size+x;H[i]=h;
   mr[i*4]=255;mr[i*4+1]=Math.round(255*Math.max(0,Math.min(1,r)));mr[i*4+2]=255;mr[i*4+3]=255;
   const g=Math.round(255*Math.max(0,Math.min(1,c)));bc[i*4]=g;bc[i*4+1]=g;bc[i*4+2]=g;bc[i*4+3]=255;}

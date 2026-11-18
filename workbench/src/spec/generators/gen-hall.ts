@@ -13,7 +13,7 @@ export const GEN_HALL=defineGenerator({
  params:{
   width:{type:'number',default:48,min:10,max:120},
   length:{type:'number',default:55,min:10,max:120},
-  height:{type:'number',default:20,min:4,max:40},
+  height:{type:'number',default:20,min:4,max:80},
   columnPitch:{type:'number',default:6,min:3,max:15},
   wallThickness:{type:'number',default:0.3,min:0.1,max:1.5},
   panelHeight:{type:'number',default:2.5,min:1,max:6},

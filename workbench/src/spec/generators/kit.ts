@@ -3,7 +3,7 @@
  * 同参数确定性重建。生成器只依赖 @forgeax/engine/modeling,同一份源码在 workbench 单测与游戏工程的 pack 构建里运行。
  * 局部坐标沿用 modeling:Y 向上、米制;规格的 Z 向上由场景导出在实例变换上换轴。
  */
-import {model,type Model} from '@forgeax/engine/modeling';
+import {model,sel,validateMesh,type Model,type ValidateOptions,type ValidationReport} from '@forgeax/engine/modeling';
 import type {MeshAsset} from '@forgeax/engine/types';
 
 export type ParamDef=
@@ -48,7 +48,12 @@ export function runGenerator<D extends ParamDefs>(g:Generator<D>,values:Record<s
  const {params,errors}=resolveParams(g,values);
  if(errors.length)throw Error('GENERATOR_PARAMS_INVALID:'+errors.join(';'));
  const m=model();
+ // 倒角:每个方块按最短边的 6%(上限 4cm,3mm 以下不倒)切一道单段倒角——硬边接不住高光,倒角才出亮线。
+ // 用 tag 标记(按 5mm 分档),不改生成器自己的 label;SPEC_BEVEL=0 关闭(对照用)。
+ const widths=new Set<number>();
+ if(process.env.SPEC_BEVEL!=='0'){const box=m.box.bind(m);(m as any).box=(o:any)=>{const w=Math.round(Math.min(0.04,Math.min(...o.size)*0.06)*200)/200;if(w<0.005||o.tag)return box(o);widths.add(w);return box({...o,tag:'bevel'+w});};}
  g.build(m,params);
+ for(const w of widths)m.bevel(sel.toEdges(sel.tag('bevel'+w),'all'),{width:w,segments:1});
  m.uv.project({mode:'box',scale:0.5});
  const out=m.finish({key,normals:{mode:'weighted'}});
  if(!out.ok)throw Error(`GENERATOR_FAILED ${g.id}: ${out.error.code} ${out.error.expected??''} ${out.error.hint??''}`);
@@ -56,6 +61,37 @@ export function runGenerator<D extends ParamDefs>(g:Generator<D>,values:Record<s
  const unknown=(mesh.materialSlots??[]).map(s=>s.slotName).filter(s=>!g.slots.includes(s));
  if(unknown.length)throw Error(`GENERATOR_SLOTS_INVALID ${g.id}: 未声明的材质槽 ${unknown.join(',')}`);
  return mesh;
+}
+
+/** 非破坏性网格拓扑与几何诊断辅助:调用建模内核 validateMesh 检查半边不变量、退化面与法向翻转。 */
+export type GeneratorValidationSummary={
+ genId:string;
+ pass:boolean;
+ faces:number;
+ edges:number;
+ vertices:number;
+ boundaryEdges:number;
+ closed:boolean;
+ errors:ValidationReport['issues'];
+ warnings:ValidationReport['issues'];
+ report:ValidationReport;
+};
+export function validateGeneratorAsset(genId:string,m:Model,options:ValidateOptions={}):GeneratorValidationSummary{
+ const report=validateMesh(m.editMesh,m.tolerance,options);
+ const errors=report.issues.filter(i=>i.severity==='error');
+ const warnings=report.issues.filter(i=>i.severity==='warn');
+ return {
+  genId,
+  pass:report.pass&&m.poisoned===undefined,
+  faces:report.faces,
+  edges:report.edges,
+  vertices:report.vertices,
+  boundaryEdges:report.boundaryEdges,
+  closed:report.closed,
+  errors,
+  warnings,
+  report,
+ };
 }
 
 /** 折线点(扁平 x,y,z…)拆成三元组。 */

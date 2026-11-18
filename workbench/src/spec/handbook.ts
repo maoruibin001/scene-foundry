@@ -11,7 +11,19 @@ export const HANDBOOK_TABLES={
  assemblies:['装配ID','组成与责任','数量','必须独立控制'],
  leaves:['ID','叶资产与建议实例数','细分/参数要求','优先级与验收重点'],
  leavesAlt:['ID','叶资产与建议数量','制作边界与状态','优先级与验收重点'],
+ lights:['灯ID','类型','位置','方向','颜色','强度','射程','内锥角','外锥角','投影'],
+ materials:['材质ID','名称','底色','金属度','粗糙度','自发光色','自发光强度','透射','清漆'],
+ slots:['生成器','材质槽→材质'],
+ post:['后处理项','值'],
+ shots:['机位ID','说明','位置','目标','视野'],
 } as const;
+
+/** 冻结观感表(v5.1 起):灯光、材质、材质槽,数值原样作为 master;文档没有这些表时返回空。 */
+const vec=(c:string)=>c==='None'||c===''?null:(JSON.parse(c) as number[]);
+const optTable=(doc:DocSource,h:readonly string[])=>doc.tables.find(t=>t.header.length===h.length&&t.header.every((x,i)=>x===h[i]));
+export function handbookLights(doc:DocSource){const t=optTable(doc,HANDBOOK_TABLES.lights);return (t?.rows??[]).map(([id,kind,pos,dir,color,intensity,range,inner,outer,shadow])=>({id,kind:kind as 'directional'|'point'|'spot'|'area',position:vec(pos) as Vec3|null,direction:vec(dir) as Vec3|null,color:vec(color) as Vec3,intensity:Number(intensity),range:range==='None'?null:Number(range),innerConeDeg:inner==='None'?null:Number(inner),outerConeDeg:outer==='None'?null:Number(outer),width:null,height:null,castShadow:shadow==='是'}));}
+export function handbookMaterials(doc:DocSource){const t=optTable(doc,HANDBOOK_TABLES.materials);return (t?.rows??[]).map(([id,label,base,metal,rough,em,emI,trans,coat])=>({id,label,baseColor:vec(base) as number[],metallic:Number(metal),roughness:Number(rough),emissive:vec(em) as Vec3|null,emissiveIntensity:Number(emI),transmission:Number(trans),ior:1.5,thickness:0,clearcoat:Number(coat),clearcoatRoughness:0.05,sources:[{kind:'doc' as const,ref:t!.section||'F2 材质冻结表'}]}));}
+export function handbookSlots(doc:DocSource){const t=optTable(doc,HANDBOOK_TABLES.slots);return Object.fromEntries((t?.rows??[]).map(([gen,map])=>[gen,JSON.parse(map) as Record<string,string>]));}
 
 export type HandbookObject={id:string;position:Vec3|null;size:Vec3|null;rotationDeg:Vec3|null;placement:string;envelope:string;interaction:string;source:string};
 export type HandbookGenerator={id:string;params:SpecParams;inputs:string[];output:string;limits:string;source:string};
@@ -61,6 +73,7 @@ export function parseGeneratorParams(cell:string):{params:SpecParams;inputs:stri
   if(vector.length===1)params[key]=vector[0];
   else if(/^-?\d+(\.\d+)?(\/-?\d+(\.\d+)?)+$/.test(value))params[key]=value.split('/').map(Number);
   else if(/^[^\d-]*-?\d+(\.\d+)?$/.test(value))params[key]=Number(value.replace(/^[^\d-]*/,''));
+  else if(value==='是'||value==='否')params[key]=value==='是';
   else if(value==='')inputs.push(key);
   else params[key]=value;
  }
@@ -87,3 +100,6 @@ export function handbookLeaves(doc:DocSource):HandbookLeaf[]{
   return {id,...parseLeafName(nameCell),params,priority:p?p[1] as 'P0'|'P1'|'P2':null,acceptance:acc,source:t.section};
  }));
 }
+
+export function handbookPost(doc:DocSource):Record<string,unknown>{const t=optTable(doc,HANDBOOK_TABLES.post);return Object.fromEntries((t?.rows??[]).map(([k,v])=>[k,JSON.parse(v)]));}
+export function handbookShots(doc:DocSource){const t=optTable(doc,HANDBOOK_TABLES.shots);return (t?.rows??[]).map(([id,label,pos,target,fov])=>({id,label,position:JSON.parse(pos) as Vec3,target:JSON.parse(target) as Vec3,fovDeg:Number(fov)}));}

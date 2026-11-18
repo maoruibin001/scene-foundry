@@ -48,3 +48,7 @@
 #upload-preview figure{min-width:0;margin:0}
 #upload-preview img{display:block;width:100%;height:190px;object-fit:contain;border-radius:8px;background:#f3f6ef}
 #upload-preview figcaption{line-height:1.6;overflow-wrap:anywhere;margin:8px 0 0}
+
+.spec-assets .shots{grid-template-columns:repeat(auto-fill,minmax(220px,1fr))}
+.spec-asset{margin:0}.spec-asset img{width:100%;border-radius:6px;background:#1c2024}
+.spec-asset figcaption{font-size:13px;margin-top:4px}.spec-asset pre{max-height:220px;overflow:auto;font-size:11px}

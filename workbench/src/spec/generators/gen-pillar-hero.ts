@@ -14,6 +14,7 @@ export const GEN_PILLAR_HERO=defineGenerator({
   radius:{type:'number',default:1.5,min:0.6,max:4},
   tubes:{type:'int',default:6,min:3,max:12},
   segments:{type:'int',default:32,min:12,max:64},
+  filament:{type:'number',default:0.016,min:0.005,max:0.08},
  },
  slots:['tube','energyCore','clampRing','endCap','indicator','pipe','tubeGlass'],
  build(m:Model,p){
@@ -33,12 +34,18 @@ export const GEN_PILLAR_HERO=defineGenerator({
   for(const s of [[1,1],[1,-1],[-1,1],[-1,-1]]){const x=s[0]*R*0.8,z=s[1]*R*0.8;rod(m,[x,bh,z],[x,13.2*u,z],0.11*u,'pipe','riser',12);
    for(let y=bh+0.6*u;y<13*u;y+=1.2*u)rod(m,[x,y-0.05,z],[x,y+0.05,z],0.15*u,'clampRing','riser-clamp',12);}
   for(const s of [1,-1])for(let k=0;k<3;k++){const a=s*(0.3+k*0.12);rod(m,[Math.cos(a)*R*1.15,bh-0.1,Math.sin(a)*R*1.15],[Math.cos(a+s*0.4)*R*1.12,6.4*u,Math.sin(a+s*0.4)*R*1.12],0.035*u,'endCap','cable',6);}
+  // 缠绕线缆与软管:从底座出来,沿柱身斜绕到上下舱法兰,概念图柱身的线束层次。
+  for(let k=0;k<6;k++){const a0=k*Math.PI/3,a1=a0+0.9,r0=R*1.22,r1=R*1.18;
+   rod(m,[Math.cos(a0)*r0,bh-0.05,Math.sin(a0)*r0],[Math.cos(a1)*r1,6.25*u,Math.sin(a1)*r1],0.045*u,'endCap','hose',8);
+   rod(m,[Math.cos(a1)*r1,8.0*u,Math.sin(a1)*r1],[Math.cos(a1+0.7)*r1,12.4*u,Math.sin(a1+0.7)*r1],0.04*u,'endCap','hose-hi',8);}
   // 玻璃舱:法兰 + 螺栓 + 竖向发光管 + 中心光芯 + 立筋
   const capsule=(y0:number,y1:number,r:number,tag:string)=>{
    const f=0.35*u;
    cyl(r*1.08,r*1.08,y0,y0+f,'clampRing',tag+'-flange-lo');cyl(r*1.08,r*1.08,y1-f,y1,'clampRing',tag+'-flange-hi');
    ring(20,r*1.1,y0+f*0.5,[0.08,f*0.6,0.08],'endCap',tag+'-bolt-lo');ring(20,r*1.1,y1-f*0.5,[0.08,f*0.6,0.08],'endCap',tag+'-bolt-hi');
-   cyl(r*0.98,r*0.98,y0+f,y1-f,'tube',tag+'-glass');
+   // 不包整圈玻璃壳:引擎里透射玻璃和 alpha 玻璃包住发光体都会把后方糊成乳白(r13/r14/r17 实测),
+   // 只保留法兰 + 立筋围合,灯管各自是透明管 + 细发光芯。
+   // (透射玻璃裹住发光体会把后方整片糊成乳白,见 docs/spec-pipeline-critical-zerog-2026-11-04.md 第 10 节)
    // 中心是深色金属芯轴 + 细发光芯,玻璃内部有明暗层次而不是整团亮光。
    // 中心:深色金属芯轴,外套一根粗玻璃管,管内细发光芯。
    cyl(r*0.12,r*0.12,y0+f,y1-f,'endCap',tag+'-spine');cyl(r*0.2,r*0.2,y0+f+0.2*u,y1-f-0.2*u,'tubeGlass',tag+'-core-glass');
@@ -46,7 +53,7 @@ export const GEN_PILLAR_HERO=defineGenerator({
    // 灯管 = 透明玻璃管(tubeGlass)+ 管内细发光芯(energyCore)+ 两端金属端帽;发光只在芯,玻璃管本身透明。
    for(let i=0;i<p.tubes;i++){const a=i*Math.PI*2/p.tubes,x=Math.cos(a)*r*0.55,z=Math.sin(a)*r*0.55,cap=0.18*u;
     rod(m,[x,y0+f+cap,z],[x,y1-f-cap,z],r*0.085,'tubeGlass',tag+'-tube-glass',16);
-    rod(m,[x,y0+f+cap,z],[x,y1-f-cap,z],r*0.016,'energyCore',tag+'-filament',8);
+    rod(m,[x,y0+f+cap,z],[x,y1-f-cap,z],r*p.filament,'energyCore',tag+'-filament',8);
     for(const [ya,yb] of [[y0+f,y0+f+cap],[y1-f-cap,y1-f]])rod(m,[x,ya,z],[x,yb,z],r*0.1,'clampRing',tag+'-tube-cap',16);
     rod(m,[x*1.28,y0+f,z*1.28],[x*1.28,y1-f,z*1.28],r*0.02,'clampRing',tag+'-tube-rail',6);}
    for(let i=0;i<8;i++){const a=i*Math.PI/4+Math.PI/8;m.box({size:[0.1,y1-y0-2*f,0.1],center:[Math.cos(a)*r*1.02,(y0+y1)/2,Math.sin(a)*r*1.02],material:'clampRing',label:`${tag}-strut-${i}`});}

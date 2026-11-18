@@ -13,8 +13,11 @@ export function irradianceFieldGi(spec:SceneSpec,environment:Vec3){
  const dimensions=size.map(v=>Math.min(128,Math.max(4,Math.ceil((v+2*margin)/spacing)+1)));
  return {gather:'irradiance-field',maxDistance:Math.hypot(...size),environment,
   field:{region:{grid:{origin:lo.map(v=>v-margin),dimensions,spacing,maxDistance:8*spacing,coverageDistance:spacing},maxInstances:1024,maxFieldBytes:64*1024*1024},
-   probeSpacing:Math.max(spacing,Math.cbrt(size[0]*size[1]*size[2])/PROBE_CELLS),raysPerProbe:64,probeBudget:128,hysteresis:0.7,
-   cards:{resolution:CARD_RESOLUTION,maxCaptureBytes:256*1024*1024,budget:256},resolution:'half',radiosity:true}};
+   // 质量旋钮(实验用,环境变量覆盖):探针间距、每探针光线数、时间累积、Card 分辨率。
+   probeSpacing:Number(process.env.SPEC_GI_PROBE)||Math.max(spacing,Math.cbrt(size[0]*size[1]*size[2])/PROBE_CELLS),raysPerProbe:Number(process.env.SPEC_GI_RAYS)||64,probeBudget:Number(process.env.SPEC_GI_BUDGET)||128,hysteresis:Number(process.env.SPEC_GI_HYST)||0.7,
+   cards:{resolution:Number(process.env.SPEC_GI_CARD)||CARD_RESOLUTION,maxCaptureBytes:256*1024*1024,budget:Number(process.env.SPEC_GI_CARDBUDGET)||256},resolution:process.env.SPEC_GI_RES==='full'?'full':'half',radiosity:process.env.SPEC_GI_RADIOSITY!=='0'},
+  // GI 下 IBL 必须关;镜面改用 Lite reflections(GI 场辐射缓存 + SDF/Card 追踪),SSR 命中处覆盖。
+  ...(process.env.SPEC_GI_REFL==='0'?{}:{reflections:{maxRoughnessToTrace:0.4,roughnessFadeLength:0.1}})};
 }
 /** build 插件源码:把 standardProfile 局部覆盖交给 DevKit。 */
 export function renderProfilePlugin(profile:Record<string,unknown>){

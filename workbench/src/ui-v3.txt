@@ -2,6 +2,9 @@ import type {} from '@forgeax/engine/app';
 import type {Plugin} from '@forgeax/engine/plugin';
 import audit from './scene-audit.json';
 export default {name:'scene/ui',inject:['gameHost'],apply(ctx){ctx.effect(()=>{
+ // 渲染分辨率上限:大屏 Retina(如 2560×1440@2x=1470 万像素)下片元开销线性放大,实测 45→19 FPS;
+ // 按 2560×1440 封顶(约 370 万像素),CSS 尺寸不变,由浏览器放大显示。
+ {const capCanvas=()=>{const c=document.querySelector('canvas');if(c&&!c.dataset.forgeaxRenderWidthLimit){c.setAttribute('data-forgeax-render-width-limit','2560');c.setAttribute('data-forgeax-render-height-limit','1440');window.dispatchEvent(new Event('resize'));}};capCanvas();setTimeout(capCanvas,500);setTimeout(capCanvas,2000);}
  const channel=new BroadcastChannel('forgeax-scene-'+audit.channelId),sources=new Set<string>();channel.onmessage=e=>{if(e.data?.specSha256!==audit.specSha256)return;sources.add(e.data.sourceId);document.documentElement.dataset.sceneAudit=JSON.stringify({...e.data,ambiguousSource:sources.size>1});};
  const hud=document.createElement('section');hud.id='scene-hud';hud.dataset.sceneUi='recording-controls';
  const fpsStyle=document.createElement('style');fpsStyle.textContent='html:has(#scene-hud[hidden]) #forgeax-fps{display:none!important}';document.head.append(fpsStyle);

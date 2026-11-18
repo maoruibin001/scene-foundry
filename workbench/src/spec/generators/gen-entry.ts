@@ -19,6 +19,16 @@ export const GEN_ENTRY=defineGenerator({
   safeMarkingSize:{type:'vec3',default:[6,3,0],min:0,max:30},
  },
  slots:['doorFrame','doorLeaf','observationWindow','doorRail','driveBox','vestibuleShell','vestibuleFloor','safeMarking','frameLight'],
+ adapt(raw){
+  const out={...raw};
+  const dh=typeof raw.doorHeight==='number'&&Number.isFinite(raw.doorHeight)?raw.doorHeight:4;
+  const dw=typeof raw.doorClearWidth==='number'&&Number.isFinite(raw.doorClearWidth)?raw.doorClearWidth:6;
+  const vh=typeof raw.vestibuleHeight==='number'&&Number.isFinite(raw.vestibuleHeight)?raw.vestibuleHeight:4.5;
+  const vw=typeof raw.vestibuleWidth==='number'&&Number.isFinite(raw.vestibuleWidth)?raw.vestibuleWidth:8;
+  if(vh<dh+0.35)out.vestibuleHeight=Math.min(14,dh+0.5);
+  if(vw<dw+1.1)out.vestibuleWidth=Math.min(30,dw+1.2);
+  return out;
+ },
  build(m:Model,p){
   const w=p.doorClearWidth,h=p.doorHeight,fd=p.frameDepth,jamb=0.5,head=0.6,vw=p.vestibuleWidth,vd=p.vestibuleDepth,vh=p.vestibuleHeight;
   if(vw<w+2*jamb)throw Error('GEN-ENTRY-01: 门斗宽度必须容下门洞与两侧门框');
