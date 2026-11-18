@@ -32,6 +32,9 @@ export function startSpecReview(id:string,selection:unknown){
   const receipt={...value,id:reviewId,model,route:result.receipt,distManifestDigest:dist,input,diagnosticOnly,runtimeStatus:job.status,completedAt:new Date().toISOString()};save(join(dir,'review.json'),receipt);
   if(diagnosticOnly){const current=getJob(id);current.visualReviews??=[];current.visualReviews.push({id:reviewId,file:`visual-reviews/${reviewId}/review.json`,overall:value.overall,distManifestDigest:dist,diagnosticOnly:true});current.diagnosticVisualReview={...value,file:`visual-reviews/${reviewId}/review.json`,diagnosticOnly:true};current.visualReviewState={id:reviewId,status:'completed',model,diagnosticOnly:true};saveJob(current);event(current,'diagnostic-visual-review','仅评审保留画面，运行与交付失败状态未更改');return;}
   const current=getJob(id);current.visualReviews??=[];current.visualReviews.push({id:reviewId,file:`visual-reviews/${reviewId}/review.json`,overall:value.overall,distManifestDigest:dist});current.visualReviewState={id:reviewId,status:'completed',model};current.styleReview=value;
+  // 重评成功后清理首次 judge 留下的失败标记，否则 specApprovalIssues 会要求 owner 确认一个已解决的问题。
+  current.styleReviewError=null;
+  if(current.specGate)current.specGate.styleReviewError=null;
   current.specGate.styleJudge={version:value.version,overall:value.overall,verdict:value.verdict,passed:gate.passed,lowDimensions:gate.low,advisory:true,threshold:{overall:70,minDimension:2}};saveJob(current);event(current,'visual-review','已对现有场景完成独立看图评审，未修改场景');
  }catch(e){const current=getJob(id);current.visualReviewState={id:reviewId,status:'failed',model,error:String(e)};save(join(dir,'failure.json'),current.visualReviewState);saveJob(current);}finally{active.delete(id);}})();
  return {id:reviewId,status:'running'};
