@@ -96,7 +96,7 @@ test('exports exact part-owned occupancy and exposed cover; an anchored revision
   } finally { rmSync(root,{recursive:true,force:true}); }
 });
 
-test('preflight rejects wrong projects, geometry outside the revision boundary, and inputs beyond local compilation or reuse', async () => {
+test('preflight rejects wrong projects, geometry outside the revision boundary, and model generation without owner-scoped authorization', async () => {
   const {root, request, put, path} = fixture();
   try {
     put('request.json', {...request, project:{...request.project,id:'@test/other-project'}});
@@ -105,6 +105,9 @@ test('preflight rejects wrong projects, geometry outside the revision boundary, 
     await expect(runLocation('export', path)).rejects.toThrow('outside the allowed location bounds');
     expect(existsSync(join(root,'r1'))).toBe(false);
     put('request.json', {...request, input:{kind:'reference',route:'voxel',images:[]}});
-    await expect(runLocation('preflight', path)).rejects.toThrow('Unknown input kind.');
+    expect(await runLocation('preflight', path)).toMatchObject({
+      ready:false, needsModel:true, authorization:'unverified', budget:null, compatibilityRoute:'/api/voxel/jobs',
+      missing: expect.arrayContaining(['An original image is required for voxel generation.']),
+    });
   } finally { rmSync(root,{recursive:true,force:true}); }
 });

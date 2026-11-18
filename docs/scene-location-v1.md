@@ -7,7 +7,7 @@ bun scripts/scene-location-v1.ts preflight /path/to/location-request.json
 bun scripts/scene-location-v1.ts export /path/to/location-request.json
 ```
 
-预检返回项目身份、实装 SDK、采取的路径、源 SHA-256 和缺失条件。退出码 0 表示该路径可用，1 表示请求或输入校验失败。导出写入新目录并返回 `location.json` 的 SHA-256。保存此回执，作为接入记录和下次更新的输入。
+预检返回项目身份、实装 SDK、采取的路径、源 SHA-256 和缺失条件。退出码 0 表示该路径可用，1 表示请求或输入校验失败，2 表示缺少模型生成前提。导出写入新目录并返回 `location.json` 的 SHA-256。保存此回执，作为接入记录和下次更新的输入。
 
 ## 最小体素请求
 
@@ -50,8 +50,8 @@ bun scripts/scene-location-v1.ts export /path/to/location-request.json
 4. 在正常入口检查走过开口、雨中走入和走出遮雨区，以及原互动或摄影。运行宿主原有检查和构建。保存采用的 manifest SHA、游戏候选、额外适配及其余包和绑定的前后哈希。回滚时重新选用旧 manifest 对应的网格和全套派生物。
 5. 复用整包用 `"input": {"kind":"reuse","manifest":"./courtyard-r1/location.json","sha256":"<已接入 SHA-256>"}`。保留完整地点合同。命令验证已封存文件并回报复用，不再编译。
 
-## 来源与费用
+## 原图生成与费用
 
-地点入口使用已有的可编辑制作源。保留制作源对应的原 job ID、产物哈希及已有调用回执，以便追溯上游来源。
+`input.kind: "reference"` 的预检接受 `route: "ordinary" | "voxel"`、`images: []` 和可选 `prompt`。普通入口至少要有描述或原图，体素常规入口需要 1–5 张原图。返回现有工作台的兼容路线和具体缺失条件。V1 的地点入口目前无法核验工作台实例和预算账本属于哪个消费项目，因而只给出生成准入诊断。具备项目独享实例、明确授权及模型预算的操作者可以使用该实例的普通/体素工作台入口，再把已保存的制作源交给本命令。保留原 job ID、固定产物哈希、每次请求回执及独立账本；预算上限和返还 token 用量不能推导实际收费。
 
 本地预检、编译与复用的 worker 调用数及模型费用均为 0。这个范围只覆盖本次命令，已有文件的上游模型费用如果无原始回执则为未知。普通/体素网格交付不要求启动工作台。所有操作针对本地显式输入和新输出目录。

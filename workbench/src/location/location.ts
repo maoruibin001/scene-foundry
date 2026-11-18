@@ -23,7 +23,8 @@ type Request = {
     roads: Road[]; anchors: Record<string, Anchor>; dependencies: Dependency[];
   };
   input: { kind: SourceKind; path: string; plan?: string; pbrDir?: string; images?: string[]; textures?: string }
-    | { kind: 'reuse'; manifest: string; sha256: string };
+    | { kind: 'reuse'; manifest: string; sha256: string }
+    | { kind: 'reference'; route: 'ordinary' | 'voxel'; prompt?: string; images: string[] };
   previous?: { manifest: string; sha256: string; retirePartIds?: string[] };
   output?: string;
   voxel?: { colliderLimit?: number; coverParts: string[]; wetBindings: WetBinding[] };
@@ -119,10 +120,29 @@ function readImages(paths: string[], directory: string) {
   });
 }
 
+function referenceStatus(input: Extract<Request['input'], {kind: 'reference'}>, directory: string) {
+  requireValue(input.route === 'ordinary' || input.route === 'voxel', 'Choose the ordinary or voxel reference route.');
+  const images = readImages(input.images, directory);
+  const missing: string[] = [];
+  if (!images.length && (input.route === 'voxel' || !input.prompt?.trim())) {
+    missing.push(input.route === 'voxel' ? 'An original image is required for voxel generation.' : 'Provide a prompt or an original image.');
+  }
+  missing.push('A worker route with verified project ownership, write authorization, model and project-scoped ledger is required.');
+  return {
+    ready: false, needsModel: true, missing, images,
+    compatibilityRoute: input.route === 'voxel' ? '/api/voxel/jobs' : '/api/jobs',
+    authorization: 'unverified', modelRoute: null, budget: null,
+    accounting: zeroModel,
+  };
+}
+
 async function prepare(request: Request, directory: string) {
   const who = identity(request, directory);
   const input = request.input;
   requireValue(input?.kind, 'Specify the input kind.');
+  if (input.kind === 'reference') {
+    return { response: { ...who, mode: 'generation', ...referenceStatus(input, directory) } };
+  }
   if (input.kind === 'reuse') {
     const prior = readBundle(directory, input, request, who.projectId);
     requireValue(Bun.deepEquals(prior.manifest.location, request.location), 'Reuse must preserve the full location contract.');
@@ -235,7 +255,7 @@ export async function runLocation(command: 'preflight' | 'export', path: string)
   const request: Request = JSON.parse(readFileSync(path, 'utf8'));
   const result = await prepare(request, directory);
   const { response } = result;
-  if (command === 'preflight' || !result.files) return {version: LOCATION_VERSION, ...response, elapsedMs: Math.round(performance.now() - start)};
+  if (command === 'preflight' || !response.ready || !result.files) return {version: LOCATION_VERSION, ...response, elapsedMs: Math.round(performance.now() - start)};
   const target = response.output!;
   const stage = mkdtempSync(join(dirname(target), '.location-'));
   try {

@@ -10,6 +10,7 @@ if (command === '--help' && !path) {
     }
     const receipt = await runLocation(command, path);
     console.log(JSON.stringify(receipt, null, 2));
+    if (!receipt.ready) process.exitCode = 2;
   } catch (error) {
     console.log(JSON.stringify({version: LOCATION_VERSION, ready: false, error: error instanceof Error ? error.message : String(error)}, null, 2));
     process.exitCode = 1;
