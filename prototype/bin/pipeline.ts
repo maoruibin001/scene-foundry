@@ -1,3 +1,4 @@
+import {publishIntegrationPayload} from '../../workbench/src/spec/integration/payload';
 import { mkdirSync, readFileSync, writeFileSync, renameSync, rmSync, cpSync, existsSync, readdirSync, realpathSync } from 'node:fs';
 import { resolve, join, dirname } from 'node:path';
 import { createHash } from 'node:crypto';
@@ -5,6 +6,8 @@ import { spawnSync } from 'node:child_process';
 import { exportSceneModulePack } from '../../scene-generator/apps/composition/backend/src/pack-export/moduleExport.ts';
 import { composeHost } from './compose-host.ts';
 import { engineRevision } from './engine-identity.ts';
+import { planSpecExport, writeSpecPack } from '../../workbench/src/spec/export-pack.ts';
+import { validateSceneSpec } from '../../workbench/src/spec/schema.ts';
 
 export function validateBrief(b: any) {
   if (!b.id || !b.semanticBrief || !Array.isArray(b.targets) || !b.targets.length) throw new Error('brief: identity, semantics and targets required');
@@ -23,7 +26,7 @@ export function assertBuiltState(report:any,digest:string){
 }
 
 const root=resolve(process.env.ASSET_PIPELINE_ROOT??resolve(import.meta.dirname,'..'));
-const dependencies=resolve(import.meta.dirname,'../..'),engine=join(dependencies,'engine');
+const dependencies=resolve(import.meta.dirname,'../..'),engine=process.env.PIPELINE_ENGINE_ROOT??join(dependencies,'engine');
 const cli=join(engine,'packages/engine/dist/bin/forgeax.mjs');
 const game=join(root,'game'), evidence=join(root,'evidence');
 const reportPath=join(evidence,'run-report.json');
@@ -34,6 +37,13 @@ const read=(f:string)=>JSON.parse(readFileSync(f,'utf8'));
 // An override inherited from a caller that still names the checkout path is dropped the same way.
 const sharedInputs=join(engine,'shared-build-inputs/manifest.json'),sharedInputsEnv=()=>{const{FORGEAX_SHARED_APP_INPUTS_MANIFEST:_,...env}=process.env;return {...env,...(existsSync(sharedInputs)?{FORGEAX_SHARED_APP_INPUTS_MANIFEST:sharedInputs}:{})};};
 const save=(f:string,v:unknown)=>writeFileSync(f,JSON.stringify(v,null,2)+'\n');
+
+/** Spec mode: meshes come from named generators at Engine build time; plan errors surface as error diagnostics. */
+function specExport(brief:any,staging:string){
+  const spec=read(join(root,'source',brief.entry));validateSceneSpec(spec);
+  if(existsSync(staging))rmSync(staging,{recursive:true});
+  const result=writeSpecPack(spec,planSpecExport(spec),staging,{packageId:brief.packageId,sourceKey:brief.sourceKey,name:brief.name},join(root,'source','pbr'));publishIntegrationPayload(join(root,'source'),staging);return result;
+}
 
 async function main(){
   mkdirSync(evidence,{recursive:true});
@@ -56,7 +66,7 @@ async function main(){
     catch(error){report.stages[name]={status:'failed',durationMs:Date.now()-started,error:String(error)};save(reportPath,report);throw error;}
   };
   const engineCommand=(name:string,args:string[])=>{
-    const r=spawnSync(process.execPath.includes('bun')?'node':process.execPath,[cli,...args,'--root',game,'--json'],{cwd:game,encoding:'utf8',env:sharedInputsEnv(),timeout:240000,killSignal:'SIGKILL',maxBuffer:32*1024*1024});
+    const r=spawnSync(process.execPath.includes('bun')?'node':process.execPath,[cli,...args,'--root',game,'--json'],{cwd:game,encoding:'utf8',env:sharedInputsEnv(),timeout:Number(process.env.ASSET_PIPELINE_ENGINE_TIMEOUT_MS??600000),killSignal:'SIGKILL',maxBuffer:32*1024*1024});
     writeFileSync(join(evidence,name+'.stdout'),r.stdout??'');writeFileSync(join(evidence,name+'.stderr'),r.stderr??'');
     if(r.error||r.status!==0)throw new Error(`${name} exit=${r.status}: ${(r.stderr??'').slice(-1800)} ${(r.stdout??'').slice(-1200)}`);
     let result;try{result=JSON.parse(r.stdout)}catch{throw new Error(`${name}: response is not structured JSON`)}
@@ -67,16 +77,17 @@ async function main(){
     report.stages={};report.browser={status:'not-run'};report.spec={status:'pending-visual-review'};delete report.catalog;delete report.generated;
     save(reportPath,report);
     await stage('candidate',()=>{
-      for(const [dir,sha] of [[engine,brief.engineSha],[join(dependencies,'scene-generator'),brief.generatorSha]]){
+      // Spec scenes are built by the workbench generator library, so only the Engine pin is checked.
+      for(const [dir,sha] of [[engine,brief.engineSha],...(brief.generator==='spec-pack'?[]:[[join(dependencies,'scene-generator'),brief.generatorSha]])]){
         const r=engineRevision(dir);if(r.sha!==sha)throw new Error('candidate SHA mismatch: '+dir);
         if(!r.clean)throw new Error('candidate has tracked changes: '+dir);
       }
     });
     const staging=join(root,'.staging-generated');
-    const result=await stage('generate-export',()=>exportSceneModulePack({sourceDir:join(root,'source'),entryFile:brief.entry,exportName:brief.exportName,args:brief.args,packageId:brief.packageId,sourceKey:brief.sourceKey,projectName:brief.name,destination:staging,includeDefaultLighting:false,consumerBuildBudgetMs:brief.budget.consumerBuildMs}));
+    const result=await stage('generate-export',()=>brief.generator==='spec-pack'?specExport(brief,staging):exportSceneModulePack({sourceDir:join(root,'source'),entryFile:brief.entry,exportName:brief.exportName,args:brief.args,packageId:brief.packageId,sourceKey:brief.sourceKey,projectName:brief.name,destination:staging,includeDefaultLighting:false,consumerBuildBudgetMs:brief.budget.consumerBuildMs}));
     await stage('generation-budget',()=>{
       if(result.triangleCount>brief.budget.maxTriangles||result.materialCount>brief.budget.maxMaterials)throw new Error('generated content exceeds declared budget');
-      if(result.diagnostics.some((d:any)=>d.severity==='error'))throw new Error('scene diagnostics contain errors');
+      if(result.diagnostics.some((d:any)=>d.severity==='error'))throw new Error('scene diagnostics contain errors: '+JSON.stringify(result.diagnostics.filter((d:any)=>d.severity==='error').slice(0,5)));
       if(result.meshCount===0)throw new Error('generated scene is empty');
     });
     await stage('publish-assets',()=>{
@@ -87,7 +98,7 @@ async function main(){
       const identity={sceneGuid:result.sceneGuid,packageId:result.packageId,sourceKey:result.sceneKey};
       save(join(game,'assets/generated-identity.json'),identity);
       writeFileSync(join(game,'assets/generated-identity.ts'),'export default '+JSON.stringify(identity)+' as const;\n');
-      save(join(evidence,'generation-receipt.json'),{...result,path:target,provenance:{kind:'procedural-scene-script',generatorSha:brief.generatorSha,sourceHash:hash(readFileSync(join(root,'source',brief.entry),'utf8')),generationDigest}});
+      save(join(evidence,'generation-receipt.json'),{...result,path:target,provenance:{kind:brief.generator==='spec-pack'?'scene-spec-pack':'procedural-scene-script',generatorSha:brief.generatorSha,sourceHash:hash(readFileSync(join(root,'source',brief.entry),'utf8')),generationDigest}});
       report.generated={sceneGuid:result.sceneGuid,triangles:result.triangleCount,meshes:result.meshCount,materials:result.materialCount};
     });
   } else if(operation==='build'){
@@ -99,10 +110,12 @@ async function main(){
     await stage('project-check',()=>engineCommand('project-check',['project','check']));
     await stage('engine-build',()=>engineCommand('project-build',['project','build']));
     await stage('catalog',()=>{
-      const catalog=read(join(game,'dist/pack-index.json'));const receipt=read(join(evidence,'generation-receipt.json'));
-      // Engine 0.4.18 nests the rows in a pack-index-tables/1 table.
-      const rows=Array.isArray(catalog)?catalog:Array.isArray(catalog.entries)?catalog.entries:catalog.entries?.entries;
-      if(!Array.isArray(rows))throw new Error('catalog rows missing');
+      const receipt=read(join(evidence,'generation-receipt.json'));
+      // Engine 0.5 writes dist/pack-index.json compressed; the catalog is read through the Engine's own asset listing.
+      const rows:any[]=[];let cursor:string|undefined;
+      for(let page=0;page<64;page++){const r=engineCommand('asset-list-'+page,['asset','list','--limit','256',...(cursor?['--cursor',cursor]:[])]);rows.push(...(r.value?.assets??[]));cursor=r.value?.page?.nextCursor==null?undefined:String(r.value.page.nextCursor);if(!cursor)break;}
+      const catalog={version:'engine-asset-list-v1',entries:rows};
+      if(!rows.length)throw new Error('catalog rows missing');
       if(!rows.some((r:any)=>r.guid===receipt.sceneGuid&&r.kind==='scene'))throw new Error('generated scene GUID absent from catalog');
       report.catalog={rows:rows.length,kinds:[...new Set(rows.map((r:any)=>r.kind))],sha256:hash(JSON.stringify(catalog))};
       save(join(evidence,'catalog.json'),catalog);

@@ -1,0 +1,11 @@
+import {readFileSync,writeFileSync} from 'node:fs';
+import {reviewedAppearanceReceipt} from '../workbench/src/spec/integration/reviewed-appearance';
+import {adoptCandidate} from '../workbench/src/spec/integration/adopt-candidate';
+const request=JSON.parse(readFileSync(process.argv[2]!,'utf8'));
+if(!request.reviewedSource)throw Error('REVIEWED_APPEARANCE_SOURCE_REQUIRED');
+const r=request.reviewedSource;
+const receipt=reviewedAppearanceReceipt(JSON.parse(readFileSync(r.baseSpec,'utf8')),JSON.parse(readFileSync(r.resultSpec,'utf8')),r.approvedSpecSha256,request.revision);
+writeFileSync(request.receipt,JSON.stringify(receipt,null,2)+'\n');
+const result=await adoptCandidate(request);
+writeFileSync(process.argv[3]!,JSON.stringify(result,null,2)+'\n');
+console.log(JSON.stringify({revision:result.revision,bindings:result.bindings.length,retainedObjects:result.retainedObjects,candidateSpec:result.candidateSpec}));

@@ -10,6 +10,14 @@ import { join, relative } from 'node:path';
 export const HOST_PACKAGE_ID = '5ce7e000-0000-7000-8000-000000000001';
 const camel = (id: string) => id.replace(/-(\w)/g, (_, c) => c.toUpperCase());
 
+/** The same migration is used when refreshing controls in a copied saved project. */
+export function composePluginSource(source:string,id:string){
+ if((source.match(/^export default \{/gm)??[]).length!==1)throw Error('compose-host: plugin must have one default plugin export');
+ const usesScene=/defaultSceneRoot/.test(source);source=source.replace(/^export default \{/m,`export const ${camel(id)}={`);
+ if(usesScene){source=source.replace(/(?:ctx\.gameHost|host)\??\.defaultSceneRoot/g,'ctx.gameScene.root').replace(/inject:\s*\[([^\]]*)\]/,(_,l)=>`inject:[${l},'gameScene']`);source="import type {} from './scene-refs.ts';\n"+source;}
+ return source;
+}
+
 export async function composeHost(game: string, engineRoot: string) {
   const configPath = join(game, 'forge.json'), cfg = JSON.parse(readFileSync(configPath, 'utf8'));
   if (cfg.schemaVersion === '3.0.0') return cfg.roots;
@@ -18,20 +26,20 @@ export async function composeHost(game: string, engineRoot: string) {
   const [{ AssetGuid }, { definePackageId }] = await Promise.all([facade('guid'), facade('source')]);
   const guid = (key: string) => AssetGuid.format(AssetGuid.derive(definePackageId(HOST_PACKAGE_ID), key));
   const assets = join(game, 'assets'), entries: Record<string, any> = {}, children: string[] = [];
-  let frontend: string | null = null, camera: string | null = null;
+  const sceneChildren: string[] = [];
+  let frontend: string | null = null, build: string | null = null;
   for (const p of cfg.plugins) {
     const file = join(game, p.name), name = camel(p.id);
     let source = readFileSync(file, 'utf8');
-    if ((source.match(/^export default \{/gm) ?? []).length !== 1) throw new Error('compose-host: ' + p.name + ' must have one default plugin export');
-    source = source.replace(/^export default \{/m, `export const ${name}={`);
-    if (/defaultSceneRoot/.test(source)) {
-      source = source.replace(/(?:ctx\.gameHost|host)\??\.defaultSceneRoot/g, 'ctx.gameScene.root').replace(/inject:\[([^\]]*)\]/, (_, l) => `inject:[${l},'gameScene']`);
-      source = "import type {} from './scene-refs.ts';\n" + source;
-    }
+    const usesScene = /defaultSceneRoot/.test(source);
+    source=composePluginSource(source,p.id);
     writeFileSync(file, source);
     entries['plugin/' + p.id] = { kind: 'plugin', module: { specifier: './' + relative(assets, file), export: name } };
     if (p.realm === 'frontend') frontend = guid('plugin/' + p.id);
-    else if (p.id === 'camera') camera = guid('plugin/' + p.id);
+    // Build-realm plugins (renderer profile, cookers) run in the isolated build process and become roots.build.
+    else if (p.realm === 'build') { if (build) throw new Error('compose-host: only one build-realm plugin'); build = guid('plugin/' + p.id); }
+    // Any plugin that injects gameScene (camera, planar-reflection, volumetric-fog, concept-look) MUST mount inside the scene owner after ctx.provide('gameScene', {root}).
+    else if (p.id === 'camera' || usesScene) sceneChildren.push(guid('plugin/' + p.id));
     else children.push(guid('plugin/' + p.id));
   }
   writeFileSync(join(assets, 'scene-refs.ts'), `import type {EntityHandle} from '@forgeax/engine/ecs';
@@ -54,12 +62,12 @@ export const scene:Plugin.Object<{readonly scene:string;readonly children:readon
   for(const g of config.children){const c=await mountPluginAsset(ctx,g);if(!c.ok)throw c.error;yield joinPluginFiber(c.value);}});}};
 `);
   entries['plugin/engine'] = { kind: 'plugin', module: { specifier: './host-plugins.ts', export: 'engine' }, config: { children: [...children, guid('plugin/scene')].map(g => ({ $asset: g })) } };
-  entries['plugin/scene'] = { kind: 'plugin', module: { specifier: './host-plugins.ts', export: 'scene' }, config: { scene: { $asset: cfg.defaultScene }, children: camera ? [{ $asset: camera }] : [] } };
+  entries['plugin/scene'] = { kind: 'plugin', module: { specifier: './host-plugins.ts', export: 'scene' }, config: { scene: { $asset: cfg.defaultScene }, children: sceneChildren.map(g => ({ $asset: g })) } };
   writeFileSync(join(assets, 'host.pack.ts'), `import {definePack,definePackageId} from '@forgeax/engine/pack/source';
 import {ok} from '@forgeax/engine/types';
 export default definePack({schemaVersion:'2.0.0',plugins:true,packageId:definePackageId('${HOST_PACKAGE_ID}'),build:()=>ok(${JSON.stringify(entries)})});
 `);
-  const roots = { engine: guid('plugin/engine'), ...(frontend ? { frontend } : {}) };
+  const roots = { engine: guid('plugin/engine'), ...(frontend ? { frontend } : {}), ...(build ? { build } : {}) };
   writeFileSync(configPath, JSON.stringify({ id: cfg.id, name: cfg.name, schemaVersion: '3.0.0', assetRoots: ['assets'], roots }, null, 2) + '\n');
   return roots;
 }

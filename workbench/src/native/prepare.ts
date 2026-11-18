@@ -12,13 +12,13 @@ export const sha=(p:string)=>createHash('sha256').update(readFileSync(p)).digest
 export function atlasSurfaces(atlas:any,grid=3){const bytes=Buffer.from(atlas.rgba8,'base64'),w=atlas.width/grid,h=atlas.height/grid;if(!Number.isInteger(w)||!Number.isInteger(h))throw Error('图集必须是等分九宫格');return Array.from({length:grid*grid},(_,i)=>{const out=Buffer.alloc(w*h*4),x=(i%grid)*w,y=Math.floor(i/grid)*h;for(let row=0;row<h;row++)bytes.copy(out,row*w*4,((y+row)*atlas.width+x)*4,((y+row)*atlas.width+x+w)*4);return {width:w,height:h,rgba8:out.toString('base64'),colorSpace:atlas.colorSpace};});}
 export const VIEWS=[{name:'参考视角一',position:[-5.0,1.66,6.5],target:[-.5,1.90,-2.0]},{name:'参考视角二',position:[-5.4,1.68,-3.82],target:[5.7,1.80,.30]}];
 export function prepareNativeControls(assets:string){
- copyFileSync(join(W,'src/native/camera.txt'),join(assets,'camera.plugin.ts'));
+ copyFileSync(join(W,'src/native/capture-telemetry.ts'),join(assets,'capture-telemetry.ts'));copyFileSync(join(W,'src/native/camera.txt'),join(assets,'camera.plugin.ts'));
  copyFileSync(join(W,'src/native/camera-motion.ts'),join(assets,'camera-motion.ts'));
  let ui=readFileSync(join(W,'src/ui-v3.txt'),'utf8').replace('Space 巡航/暂停 · 方向键移动 · H 隐藏/恢复 · R 开始/停止录屏','点击画面后：WASD 移动 · Q/E 降/升 · Shift 加速 · 鼠标拖动/← → 转向 · 1/2 复位 · Space 观测/暂停 · H 隐藏 · R 录屏');
  ui=ui.replace('const record=document.createElement',`for(const [index,label] of ['参考视角一','参考视角二'].entries()){const button=document.createElement('button');button.textContent=label;button.style.cssText='margin:8px 4px;padding:5px 9px;cursor:pointer';button.onclick=()=>{channel.postMessage({action:'view',index});const canvas=document.querySelector('canvas');if(canvas){canvas.tabIndex=0;canvas.focus();}};hud.append(button);}hud.append(document.createElement('br'));const record=document.createElement`);
  ui=ui.replace('const keys=(e:KeyboardEvent)=>{',`const keys=(e:KeyboardEvent)=>{if(e.target instanceof HTMLCanvasElement&&['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code))e.preventDefault();`);
- ui=ui.replace('return()=>{channel.close();',`const focusCanvas=(e:PointerEvent)=>{if(e.target instanceof HTMLCanvasElement){e.target.tabIndex=0;e.target.focus();}};const contextMenu=(e:MouseEvent)=>{if(e.target instanceof HTMLCanvasElement)e.preventDefault();};document.addEventListener('pointerdown',focusCanvas);document.addEventListener('contextmenu',contextMenu);
- return()=>{document.removeEventListener('pointerdown',focusCanvas);document.removeEventListener('contextmenu',contextMenu);channel.close();`);
+ ui=ui.replace('return()=>{releaseCapture();',`const focusCanvas=(e:PointerEvent)=>{if(e.target instanceof HTMLCanvasElement){e.target.tabIndex=0;e.target.focus();}};const contextMenu=(e:MouseEvent)=>{if(e.target instanceof HTMLCanvasElement)e.preventDefault();};document.addEventListener('pointerdown',focusCanvas);document.addEventListener('contextmenu',contextMenu);
+ return()=>{document.removeEventListener('pointerdown',focusCanvas);document.removeEventListener('contextmenu',contextMenu);releaseCapture();`);
  writeFileSync(join(assets,'ui.plugin.ts'),ui);
 }
 export function prepareNative(root:string,id:string,layout?:any){

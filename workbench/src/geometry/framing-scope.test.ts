@@ -42,3 +42,10 @@ test('第二个参考图也必须检验主体，不能当成细节检查图',()=
  const {audit,samples}=fixture();audit.views[1].referenceIndex=2;
  expect(analyzeSceneRun(samples,audit).hard.framing).toBe(false);
 });
+test('recording-only native Render Worker intervals replace contaminated pre-capture update samples',()=>{
+ const {audit,samples}=fixture();for(const s of samples)s.frameTimes=Array(1200).fill(500);
+ const render={version:'engine-render-recording-window-v1',startAt:2000,endAt:12000,startFrame:100,endFrame:700,submittedEvents:600,frameTimes:Array(599).fill(1000/60),missingIntervals:0,error:null};
+ const r=analyzeSceneRun(samples,audit,1600,900,render);expect(r.submittedFps).toBe(60);expect(r.performance.p95FrameMs).toBeCloseTo(1000/60);expect(r.hard.frameRate).toBe(true);
+ expect(()=>analyzeSceneRun(samples,audit,1600,900,{...render,missingIntervals:1})).toThrow('RenderWorker');
+ expect(()=>analyzeSceneRun(samples,audit,1600,900,{...render,startFrame:null})).toThrow('RenderWorker');
+});

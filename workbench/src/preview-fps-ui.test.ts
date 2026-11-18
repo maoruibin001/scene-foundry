@@ -36,3 +36,12 @@ test('reference advice recommends multiple views without changing text or single
  const page=readFileSync(new URL('../public/index.html',import.meta.url),'utf8'),app=readFileSync(new URL('../public/app.js',import.meta.url),'utf8');
  expect(page).toContain('推荐 2–5 张');expect(page).toContain('id="image" type="file" multiple');expect(app).toContain('referenceImageAdvice(imageIds.length)');expect(app).toContain('!imageIds.length');expect(app).not.toContain('imageIds.length<2');
 });
+
+test('a standalone backend decorated preview passes through the UI gateway exactly once',async()=>{
+ const root=mkdtempSync(join(tmpdir(),'preview-fps-already-'));
+ const body={url:'http://127.0.0.1:55555/',sourceUrl:'http://localhost:19775/',liveFps:true};
+ const upstream=Bun.serve({hostname:'127.0.0.1',port:0,fetch:()=>Response.json(body)});
+ try{const handler=uiHandler(root,upstream.url.toString(),undefined,undefined,undefined,{wrapURL:async()=>{throw Error('must not rewrap');}});
+ const response=await handler(new Request('http://127.0.0.1/api/jobs/11111111-1111-1111-1111-111111111111/preview-output',{method:'POST',body:'{}'}));expect(await response.json()).toEqual(body);
+ }finally{upstream.stop(true);rmSync(root,{recursive:true,force:true});}
+});

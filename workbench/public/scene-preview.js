@@ -5,14 +5,26 @@ const esc=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;
 const pendingPreviews=new Map();
 const outputPath=(job,path,kind)=>scenePath(`/files/runs/${encodeURIComponent(job.id)}/${path}`,kind);
 
+/** The spec visual receipt is independent of ordinary five/six-dimension delivery scores. */
+export function specVisualSummary(job){
+ const review=job?.styleReview,gate=job?.specGate;
+ if(!job?.specJob||review?.evidence?.status!=='visible'||!Number.isFinite(review.overall)||!gate?.styleJudge||review.overall!==gate.styleJudge.overall)return null;
+ const passed=gate.styleJudge.passed===true,score=review.overall,threshold=gate.styleJudge.threshold?.overall??70;
+ const hardPassed=Array.isArray(gate.failed)&&gate.failed.length===0;
+ const owner=gate.ownerApproval?.method==='explicit-ui';
+ return {score,qualityLabel:passed?'独立视觉目标通过；'+(owner?'用户已确认':'等待用户确认'):`独立视觉已评分，未达${threshold}分目标`,
+  explanation:`独立视觉评审已完成：${score} 分，${passed?'达到':'未达到'} ${threshold} 分目标；${hardPassed?'运行检查通过':'运行检查未通过'}。${owner?'用户已确认当前画面；独立评分仍单列。':'尚未获用户最终确认。'}`};
+}
+
 /** Availability and selection come only from the delivery receipt, never root runtime or status. */
 export function sceneOutput(job){
  const delivery=job?.delivery,best=delivery?.best;
  if(delivery?.available!==true||!best)return null;
  const context=currentSceneKind(),imagePaths=Array.isArray(best.images)?best.images.filter(path=>typeof path==='string'&&path.length):[],images=imagePaths.map(path=>outputPath(job,path,context));
  const label=best.layoutDraft?'布局范围草稿':best.kind==='graybox'?'空间草稿':best.kind==='partial'?'部分场景草稿':'场景';
- const qualityLabel=best.kind==='scene'?(best.deliveryStatus==='passed'&&best.deliveryStandard==='profile70'?'所选权重70分目标与共同底线通过；旧固定基准另列':best.deliveryStatus==='passed'&&best.deliveryStandard==='basic70'?'70分基础交付通过；完整规范结果另列':best.qualityStatus==='passed'?'正式验收通过':best.qualityStatus==='not_met'?'已评分，未达标':'未完成成品评分'):best.kind==='partial'&&best.qualityStatus==='partial_assessed'?'草稿已评分，成品尚未完成':'未完成成品评分';
- return {key:JSON.stringify([context,job.id,best.distManifestDigest??null,best.folder??null]),kind:best.kind,label,poster:images[0]??null,imagePaths,images,folder:best.folder??null,distManifestDigest:best.distManifestDigest??null,qualityLabel,score:Number.isFinite(best.score)?best.score:null,limitations:deliveryLimitation(delivery),selectionStatus:delivery.selection?.status??null,selectionReason:delivery.selection?.reason??null,runtime:best.runtime?outputPath(job,best.runtime,context):null};
+ const specSummary=specVisualSummary(job);
+ const qualityLabel=specSummary?.qualityLabel??(best.kind==='scene'?(best.deliveryStatus==='passed'&&best.deliveryStandard==='profile70'?'所选权重70分目标与共同底线通过；旧固定基准另列':best.deliveryStatus==='passed'&&best.deliveryStandard==='basic70'?'70分基础交付通过；完整规范结果另列':best.qualityStatus==='passed'?'正式验收通过':best.qualityStatus==='not_met'?'已评分，未达标':'未完成成品评分'):best.kind==='partial'&&best.qualityStatus==='partial_assessed'?'草稿已评分，成品尚未完成':'未完成成品评分');
+ return {key:JSON.stringify([context,job.id,best.distManifestDigest??null,best.folder??null]),kind:best.kind,label,poster:images[0]??null,imagePaths,images,folder:best.folder??null,distManifestDigest:best.distManifestDigest??null,qualityLabel,score:specSummary?.score??(Number.isFinite(best.score)?best.score:null),limitations:specSummary?.explanation??deliveryLimitation(delivery),selectionStatus:delivery.selection?.status??null,selectionReason:delivery.selection?.reason??null,runtime:best.runtime?outputPath(job,best.runtime,context):null};
 }
 
 function localPreviewURL(value){

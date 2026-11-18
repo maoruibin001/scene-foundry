@@ -9,8 +9,8 @@
   "args": [{"segments": 16, "seed": 23}],
   "packageId": "61b8d6f1-150f-41c7-a2be-b7890d1c7618",
   "sourceKey": "scene/micro-garden",
-  "engineSha": "30ae88226564ca90ae6082f7e94686a4cc781a6a",
-  "engineRelease": { "package": "@forgeax/engine", "version": "0.4.18-rc.1", "integrity": "sha512-yC8OVy5Ii5xgjH03E00A/XJm7dTs2en1+OY3CUXNRXk7/QfLNuEvI/wwxpWJI3vtZnd5N3CLCYD5N8VHL3aNhA==" },
+  "engineSha": "be74048dcef1da092fa27dbf3be2430168f811c5",
+  "engineRelease": { "package": "@forgeax/engine", "version": "0.5.0-rc.1", "integrity": "sha512-QdhXsSp5trDwPt6y5SwqCmHX4glCCTMx024a5HUrw2BSuKBpOuFATWfM15esmyHWf27UvOduFFuLzxq4jeskfg==" },
   "generatorSha": "c3943a5026fc5f32f1b4993d542e1f372656049c",
   "budget": {"maxTriangles": 20000, "maxMaterials": 16, "consumerBuildMs": 15000},
   "externalAssets": {"required": false, "status": "not-requested"}

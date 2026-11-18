@@ -26,3 +26,26 @@ test('实际终止信号等待清理完成',async()=>{
 test('会话关闭不返回时明确失败，不吞掉超时或伪造关闭成功',async()=>{
  const steps:string[]=[];await expect(closeCaptureResources({close:()=>new Promise(()=>{})},null,s=>steps.push(s),{timeoutMs:10})).rejects.toThrow('CAPTURE_CLEANUP_TIMEOUT');expect(steps).not.toContain('采集资源已关闭');
 });
+
+test('Engine owns private and borrowed teardown; pipeline never navigates before official close',async()=>{
+ const order:string[]=[];
+ await closeCaptureResources({report:()=>({carrier:'private-browser'}),page:{goto:()=>{throw Error('must not navigate a closing GPU owner');}},close:async()=>{order.push('close');}},null);
+ expect(order).toEqual(['close']);
+ await closeCaptureResources({report:()=>({carrier:'borrowed'}),page:{goto:async()=>{throw Error('不能触碰借用页面');}},close:async()=>{}},null);
+ await expect(closeCaptureResources({report:()=>({carrier:'private-browser'}),page:{goto:async()=>{}},close:async()=>{throw Error('close failed');}},null)).rejects.toThrow('close failed');
+});
+test('an authoritative Engine close requires its actual closedAt receipt',async()=>{
+ const report:any={schemaVersion:'3.0.0',carrier:'private-browser'};
+ await expect(closeCaptureResources({report:()=>report,close:async()=>{}},null)).rejects.toThrow('CAPTURE_CLOSE_UNCONFIRMED');
+ await closeCaptureResources({report:()=>report,close:async()=>{report.closedAt=new Date().toISOString();}},null);
+});
+test('close timeout preserves exact phase and only the capture process tree instead of passing the gate',async()=>{
+ const dir=mkdtempSync(join(tmpdir(),'capture-close-diag-'));try{
+ await expect(closeCaptureResources({close:()=>new Promise(()=>{})},null,()=>{},{timeoutMs:15,outputDir:dir})).rejects.toThrow('CAPTURE_CLEANUP_TIMEOUT');
+ const d=JSON.parse(readFileSync(join(dir,'capture-close-diag.json'),'utf8'));expect(d.phaseAtTimeout).toBe('session');expect(d.closedAt).toBeNull();expect(d.sinkCloseMs).toBeNumber();expect(d.processTree.some((p:any)=>p.pid===process.pid)).toBe(true);
+ }finally{rmSync(dir,{recursive:true,force:true});}
+});
+test('media references must be released and the SDK still owns actual closure',async()=>{
+ let closed=false;const d=await closeCaptureResources({page:{isClosed:()=>false},close:async()=>{closed=true;}},null,()=>{},{releaseMedia:async()=>({chunks:0,objectUrlActive:false,recorderActive:false,channelClosed:true})});expect(closed).toBe(true);expect(d.mediaReleaseMs).toBeNumber();
+ closed=false;await expect(closeCaptureResources({page:{isClosed:()=>false},close:async()=>{closed=true;}},null,()=>{},{releaseMedia:async()=>({chunks:1})})).rejects.toThrow('MEDIA_RELEASE');expect(closed).toBe(true);
+});
