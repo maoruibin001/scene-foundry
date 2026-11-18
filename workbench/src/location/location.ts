@@ -170,7 +170,8 @@ async function prepare(request: Request, directory: string) {
   let nativeBounds: Bounds | undefined;
   const referenceImages = readImages(input.images ?? [], directory);
   if (input.kind === 'spec') {
-    requireValue(!request.voxel && !planBytes && !input.textures && !referenceImages.length, 'A frozen spec supplies its own requirements and does not have a voxel grid.');
+    requireValue(!request.voxel && !planBytes && !input.textures && !referenceImages.length,
+      'Specification input has its own requirement and material contracts; use the dedicated pbrDir field for catalog assets.');
     validateSceneSpec(data);
     // The existing Pack exporter emits Y-up scene coordinates without a host translation.
     requireValue(Bun.deepEquals(loc.placement, {pivotSourceMeters: [0, 0, 0], worldAnchorEngine: [0, 0, 0]}),
@@ -189,6 +190,16 @@ async function prepare(request: Request, directory: string) {
       && !compiled.report.dropped.length, 'Spec export has unresolved, dropped or proxy geometry.');
     partIds = data.objects.map(o => o.id);
     nativeBounds = worldBounds(data.bounds, loc.placement);
+    const meshes = new Map(compiled.meshes.map(mesh => [mesh.key, mesh]));
+    for (const entity of compiled.entities) {
+      const aabb = meshes.get(entity.mesh)!.aabb;
+      const matrix = compiler.packInstanceTransforms([entity]);
+      for (const x of [aabb[0], aabb[3]]) for (const y of [aabb[1], aabb[4]]) for (const z of [aabb[2], aabb[5]]) {
+        const corner = [0, 1, 2].map(axis =>
+          matrix[axis] * x + matrix[axis + 4] * y + matrix[axis + 8] * z + matrix[axis + 12]) as Vec3;
+        requireValue(inside(corner, loc.boundsEngine), `Compiled spec mesh is outside the location bounds: ${entity.id}.`);
+      }
+    }
     const packageId = sha256(`${who.projectId}/${loc.id}/${sha256(source)}`);
     const uuid = `${packageId.slice(0, 8)}-${packageId.slice(8, 12)}-5${packageId.slice(13, 16)}-8${packageId.slice(17, 20)}-${packageId.slice(20, 32)}`;
     specExport = root => {

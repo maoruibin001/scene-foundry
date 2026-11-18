@@ -16,31 +16,31 @@ bun scripts/scene-location-v1.ts export /path/to/location-request.json
   "version": "scene-foundry-location-v1",
   "project": { "id": "@local/my-game", "root": "./game" },
   "sdk": "0.5.0",
-  "input": { "kind": "voxel", "path": "./courtyard.voxel.json" },
+  "input": { "kind": "voxel", "path": "./gate-shelter.voxel.json" },
   "location": {
-    "id": "town-courtyard",
-    "placement": { "pivotSourceMeters": [14, 12, 0], "worldAnchorEngine": [155, 24, 52] },
-    "boundsEngine": { "min": [141, 23, 41], "max": [166, 36, 64] },
-    "roads": [ { "id": "town-road", "positionEngine": [155, 24, 42], "widthMeters": 4.5 } ],
-    "anchors": { "bell": { "positionEngine": [161.125, 26.375, 51.125], "partId": "town_courtyard_bell" } },
+    "id": "gate-shelter",
+    "placement": { "pivotSourceMeters": [0, 0, 0], "worldAnchorEngine": [40, 2, 16] },
+    "boundsEngine": { "min": [40, 2, 6], "max": [48, 8, 16] },
+    "roads": [ { "id": "trail", "positionEngine": [44, 2, 16], "widthMeters": 2 } ],
+    "anchors": { "gate": { "positionEngine": [44, 3, 13], "partId": "gate_frame" } },
     "dependencies": []
   },
   "voxel": {
     "colliderLimit": 340,
-    "coverParts": ["town_awning"],
+    "coverParts": ["shed_roof"],
     "wetBindings": [
-      { "partId": "town_awning", "materialId": "roof", "hostMaterialKey": "weather-roof" }
+      { "partId": "shed_roof", "materialId": "roof", "hostMaterialKey": "weather-roof" }
     ]
   },
   "output": "./courtyard-r1"
 }
 ```
 
-用真实制作源中的部件和材质 ID 替换示例值。边界、锚点、道路接点均为宿主 Engine 坐标，单位为米。使用 `dependencies` 的 `{id, sha256}` 冻结宿主提供的相邻包或参考数据，宿主接入时对照其实际文件。几何编译检查整个输出位于给定边界内。可通过 `input.plan` 提供现有需求文件。原模型任务带参考机位时，`input.images` 提供原图路径及原顺序。编译会核对参考机位并记录图片哈希。
+用真实制作源中的部件和材质 ID 替换示例值。边界、锚点、道路接点均为宿主 Engine 坐标，单位为米。使用 `dependencies` 的 `{id, sha256}` 冻结宿主提供的相邻包或参考数据，宿主接入时对照其实际文件。普通和体素输出的几何、规格已布置网格的包围盒均检查在给定边界内。可通过 `input.plan` 提供现有需求文件。原模型任务带参考机位时，`input.images` 提供原图路径及原顺序。编译会核对参考机位并记录图片哈希。
 
 - **体素源**接受 `voxel-scene-v1` 或 `voxel-grid-v2`。预检执行相同网格和表面约束检查。颜色合并规则、占用格、操作和几何预算沿用编译器。碰撞有独立的宿主上限，超限会给出错误。
 - **普通源**用 `"kind": "ordinary"` 导出 `scene-v1` 或 `geometry-v1` 的现有可编辑几何。带贴图的几何使用 `input.textures` 传入已经验证的 `textureId → TextureBundle` JSON。
-- **规格源**用 `"kind": "spec"` 导出 `scene-spec-v1` 的原生 Pack。使用零 pivot 和零 world anchor，按已有 Pack/续作桥接在宿主布置。预检需要 Workbench 可解析与宿主一致的 0.5.0 SDK。Poly Haven 规格用 `input.pbrDir` 指定现有目录，导出记录相关依赖文件。已有大厅规格/外观回接继续用 [现有游戏接续](existing-game-continuation-2026-11-15.md) 和 [已评审外观回接](pipeline-reviewed-game-adoption-2026-11-16.md)。
+- **规格源**用 `"kind": "spec"` 导出 `scene-spec-v1` 的原生 Pack。使用零 pivot 和零 world anchor，按已有 Pack/续作桥接在宿主布置。预检需要 Workbench 可解析与宿主一致的 0.5.0 SDK。可在独立 Scene Foundry 检出安装对应 SDK，或把该检出的 `workbench/node_modules/@forgeax/engine` 连到消费副本的本地 SDK。Poly Haven 规格用 `input.pbrDir` 指定现有目录，导出记录相关依赖文件。已有大厅规格/外观回接继续用 [现有游戏接续](existing-game-continuation-2026-11-15.md) 和 [已评审外观回接](pipeline-reviewed-game-adoption-2026-11-16.md)。
 
 ## 接入与第二次更新
 
