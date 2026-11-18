@@ -16,13 +16,14 @@ import {validateSceneSpec,type SceneSpec} from './schema';
 import {emitSpecWorld} from './world-emitter';
 import {conceptLookPlugin,conceptLookUi} from './concept-look';
 import {irradianceFieldGi,renderProfilePlugin} from './render-profile';
+import {applyPerformancePreset,presetSummary,validatePerformancePreset,type PerformancePresetId} from './performance-presets';
 import {DEFAULT_STANDARD_PROFILE} from '@forgeax/engine/render';
 
 const W=resolve(import.meta.dirname,'../..'),BASE=resolve(W,'..'),P=join(BASE,'prototype'),ENGINE=join(BASE,'engine');
 const read=(p:string)=>JSON.parse(readFileSync(p,'utf8')),save=(p:string,v:unknown)=>writeFileSync(p,JSON.stringify(v,null,2)+'\n');
 const sha=(s:string)=>createHash('sha256').update(s).digest('hex');
 
-export async function prepareSpecProject(root:string,spec:SceneSpec,options:{id?:string;stateId?:string;maxTriangles?:number;concurrency?:number}={}){
+export async function prepareSpecProject(root:string,spec:SceneSpec,options:{id?:string;stateId?:string;maxTriangles?:number;concurrency?:number;performancePreset?:PerformancePresetId}={}){
  validateSceneSpec(spec);
  const plan=await planSpecExportParallel(spec,{cacheDir:join(root,'.mesh-cache'),concurrency:options.concurrency});
  const exportStats=getExportPlanTelemetry(plan)??{parallelWorkers:0,durationMs:0,uniqueMeshes:plan.meshes.length,workerMeshBuilds:0,meshCacheHits:0,surfaceBuilds:0};
@@ -69,7 +70,14 @@ export async function prepareSpecProject(root:string,spec:SceneSpec,options:{id?
  const hasDecals=(spec.decals?.length??0)>0;
  const activePost=spec.lighting.states.find(s=>s.id===(options.stateId??spec.lighting.defaultState))!.post;
  const requiresDeferred=hasDecals||activePost.gtao||Boolean(activePost.ssr);
- const perfProfile={...DEFAULT_STANDARD_PROFILE,...(requiresDeferred?{renderPath:'deferred' as const}:{}),...(process.env.SPEC_RENDER_PATH?{renderPath:process.env.SPEC_RENDER_PATH}:{}),lightCount:32,volumetricFog:{quality:'low',depth:48,tileSize:16}};
+ const baseProfile={...DEFAULT_STANDARD_PROFILE,...(requiresDeferred?{renderPath:'deferred' as const}:{}),...(process.env.SPEC_RENDER_PATH?{renderPath:process.env.SPEC_RENDER_PATH}:{}),lightCount:32,volumetricFog:{quality:'low',depth:48,tileSize:16}};
+ // 有界性能优化续接任务会带档位；普通任务保持原画质。档位只叠加渲染预算，不动几何与规格。
+ const presetId=options.performancePreset?validatePerformancePreset(options.performancePreset):null;
+ const perfProfile=presetId?applyPerformancePreset(baseProfile,presetId):baseProfile;
+ save(join(root,'performance-preset.json'),{version:'spec-performance-preset-v1',preset:presetId??'quality',
+  source:'本仓库渲染预算开关 + 引擎 DEFAULT_STANDARD_PROFILE（引擎未提供 optimize API 或方案库）',
+  summary:presetId?presetSummary(presetId):'原画质配置，优化链的基线',
+  renderPathLockedToDeferred:requiresDeferred});
  // 漫反射 GI:渲染器配置只能在构建期由 build 插件给出;默认 profile + 延迟渲染 + irradiance-field。
  const giState=spec.lighting.states.find(s=>s.id===(options.stateId??spec.lighting.defaultState))!.post.gi;
  if(!giState){

@@ -1,6 +1,6 @@
 import {waitForReflections} from './reflection-ready.mjs';
 import {captureFrame} from './reference-frame.mjs';
-import {captureBrowserExecutable} from '../capture-browser.mjs';
+import {captureBrowserExecutable,installCaptureNoSandbox} from '../capture-browser.mjs';
 import {reconstructionPython} from '../runtime-paths.mjs';
 import {recordingSink} from '../recording-sink.mjs';
 import {captureShutdown,closeCaptureResources} from '../capture-shutdown.mjs';
@@ -14,6 +14,7 @@ import {promisify} from 'node:util';
 import {analyzeSceneRun} from './runtime-metrics.mjs';
 import {recordedMotion} from './recorded-motion.mjs';
 import {capturePlan} from './capture-plan.mjs';
+installCaptureNoSandbox();
 const [root,url,output]=process.argv.slice(2),browser=createBrowserCapture(root);let session,sink;
 const shutdown=captureShutdown(()=>closeCaptureResources(session,sink,message=>console.log(message),{outputDir:output,releaseMedia:async()=>{if(!session?.page||session.page.isClosed())return null;return session.page.evaluate(()=>{document.dispatchEvent(new Event('scene-capture-release'));return JSON.parse(document.documentElement.dataset.sceneCaptureReleased??'null');});}}));
 try{

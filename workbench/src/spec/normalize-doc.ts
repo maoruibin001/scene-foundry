@@ -5,8 +5,10 @@
  * 合并时 master 字段以表格为准覆盖,确定性对账与引用自愈后 validateSceneSpec;产物交 owner 审改后再进入规格驱动的后端。
  * 用法:bun src/spec/normalize-doc.ts <doc.html> <outDir> [--effort high|xhigh]
  */
+import {createHash} from 'node:crypto';
 import {existsSync,mkdirSync,readFileSync,writeFileSync} from 'node:fs';
 import {join,resolve} from 'node:path';
+import {fileURLToPath} from 'node:url';
 import {callSpecNode,nodeCacheHash,validateNodeModels,type NodeModels,type NodeModel} from './node-models';
 import {findTable,parseHtmlDocument,type DocSource} from './doc-source';
 import {handbookGenerators,handbookLeaves,handbookLights,handbookMaterials,handbookObjects,handbookPost,handbookShots,handbookSlots,HANDBOOK_TABLES,type HandbookGenerator,type HandbookObject} from './handbook';
@@ -90,6 +92,14 @@ const ENGINE_FACTS=`目标引擎 ForgeaX 0.5(实测 2026-11-06,1600×900 目标 
 - 规模:场景 ≤60 万三角;大空间靠高精度程序化生成器实例与通透体积光营造。\n${HIGH_TECH_LAWS}`;
 const SCOPE=`本次只搭建静态场景环境与光影,不实现交互、玩法、物理、敌人、角色、AI 对话、声音、UI、特效粒子与运行时破坏。玩家、武器、敌人、触发体、出生点、纯玩法数据不进入场景对象;破坏类资产只保留完整(未破坏)外观。`;
 const SYSTEM=`你是游戏关卡的技术美术与场景规格化工程师。把设计手册整理成标准化场景规格。手册中的冻结表格已由程序确定性解析为 facts,其中的 ID、坐标、尺寸、倾角、生成器参数是 master 事实,必须原样使用,不得改写、取整或换算。手册没有给出、但搭建完整大厅必需的内容,按手册的约束、预算与高科明亮科幻光学铁律合理补全,标 authority=design_fill,并在 sources 里写依据章节;不能声称补全是测量结果。每条输出写来源(kind=doc 时 ref 写章节名或资产 ID)。重要执行要求:请保持思维链简短果断(控制在 800 字以内),不要逐条复述表格或反复纠结边缘项,直接调用 StructuredOutput 输出紧凑合法的 JSON。全部使用中文。${SCOPE}\n${ENGINE_FACTS}`;
+
+/** 规格化实现摘要:提示词与解析/合并逻辑任一变化都会让文档缓存失效,不再复用旧模型输出。 */
+export function normalizeImplementationDigest(){
+ const h=createHash('sha256');
+ h.update(readFileSync(fileURLToPath(import.meta.url)));
+ h.update(SYSTEM);
+ return h.digest('hex').slice(0,16);
+}
 
 function paramsOf(list:{name:string;number:number|null;numbers:number[]|null;text:string|null;flag:boolean|null}[]):SpecParams{
  const out:SpecParams={};
@@ -446,7 +456,8 @@ function classifyMasterShard(m:HandbookObject):'core'|'arch'|'tech'|'infra'{
 async function normalizeCaseDocument(htmlPath:string,outDir:string,effort='high',reuse?:string,nodeModels?:NodeModels,signal?:AbortSignal){
  const selections=validateNodeModels(nodeModels);
  const ignoreFrozenLook=process.env.SPEC_IGNORE_FROZEN_LOOK==='1';
- const concurrency=Math.max(1,Number(process.env.SPEC_CBC4_CONCURRENCY||6)||6);
+ // 默认 4 路：6 路并发时模型 relay 更易触发限流/静默（历史 3 次 PROVIDER_TIMEOUT），与工作台默认并发一致。
+ const concurrency=Math.max(1,Number(process.env.SPEC_CBC4_CONCURRENCY||4)||4);
  const html=readFileSync(htmlPath,'utf8'),doc=parseHtmlDocument(html),facts=handbookFacts(doc),fullText=documentText(doc);
  const compactArchText=compactSectionText(doc,/包络|母布局|建筑|结构|核心|控制室|约束|B1|B2|§2|§3|F1/);
  const compactStagingText=compactSectionText(doc,/光照|视觉|材质|氛围|机位|验收|约束|F1|B1|B2|§2|§4/);
@@ -460,7 +471,19 @@ async function normalizeCaseDocument(htmlPath:string,outDir:string,effort='high'
  const shardNode=(n:NodeModel):NodeModel=>n;
 
  // ==================== Wave 1: 3 路 cbc4 并发(全量材质 + 主结构核心族 + 管线道具排除族) ====================
- const slotCatalog=Object.fromEntries(Object.values(GENERATORS).map((g:any)=>[g.id,{label:g.label,slots:g.slots,params:Object.keys(g.params)}]));
+ // 只给参数名会让模型把 number 写成布尔、把 vec3 写成中文描述、把区间写成数组，
+ // 导出器随即判定「关键参数无解」并把对象整只退化成灰模。这里注入完整类型/范围/默认值契约。
+ const paramContract=(g:any)=>Object.entries(g.params as Record<string,any>).map(([k,d])=>{
+  if(d.type==='bool')return `${k}:bool=${d.default}`;
+  if(d.type==='list')return `${k}:list[${d.minLength}..${d.maxLength}/stride${d.stride}]${d.min}..${d.max}`;
+  const def=Array.isArray(d.default)?d.default.join(','):d.default;
+  return `${k}:${d.type} ${d.min}..${d.max}=${def}`;
+ }).join(';');
+ const slotCatalog=Object.fromEntries(Object.values(GENERATORS).map((g:any)=>[g.id,{label:g.label,slots:g.slots,params:paramContract(g)}]));
+ const GENERATOR_PARAM_RULES=`【生成器参数硬契约，违反会让对象退化成灰模代理】
+- generatorParams / object.params 的键名只能用该生成器 params 里列出的名字，严禁自造 size/envelope/path/dimensions 等别名；尺寸语义一律用生成器真实参数名（如 GEN-HALL-01 用 width/length/height，GEN-PIPE-01 用 path 的数字点序列）。
+- 值必须严格匹配类型与范围：num/int 是单个数字（int 必须整数，不得超过 min..max），bool 只能是 true/false，vec3 必须恰好 3 个数字，list 必须是 minLength..maxLength 个数字且个数为 stride 的倍数。
+- 严禁把中文描述文本、布尔猜测值、区间数组（如 [0.1,0.25,0.5]）写进参数；不确定就别写这个参数，让契约默认值生效。`;
  const CANONICAL_MAT_ROLES=`标准材质角色 ID 清单(spec-materials 必须完整定义以下全部 ID,各资产族分片可直接引用):
 - MAT_AERO_WHITE: 深冷枪铁磨损结构板(厚重湿冷工业基调,严禁苍白! baseColor [0.22,0.25,0.30,1], metallic 0.62, roughness 0.34, clearcoat 0.25, surface:{pattern:'worn',tilesPerMeter:0.6})
 - MAT_SILVER_TRIM: 拉丝机械修边亮钢(baseColor [0.46,0.50,0.56,1], metallic 0.82, roughness 0.24, surface:{pattern:'trim',tilesPerMeter:0.5})
@@ -491,7 +514,7 @@ async function normalizeCaseDocument(htmlPath:string,outDir:string,effort='high'
    {generators:facts.generators},compactStagingText,MATERIALS_ONLY_SCHEMA,keyImages,effort,reuse,shardNode(selections.families),signal),
 
   ()=>ask(calls,'spec-families-struct',`任务 Wave 1.2(核心、建筑骨架、多层设备墙与控制能量资产族分片 spec-families-struct,族上限 20):
-可用生成器目录(generatorId 只能从这里选,materialSlots 的 slot 必须原样使用这里列出的英文槽名,material 引用下列标准材质 ID):${JSON.stringify(slotCatalog)}
+可用生成器目录(generatorId 只能从这里选,materialSlots 的 slot 必须原样使用这里列出的英文槽名,material 引用下列标准材质 ID):${JSON.stringify(slotCatalog)}\n${GENERATOR_PARAM_RULES}
 ${CANONICAL_MAT_ROLES}
 请将本分片负责的叶资产列表归并为高细节程序化资产族(纯玩法/破坏态放入 excludedLeaves),思维链≤400字:
 - 必须包含:
@@ -504,7 +527,7 @@ ${CANONICAL_MAT_ROLES}
    {leaves:leavesA,generators:facts.generators,assemblies:facts.assemblies},compactArchText,FAMILIES_SHARD_SCHEMA,[],effort,reuse,shardNode(selections.families),signal),
 
   ()=>ask(calls,'spec-families-props',`任务 Wave 1.3(管网机电、道具比例尺与排除叶资产分片 spec-families-props,族上限 16):
-可用生成器目录(generatorId 只能从这里选,materialSlots 的 slot 必须原样使用这里列出的英文槽名,material 引用下列标准材质 ID):${JSON.stringify(slotCatalog)}
+可用生成器目录(generatorId 只能从这里选,materialSlots 的 slot 必须原样使用这里列出的英文槽名,material 引用下列标准材质 ID):${JSON.stringify(slotCatalog)}\n${GENERATOR_PARAM_RULES}
 ${CANONICAL_MAT_ROLES}
 请将本分片负责的叶资产列表归并为机电管网/道具资产族,并将纯玩法、武器、角色、敌人、特效、破坏态叶资产全部列入 excludedLeaves 说明原因(确保本分片 leaves 100% 有去向),思维链≤350字:
 - 必须包含:GEN-PIPE-01(供能管网)、GEN-CABLETRAY-01 / GEN-CABLE-01(桥架线束)、GEN-EQUIPGROUP-01(柱脚与入口成组设备箱柜)、GEN-LUMINAIRE-01(步道暖琥珀导引灯具)、GEN-FIGURE-01(1.75m 比例尺工程师人物)、GEN-CABINET-01 / GEN-PROP-01。`,

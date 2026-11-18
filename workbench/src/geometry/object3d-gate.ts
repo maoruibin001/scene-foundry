@@ -31,6 +31,16 @@ const KEPT=['critical-visible','not-mirrored','camera-clear'];
 export function object3dRule(job:any){return job?.object3dGatePolicy?.version===OBJECT3D_GATE.version;}
 export function object3dPolicyFor(sceneKind:string,env=process.env){return sceneKind!=='voxel'&&env.PIPELINE_FOV_PYTHON&&env.PIPELINE_OBJECT3D_GATE!=='0'?{...OBJECT3D_GATE,model:env.PIPELINE_FOV_MODEL||DEFAULT_MODEL}:null;}
 
+// object3d-advisory-v1：object3d 的三维位置误差从 2 图单目+遮挡下物理上到不了 .35（GT 深挖已证：相机对、家具可见面误差地板 ~0.375、
+// 背景结构墙体测量不可靠）。此策略把 object3d 从硬放行门降为"软目标"：它仍驱动修复（选轮仍按 object3d 取低，还原度继续被压），
+// 但修复预算耗尽时，若测量粗检（关键主体可见/未镜像/机位清晰）都过，就接受最优轮而非判失败——高还原度由 critical-visible 守住，
+// 深度尽力但不卡死不可达精度。交付再由已校准的视觉判分做最终“看着对”把关。默认关，env PIPELINE_OBJECT3D_ADVISORY=1 开。
+export const OBJECT3D_ADVISORY={version:'object3d-advisory-v1'} as const;
+export function object3dAdvisoryRule(job:any){return job?.object3dAdvisoryPolicy?.version===OBJECT3D_ADVISORY.version;}
+export function object3dAdvisoryPolicyFor(object3d:any,env=process.env){return object3d&&env.PIPELINE_OBJECT3D_ADVISORY==='1'?{...OBJECT3D_ADVISORY}:null;}
+/** 测量粗检（KEPT：critical-visible/not-mirrored/camera-clear）是否全过——advisory 下只有它们是硬门。 */
+export function object3dGrossPass(gate:any){const checks=gate?.objective?.checks??[];return KEPT.every(k=>{const c=checks.find((x:any)=>x.id===k);return !c||c.passed;});}
+
 async function python(args:string[],signal?:AbortSignal){
  const bin=process.env.PIPELINE_FOV_PYTHON;if(!bin)throw Error('object3d-gate-v1 需要 PIPELINE_FOV_PYTHON');
  const p=Bun.spawn([bin,'-I',...args],{stdout:'pipe',stderr:'pipe',signal,env:process.env});

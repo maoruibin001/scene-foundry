@@ -15,7 +15,7 @@ export function startSpecReview(id:string,selection:unknown){
  if(active.has(id))throw Error('该场景已有视觉评审进行中');
  const refs=visualReferences<any>(job.styleImages??[]);
  const model=validateNodeModels({styleReview:selection??VISUAL_PANEL_SELECTION}).styleReview;
- if(model.model!==VISUAL_PANEL_MODEL)throw Error('VISUAL_ROUTE_UNSUPPORTED：请选择 codex1 / codex2 / codex3 联合评审');
+ if(['cbc4','cbc5'].includes(model.provider)&&model.model!==VISUAL_PANEL_MODEL)throw Error('VISUAL_ROUTE_UNSUPPORTED：视觉评审已改用 codex1 / codex2 / codex3 原图联合评审');
  active.add(id);const reviewId=randomUUID(),dir=join(runDir(id),'visual-reviews',reviewId);mkdirSync(dir,{recursive:true});
  job.visualReviewState={id:reviewId,status:'running',model,startedAt:new Date().toISOString()};saveJob(job);
  void (async()=>{try{

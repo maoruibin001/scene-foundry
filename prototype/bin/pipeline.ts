@@ -3,7 +3,6 @@ import { mkdirSync, readFileSync, writeFileSync, renameSync, rmSync, cpSync, exi
 import { resolve, join, dirname } from 'node:path';
 import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
-import { exportSceneModulePack } from '../../scene-generator/apps/composition/backend/src/pack-export/moduleExport.ts';
 import { composeHost } from './compose-host.ts';
 import { engineRevision } from './engine-identity.ts';
 import { planSpecExport, writeSpecPack } from '../../workbench/src/spec/export-pack.ts';
@@ -84,7 +83,13 @@ async function main(){
       }
     });
     const staging=join(root,'.staging-generated');
-    const result=await stage('generate-export',()=>brief.generator==='spec-pack'?specExport(brief,staging):exportSceneModulePack({sourceDir:join(root,'source'),entryFile:brief.entry,exportName:brief.exportName,args:brief.args,packageId:brief.packageId,sourceKey:brief.sourceKey,projectName:brief.name,destination:staging,includeDefaultLighting:false,consumerBuildBudgetMs:brief.budget.consumerBuildMs}));
+    // 普通程序化场景才需要私有 scene-generator；spec-pack 由 workbench 生成器库自足，
+    // 静态 import 会让 spec 路径被一个不存在的私有仓库绑死，因此改为分支内按需加载。
+    const result=await stage('generate-export',async()=>{
+      if(brief.generator==='spec-pack')return specExport(brief,staging);
+      const {exportSceneModulePack}=await import('../../scene-generator/apps/composition/backend/src/pack-export/moduleExport.ts');
+      return exportSceneModulePack({sourceDir:join(root,'source'),entryFile:brief.entry,exportName:brief.exportName,args:brief.args,packageId:brief.packageId,sourceKey:brief.sourceKey,projectName:brief.name,destination:staging,includeDefaultLighting:false,consumerBuildBudgetMs:brief.budget.consumerBuildMs});
+    });
     await stage('generation-budget',()=>{
       if(result.triangleCount>brief.budget.maxTriangles||result.materialCount>brief.budget.maxMaterials)throw new Error('generated content exceeds declared budget');
       if(result.diagnostics.some((d:any)=>d.severity==='error'))throw new Error('scene diagnostics contain errors: '+JSON.stringify(result.diagnostics.filter((d:any)=>d.severity==='error').slice(0,5)));

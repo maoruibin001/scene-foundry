@@ -1,3 +1,4 @@
+import {claude10Executable,claude10Option} from './claude10-provider';
 import {mkdtempSync,rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
@@ -29,7 +30,7 @@ async function discover(){
     if(requestId===0){send({method:'initialized'});send({id:++requestId,method:'model/list',params:{limit:100,includeHidden:false}});continue;}
     rows.push(...message.result.data);
     if(message.result.nextCursor){send({id:++requestId,method:'model/list',params:{limit:100,includeHidden:false,cursor:message.result.nextCursor}});continue;}
-    const models=modelOptions(rows);if(custom.some(c=>models.some(m=>m.model===c.model)))throw Error('不同供应商使用了相同模型 ID，需明确区分后再生成');if(!models.length)throw Error('本机 Codex 没有可用于场景生成和图片验收的模型');
+    const models=modelOptions(rows);if(claude10Executable()){const claude=claude10Option();if(models.some(m=>m.model===claude.model)||custom.some(m=>m.model===claude.model))throw Error('Claude 模型 ID 与现有供应商冲突');custom.push(claude);}if(custom.some(c=>models.some(m=>m.model===c.model)))throw Error('不同供应商使用了相同模型 ID，需明确区分后再生成');if(!models.length)throw Error('本机 Codex 没有可用于场景生成和图片验收的模型');
     return {models:[...custom,...models.filter(m=>!custom.some(c=>c.model===m.model)).map(m=>({...m,displayName:m.displayName+' · OpenAI 订阅'}))],fetchedAt:new Date().toISOString()};
    }
   }

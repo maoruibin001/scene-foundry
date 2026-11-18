@@ -146,7 +146,7 @@ export async function writeAssetPreviewsParallel(
   }
  }
 
- const {results}=await runWorkerTasks(tasks,{concurrency:opts?.concurrency});
+ const {results,workersUsed,durationMs}=await runWorkerTasks(tasks,{concurrency:opts?.concurrency});
  for(let t=0;t<results.length;t++){
   const res=results[t]!,idx=itemIndices[t]!,mesh=plan.meshes[idx]!;
   if(res.ok&&res.kind==='preview'){
@@ -159,5 +159,8 @@ export async function writeAssetPreviewsParallel(
  }
 
  writePreviewIndex(outDir,items);
+ // 把本次池的真实用量挂在返回值上（非枚举，不改变 preview-index 内容），
+ // 取代并发任务间会串台的模块级 lastPoolWorkers。
+ Object.defineProperty(items,'poolTelemetry',{value:{workersUsed,durationMs},enumerable:false});
  return items;
 }

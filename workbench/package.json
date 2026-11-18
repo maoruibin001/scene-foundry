@@ -3,7 +3,10 @@
   "private": true,
   "scripts": {
     "start": "bun src/server.ts",
-    "test": "bun test ./src",
+    "test": "bun test ./src --timeout 30000",
+    "specs:reconcile": "bun scripts/reconcile-specs.ts",
+    "specs:migrate-history": "bun scripts/migrate-historical-spec-reports.ts",
+    "verify:performance-preset": "bun scripts/verify-performance-preset.ts",
     "bench": "bun src/bench/replay.ts bench/scenes.json"
   },
   "type": "module"

@@ -38,6 +38,14 @@ test('cbc4 需结构化结果（含 result JSON 字符串回退）且有模型�
  expect(()=>parseCbcResult(JSON.stringify({type:'result',subtype:'success',result:'not json'}),'hy4std')).toThrow('CBC4_INVALID_OUTPUT：缺少结构化结果');
  expect(()=>parseCbcResult(JSON.stringify({type:'result',subtype:'success',result:'[1,2,3]'}),'hy4std')).toThrow('CBC4_INVALID_OUTPUT：缺少结构化结果');
 });
+test('cbc5 视觉节点的启动器回执短名按显式别名接受，未知模型仍拒绝',()=>{
+ const receipt=JSON.stringify({type:'result',subtype:'success',modelUsage:{hy4flash:{}},structured_output:{ok:true}});
+ const parsed=parseCbcResult(receipt,'hy4flash-dev');
+ expect(JSON.parse(parsed.text)).toEqual({ok:true});
+ expect(parsed.receipt.returnedModel).toBe('hy4flash');
+ expect(()=>parseCbcResult(receipt,'hy4-preview-ioa')).toThrow('MODEL_ROUTE_UNVERIFIED');
+ expect(()=>parseCbcResult(receipt,'hy4std')).toThrow('MODEL_ROUTE_UNVERIFIED');
+});
 test('cbc4 节点通过受限 CLI（dontAsk）传递图像、所选模型并保存输入与路由回执',async()=>{
  const {callSpecNode}=await import('./node-models');
  const dir=mkdtempSync(join(tmpdir(),'cbc-node-')),bin=join(dir,'cbc4-fake'),img=join(dir,'ref.png');

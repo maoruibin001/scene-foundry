@@ -1,6 +1,7 @@
 import {test,expect} from 'bun:test';
 import {ANTIALIAS_TAA,FogModeValue} from '@forgeax/engine/render';
 import {buildFogComponent,emitSpecWorld} from './world-emitter';
+import {irradianceFieldGi,renderProfilePlugin} from './render-profile';
 import {planSpecExport} from './export-pack';
 import {sampleSpec} from './fixtures';
 
@@ -100,4 +101,42 @@ test('explicit spec lighting continuation replaces native lighting, exports beam
  const w=emitSpecWorld(s,{worldPackageId:'60fb39fb-420e-4aa5-8189-fd9c4d8369e7'});
  expect(w.entities).toHaveProperty('light_key');expect(w.entities).not.toHaveProperty('source_oldSun');expect(w.entities).not.toHaveProperty('fog');
  expect((w.entities.camera as any).components.Camera.exposure).toBe(1);expect(w.volumetricPlugin).toContain('maxDistance:150');expect(w.volumetricPlugin).toContain('"light_key"');
+});
+
+test('GI 开启时面光换成宽角聚光并登记 deferred，关闭时原样保留面光',()=>{
+ const area:any={id:'panel',kind:'area',position:[0,0,18],direction:[0,0,-1],color:[1,1,1],intensity:5,range:20,innerConeDeg:null,outerConeDeg:null,width:4,height:4,castShadow:false};
+ const s=sampleSpec();s.lighting.states[0]!.lights.push(area);
+ s.lighting.states[0]!.post.gi={environment:[0.1,0.12,0.16]};
+ const w:any=emitSpecWorld(s,{worldPackageId:'60fb39fb-420e-4aa5-8189-fd9c4d8369e7'});
+ expect(w.entities.light_panel.components.SpotLight).toBeDefined();
+ expect(w.entities.light_panel.components.RectAreaLight).toBeUndefined();
+ expect(w.deferred.map((d:any)=>d.feature)).toContain('RectAreaLight:panel');
+ const off=sampleSpec();off.lighting.states[0]!.lights.push({...area});
+ const plain:any=emitSpecWorld(off,{worldPackageId:'60fb39fb-420e-4aa5-8189-fd9c4d8369e7'});
+ expect(plain.entities.light_panel.components.RectAreaLight).toBeDefined();
+});
+
+test('体积雾必须 fog + volumetric 同时配置才生成 3D 密度纹理插件',()=>{
+ const s=sampleSpec(),st=s.lighting.states[0]!;
+ st.post.fog={color:[0.12,0.16,0.22],density:0.03,anisotropy:0.2,boundsMin:[-20,-20,0],boundsMax:[20,20,18],light:st.lights[0]!.id};
+ const before:any=emitSpecWorld(s,{worldPackageId:'60fb39fb-420e-4aa5-8189-fd9c4d8369e7'});
+ expect(before.volumetricPlugin).toBeNull();
+ st.post.volumetric={extinction:0.35,albedo:[0.2,0.3,0.4],anisotropy:0.2,heightFalloff:0.6,noise:0.4,maxDistance:60};
+ const w:any=emitSpecWorld(s,{worldPackageId:'60fb39fb-420e-4aa5-8189-fd9c4d8369e7'});
+ expect(typeof w.volumetricPlugin).toBe('string');
+ expect(w.volumetricPlugin).toContain('VolumetricFog');
+ expect(w.volumetricPlugin).toContain('W=32,H=32,D=16');
+ expect(w.volumetricPlugin).toContain(JSON.stringify('light_'+st.lights[0]!.id.replace(/[^A-Za-z0-9_]/g,'_')));
+});
+
+test('GI 渲染 profile 按包络推导采样网格，并经 build 插件注入 standardProfile',()=>{
+ const s=sampleSpec();s.bounds={min:[-32,-40,-4],max:[32,40,28]};
+ const profile:any=irradianceFieldGi(s,[0.1,0.12,0.16]);
+ expect(profile.gather).toBe('irradiance-field');
+ expect(profile.field.region.grid.dimensions).toHaveLength(3);
+ expect(profile.field.region.grid.dimensions.every((d:number)=>d>=4&&d<=128)).toBe(true);
+ expect(profile.maxDistance).toBeGreaterThan(0);
+ const src=renderProfilePlugin(profile);
+ expect(src).toContain('standardProfile');
+ expect(src).toContain('irradiance-field');
 });

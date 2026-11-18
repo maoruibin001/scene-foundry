@@ -188,7 +188,7 @@ export type WorkerTaskResult=Exclude<WorkerResponse,{kind:'ready'}>;
  */
 export async function runWorkerTasks(
  tasks:readonly WorkerTaskPayload[],
- opts?:{concurrency?:number},
+ opts?:{concurrency?:number;watchdogMs?:number},
 ):Promise<{results:WorkerTaskResult[];workersUsed:number;durationMs:number}>{
  const t0=performance.now();
  if(!tasks.length){
@@ -214,12 +214,18 @@ export async function runWorkerTasks(
    activeWorkerCount++;
    workers.push(handle);
    const w=handle.worker;
+   let watchdog:ReturnType<typeof setTimeout>|undefined;
    try{
     await new Promise<void>((resolveReady,rejectReady)=>{
      let ready=false;
      let currentTaskId=-1;
+     // 单个 Worker 既不回消息也不报错时，Promise 永不 settle，finally 也不会执行、线程不会回收。
+     // 看门狗保证整批任务有上界；超时按失败处理，不允许静默留下半批结果。
+     const watchdogMs=Math.max(50,Math.floor(opts?.watchdogMs??120000));
+     watchdog=setTimeout(()=>rejectReady(new Error(`ASSET_WORKER_WATCHDOG_TIMEOUT：Worker 在 ${watchdogMs}ms 内未完成任务 ${currentTaskId}`)),watchdogMs);
+     const finish=()=>{if(watchdog)clearTimeout(watchdog);resolveReady();};
      const step=()=>{
-      if(nextIndex>=tasks.length){resolveReady();return;}
+      if(nextIndex>=tasks.length){finish();return;}
       const idx=nextIndex++;
       currentTaskId=idx;
       const payload={...tasks[idx]!,id:idx} as WorkerRequest;
@@ -249,6 +255,7 @@ export async function runWorkerTasks(
      };
     });
    }finally{
+    if(watchdog)clearTimeout(watchdog);
     terminateHandle(handle);
    }
   };

@@ -41,6 +41,8 @@ export function nodeCacheHash(task:string,facts:unknown,doc:string,schema:unknow
 }
 export type NodeRequest={system:string;text:string;images?:{path:string;mime:string}[];role:string;signal?:AbortSignal};
 const isJsonObject=(v:unknown):v is Record<string,unknown>=>Boolean(v)&&typeof v==='object'&&!Array.isArray(v);
+/** cbc5 启动器把 --model hy4flash-dev 记成回执键 hy4flash；只放行这一个显式别名，其余模型仍精确匹配。 */
+const MODEL_RECEIPT_ALIASES:Record<string,readonly string[]>={'hy4flash-dev':['hy4flash']};
 export function parseCbcResult(stdout:string,model:string){
  let result:any=null;
  const trimmed=stdout.trim();
@@ -55,14 +57,29 @@ export function parseCbcResult(stdout:string,model:string){
   }
  }
  if(!result||result.is_error||result.subtype!=='success')throw Error('CBC4_FAILED：模型未返回成功结果');
- const actual=Object.keys(result.modelUsage??{});
- if(actual.length&&(actual.length!==1||actual[0]!==model))throw Error('MODEL_ROUTE_UNVERIFIED：cbc4 返回了不同模型');
+ const actual=Object.keys(result.modelUsage??{}),accepted=MODEL_RECEIPT_ALIASES[model]??[model];
+ if(actual.length&&(actual.length!==1||!accepted.includes(actual[0]!)))throw Error('MODEL_ROUTE_UNVERIFIED：模型回执与所选节点不一致');
  let structured:Record<string,unknown>|null=isJsonObject(result.structured_output)?result.structured_output:null;
  if(result.structured_output==null&&typeof result.result==='string'){
   try{const parsed=JSON.parse(result.result.trim());if(isJsonObject(parsed))structured=parsed;}catch{}
  }
  if(!structured)throw Error('CBC4_INVALID_OUTPUT：缺少结构化结果');
  return {text:JSON.stringify(structured),receipt:{provider:'cbc4',requestedModel:model,returnedModel:actual[0]??null,routeEvidence:actual.length?'provider-receipt':'launcher-selection-only',usage:result.usage??null}};
+}
+/** 只有"连接卡住"或"几乎没有任何输出"的超时才值得重跑；模型确实跑满上限时再试一次没有收益。 */
+export function isTransientCbcTimeout(result:{timedOut?:boolean;trace?:any}){
+ return Boolean(result?.timedOut)&&(result?.trace?.timeoutReason==='stalled'||(result?.trace?.stdoutBytes??0)<64*1024);
+}
+/** cbc4/cbc5 瞬态超时允许重跑一次，带短暂退避；取消信号与其余错误立即照常返回。 */
+export async function callCbcWithRetry(options:Parameters<typeof captureCodexProcess>[0],attempts=2,run:typeof captureCodexProcess=captureCodexProcess){
+ let last:Awaited<ReturnType<typeof captureCodexProcess>>|undefined;
+ for(let attempt=1;attempt<=attempts;attempt++){
+  // 每次尝试各写一份执行日志，失败证据不被重跑覆盖。
+  last=await run(attempt===1?options:{...options,prefix:options.prefix+'-retry'+attempt});
+  if(!isTransientCbcTimeout(last)||options.signal?.aborted||attempt===attempts)break;
+  await new Promise(resolve=>setTimeout(resolve,1000*attempt));
+ }
+ return last!;
 }
 export async function callSpecNode(input:NodeRequest,dir:string,selection:NodeModel,schema:any){
  if(input.role==='spec-style-judge'&&selection.provider==='codex'&&process.env.PIPELINE_VISUAL_HOLD_REASON)throw Error('VISUAL_REVIEW_HELD：'+process.env.PIPELINE_VISUAL_HOLD_REASON);
@@ -90,19 +107,21 @@ async function callSpecNodeInner(input:NodeRequest,dir:string,selection:NodeMode
   const thumbDir=join(dir,'.cbc4-vision-thumbs');mkdirSync(thumbDir,{recursive:true});
   const py=reconstructionPython();
   const resized:{path:string;mime:string}[]=[];
-  let okAll=true;
   for(let idx=0;idx<validatedImages.length;idx++){
    const src=validatedImages[idx]!.path,dst=join(thumbDir,`img-${idx}.jpg`);
    const r=spawnSync(py,['-c','import sys;from PIL import Image;im=Image.open(sys.argv[1]).convert("RGB");im.thumbnail((960,960),Image.Resampling.LANCZOS);im.save(sys.argv[2],"JPEG",quality=85,optimize=True)',src,dst],{timeout:15000});
-   if(r.status===0)resized.push({path:dst,mime:'image/jpeg'});else{okAll=false;break;}
+   // 原图超过网关载荷会被剥离，模型会"看不到画面"还照常给分；缩图失败必须显式报错，不能静默降级。
+   if(r.status!==0)throw Error('CBC4_IMAGE_RESIZE_FAILED：第 '+idx+' 张缩图失败，不发送会被网关剥离的原图：'+String(r.stderr?.toString().slice(-300)??r.error));
+   resized.push({path:dst,mime:'image/jpeg'});
   }
-  if(okAll&&resized.length===validatedImages.length)images=resized;
+  if(resized.length!==validatedImages.length)throw Error('CBC4_IMAGE_RESIZE_FAILED：缩图结果不完整');
+  images=resized;
  }
  writeFileSync(join(dir,input.role+'-input-receipt.json'),JSON.stringify({provider,role:input.role,executable,model:selection.model,reasoningEffort:selection.reasoningEffort,permissionMode:'dontAsk',imageCount:images.length,images:imageReceipts,transmittedImages:images.map((im,index)=>({index,mime:im.mime,bytes:readFileSync(im.path).length,sha256:createHash('sha256').update(readFileSync(im.path)).digest('hex'),sourceSha256:imageReceipts[index]!.sha256})),systemSha256:createHash('sha256').update(input.system).digest('hex'),textSha256:createHash('sha256').update(input.text).digest('hex'),schemaSha256:createHash('sha256').update(schemaText).digest('hex')},null,2));
  // cbc4 的 StructuredOutput 在 thinking_delta 结束后会缓冲完整 JSON 再统一 flush(实测约 2–4 分钟静默),stallMs 设为 300s 并在超时失败时允许瞬态重跑 1 次。
  const cbcTimeout=['cbc4','cbc5'].includes(selection.provider)?{timeoutMs:600000,maxTimeoutMs:1500000,activityWindowMs:360000,extensionMs:360000,stallMs:300000}:modelTimeoutPolicy(selection.reasoningEffort,input.role);
  const started=Date.now();
- let result=await captureCodexProcess({args,cwd:dir,env,input:claude10Message({...input,images}),prefix:join(dir,input.role+'-'),...cbcTimeout,signal:input.signal});
+ const result=await callCbcWithRetry({args,cwd:dir,env,input:claude10Message({...input,images}),prefix:join(dir,input.role+'-'),...cbcTimeout,signal:input.signal});
  const durationMs=Date.now()-started;
  if(result.timedOut)throw Error('PROVIDER_TIMEOUT：cbc4 调用超时');
  if(result.code!==0)throw Error('CBC4_FAILED：'+result.stderr.slice(-1000));

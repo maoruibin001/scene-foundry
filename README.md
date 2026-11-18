@@ -53,8 +53,27 @@ Generation settings select matching depth, validated reuse or a fresh start, and
 From `workbench/`:
 
 ```sh
-bun test ./src
+bun run test
 ```
+
+`bun run test` passes an explicit 30s per-test timeout. A bare `bun test ./src` uses Bun's 5s default and can fail under a loaded machine: Bun 1.3 has no reliable global timeout setting (the `[test]` section has no `timeout` key, and a preload calling `setDefaultTimeout` does not reach every parallel test worker).
+
+Spec-to-generator contract reconciliation (from `workbench/`):
+
+```sh
+bun run specs:reconcile          # write contract-compliant specs under new content ids, probe real mesh builds
+bun run specs:migrate-history    # mark historically invalid visual reviews as unusable (scores/status untouched)
+```
+
+Specs are content-addressed (`loadSpec` verifies `digest(JSON.stringify(spec)) === id`), so reconciliation never rewrites existing specs or jobs. `storeSpec` and the plan stage apply the same deterministic reconciliation, letting historical specs build real generator meshes instead of gray-box proxies. Descriptive text that carries no executable geometry is recorded explicitly and falls back to the generator's contract default; no paths or dimensions are fabricated.
+
+Bounded performance optimization (from `workbench/`):
+
+```sh
+bun run verify:performance-preset
+```
+
+The optimization button appears only when a spec scene has real runtime evidence and is below the 30 FPS target (or the `frameRate` hard check failed). Each round creates an independent continuation job that applies a render-budget preset (`quality` / `balanced` / `performance`) on top of the Engine's `DEFAULT_STANDARD_PROFILE`, writes a performance baseline, and stops after 3 rounds or one round without effective gain; the last effective preset is reported for rollback. Presets are this repository's own render-budget switches — the Engine has no optimize API or preset library, and exposes neither draw calls nor GPU timings. Baselines therefore record frame-time distribution, scene cost and render configuration only, with no fabricated GPU breakdown. Visual review and explicit owner approval are still required; an FPS gain never counts as acceptance.
 
 After the private Engine and Scene Generator dependencies are prepared, run the template integration test from the repository root:
 

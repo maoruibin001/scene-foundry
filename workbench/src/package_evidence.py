@@ -3,7 +3,8 @@ from pathlib import Path
 import json,hashlib
 SPEC_FILES=['scene-spec.json','source-scene-spec.json','spec-export.json','spec-gate.json','style-review.json','spec-owner-approval.json']
 def write_spec_evidence(archive,root,source,script):
-    job=json.loads((root/'job.json').read_text())
+    job_file=root/'job.json'
+    job=json.loads(job_file.read_text()) if job_file.is_file() else {}
     references=(job.get('images') or ([job['image']] if job.get('image') else []))+(job.get('styleImages') or [])
     archive.writestr('input/style-references.json',json.dumps(job.get('styleImages',[]),ensure_ascii=False,indent=2))
     seen=set()

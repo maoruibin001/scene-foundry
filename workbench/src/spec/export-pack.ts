@@ -107,7 +107,9 @@ const GENERATOR_KIT_DIGEST=(()=>{
 })();
 
 function hash(v:unknown){return createHash('sha256').update(JSON.stringify(v)).digest('hex').slice(0,10);}
-const meshContentHash=(generator:string,params:Record<string,ParamValue>)=>hash({g:generator,params});
+// 网格必须随生成器源码一起失效：只按 generator+params 会命中改代码之前烘焙的旧网格。
+export const meshContentHashWithKit=(kit:string,generator:string,params:Record<string,ParamValue>)=>hash({g:generator,params,kit});
+const meshContentHash=(generator:string,params:Record<string,ParamValue>)=>meshContentHashWithKit(GENERATOR_KIT_DIGEST,generator,params);
 
 function setBounded<K,V>(map:Map<K,V>,key:K,val:V,limit:number){
  if(map.has(key))map.delete(key);
@@ -215,7 +217,6 @@ export function clearMeshCaches(){
 }
 
 export function inspectSpecParameters(spec:SceneSpec){return prepareExportPlacements(spec).report;}
-
 export const getExportPlanTelemetry=(plan:ExportPlan):ExportPlanTelemetry|undefined=>PLAN_TELEMETRY.get(plan);
 
 function surfaceFileName(safeKey:string,size:number){
@@ -303,7 +304,7 @@ export function materialOptions(m:SpecMaterial){
   // 清透玻璃:alpha 混合 + 不写深度 + 双面;透射关闭(两者互斥,透射会把后方发光体模糊成乳白)。
   ...(m.opacity!=null&&m.opacity<1?{baseColor:[m.baseColor[0],m.baseColor[1],m.baseColor[2],m.opacity],renderState:{blend:{color:{srcFactor:'src-alpha',dstFactor:'one-minus-src-alpha',operation:'add'},alpha:{srcFactor:'one',dstFactor:'one-minus-src-alpha',operation:'add'}},depthWriteEnabled:false,cullMode:'none'}}
    :m.transmission>0?{transmission:m.transmission,ior:m.ior,thickness:m.thickness}:{}),
-  ...(m.clearcoat>0?{clearcoat:m.clearcoat,clearcoatRoughness:m.clearcoatRoughness}:{})};
+  ...(m.clearcoat>0?{clearcoat:m.clearcoat,clearcoatRoughness:m.clearcoatRoughness,staticSwitches:{clearcoat:true}}:{})};
 }
 
 type PendingPlacement=
@@ -314,7 +315,7 @@ type PendingPlacement=
 type UniqueMeshJob={key:string;generatorId:string;params:Record<string,ParamValue>;family:string};
 type BuiltMeshOutcome={ok:true;record:CachedMeshRecord}|{ok:false;error:string};
 
-function prepareExportPlacements(spec:SceneSpec){
+export function prepareExportPlacements(spec:SceneSpec){
  const report:ExportReport={unresolved:[],expanded:[],slotFallbacks:[],covered:[],proxies:[],dropped:[],derived:[],errors:[]};
  // 平面反射只作用于反射对象所属族里的光滑材质(roughness≤0.15,如池水);引擎要求材质在 pack 里烘焙该开关。
  const state=spec.lighting.states.find(s=>s.id===spec.lighting.defaultState),planar=state?.post.planarReflections[0];
@@ -375,11 +376,11 @@ function prepareExportPlacements(spec:SceneSpec){
     const drop=(reason:string)=>{if(!report.dropped.some(d=>d.family===family.id&&d.key===key))report.dropped.push({family:family.id,key,reason});};
     if(!(key in gen.params)){
      const structural=/^(size|envelope|path|position|rotation|scale|dimensions|footprint)$/i.test(key);
-     if(structural)pending.push({key,input:value,reason:'生成器没有可验证的结构参数映射'});
+     const wasAdapted=gen.adapt&&Object.keys(objectParams).some(k=>k in gen.params&&!(k in {...family.generator!.params,...inputParams}));
+     if(structural&&!(key==='size'&&wasAdapted))pending.push({key,input:value,reason:'生成器没有可验证的结构参数映射'});
      else drop('生成器没有这个参数（未改变几何要求）');
      continue;
     }
-
     if(Array.isArray(value)&&gen.params[key]!.type!=='vec3'&&gen.params[key]!.type!=='list'){
      // 手册里一族多尺寸/区间(外径 11/13/15、管径 0.1/0.25/0.5、件数 [4,6])按族内对象序号确定性分配;模型复制到对象级 params 时同样生效。
      if(value.length===objects.length){
