@@ -107,15 +107,14 @@ export function decodedVoxelGrid(program:VoxelProgram):VoxelGrid {
  return {size:program.size,cellSize:program.cellSize,colors,owners,filled,operations:program.runs.length,composition:{keptCells:0,replacedCells:0}};
 }
 
-/** Merge only equal-color, equal-owner cells; the result exactly preserves occupied volume. */
-export function voxelBoxes(grid: VoxelGrid) {
+/** Partition occupied cells without crossing entity boundaries. */
+export function* mergedVoxelBoxes(grid: VoxelGrid, preserveColor: boolean) {
   const [width, depth, height] = grid.size, visited = new Uint8Array(grid.colors.length);
-  const boxes: { owner: number; color: number; min: V; size: V }[] = [], counts = new Map<number, number>();
   const key = (x: number, y: number, z: number) => x + width * (y + depth * z);
   for (let z = 0; z < height; z++) for (let y = 0; y < depth; y++) for (let x = 0; x < width; x++) {
     const start = key(x, y, z), color = grid.colors[start], owner = grid.owners[start];
     if (!color || visited[start]) continue;
-    const match = (a: number, b: number, c: number) => { const i = key(a, b, c); return !visited[i] && grid.colors[i] === color && grid.owners[i] === owner; };
+    const match = (a: number, b: number, c: number) => { const i = key(a, b, c); return !visited[i] && grid.owners[i] === owner && (!preserveColor || grid.colors[i] === color); };
     let w = 1, d = 1, h = 1;
     while (x + w < width && match(x + w, y, z)) w++;
     while (y + d < depth && Array.from({ length: w }, (_, a) => match(x + a, y + d, z)).every(Boolean)) d++;
@@ -124,13 +123,28 @@ export function voxelBoxes(grid: VoxelGrid) {
       h++;
     }
     for (let c = 0; c < h; c++) for (let b = 0; b < d; b++) for (let a = 0; a < w; a++) visited[key(x + a, y + b, z + c)] = 1;
-    boxes.push({ owner, color, min: [x, y, z], size: [w, d, h] }); counts.set(owner, (counts.get(owner) ?? 0) + 1);
+    yield { owner, color, min: [x, y, z] as V, size: [w, d, h] as V };
+  }
+}
+
+/** The legacy colored box representation retains its own render budget. */
+export function voxelBoxes(grid: VoxelGrid) {
+  const boxes = [], counts = new Map<number, number>();
+  for (const box of mergedVoxelBoxes(grid, true)) {
+    const {owner} = box;
+    boxes.push(box);
+    counts.set(owner, (counts.get(owner) ?? 0) + 1);
     assert(boxes.length <= VOXEL_LIMITS.boxes && counts.get(owner)! <= VOXEL_LIMITS.boxesPerEntity, "合并后几何超过预算；须简化冗余色块，保留主要轮廓与空隙");
   }
   return boxes;
 }
 
 export function compileVoxelScene(program: VoxelProgram, plan: any, referenceCount: number) {
+  const {scene, grid, metrics} = compileVoxelSceneWithGeometry(program, plan, referenceCount);
+  return {scene, grid, metrics};
+}
+
+export function compileVoxelSceneWithGeometry(program: VoxelProgram, plan: any, referenceCount: number) {
   const grid = voxelGrid(program), surfaces = voxelSurfaces(grid), unit = program.cellSize;
   const origin=program.version===VOXEL_GRID_VERSION?program.origin!:[0,0,0];
   const materials = program.palette.map(p => ({ id: p.id, color: paletteColor(p.color), roughness: p.roughness ?? 1, metallic: p.metallic ?? 0, textureId: null, ...(p.emission ? { emission: p.emission } : {}) }));
@@ -152,7 +166,7 @@ export function compileVoxelScene(program: VoxelProgram, plan: any, referenceCou
   };
   validateScene(scene, plan, referenceCount);
   const compiled = compileGeometryProgram(scene.program);
-  return { scene, grid, metrics: { version: "voxel-metrics-v1", cells: grid.filled, gridSize: grid.size, cellSize: unit, operations: grid.operations,composition:grid.composition, mergedSurfaceQuads: surfaces.reduce((n, s) => n + s.triangles.length / 2, 0), triangles: compiled.triangles, entities: program.entities.length, palette: materials.length, representation: "integer-grid voxels with hidden-face removal and equal-color surface merging" } };
+  return { scene, grid, compiled, surfaces, metrics: { version: "voxel-metrics-v1", cells: grid.filled, gridSize: grid.size, cellSize: unit, operations: grid.operations,composition:grid.composition, mergedSurfaceQuads: surfaces.reduce((n, s) => n + s.triangles.length / 2, 0), triangles: compiled.triangles, entities: program.entities.length, palette: materials.length, representation: "integer-grid voxels with hidden-face removal and equal-color surface merging" } };
 }
 
 /** Greedy exposed-face meshing, grouped by semantic entity and palette. No internal faces. */
